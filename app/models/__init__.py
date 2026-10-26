@@ -1,0 +1,31 @@
+"""Import every model so Base.metadata knows all tables."""
+from app.models.masters import (  # noqa: F401
+    AttributeDefinition,
+    Calendar,
+    CalendarException,
+    CalendarPattern,
+    ChangeoverEntry,
+    ChangeoverMatrix,
+    Item,
+    Organization,
+    PlanProfile,
+    Resource,
+    ResourceGroup,
+    Routing,
+    RoutingStep,
+    RoutingStepResource,
+    Rule,
+    Site,
+)
+from app.models.transactions import (  # noqa: F401
+    Actual,
+    Job,
+    Plan,
+    PlanAssignment,
+    PlanKpi,
+    PlanViolation,
+    SolverRun,
+    Task,
+    TaskDependency,
+    TaskResourceOption,
+)
