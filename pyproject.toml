@@ -9,13 +9,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "I"]
-ignore = ["B008"]  # FastAPI's Depends() in defaults is idiomatic
+ignore = ["B008", "E501"]  # Depends() defaults are idiomatic; long lines hold Japanese messages
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "scripts", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.ruff.lint.per-file-ignores]
-"app/services/demo_seed.py" = ["E501"]

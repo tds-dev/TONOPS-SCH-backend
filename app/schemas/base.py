@@ -35,10 +35,14 @@ UtcDatetime = Annotated[
 
 
 def to_camel(name: str) -> str:
-    """'ResourceName' -> 'resourceName', 'SiteID' -> 'siteID' -> 'siteId'."""
+    """'ResourceName' -> 'resourceName', 'SiteID' -> 'siteId', 'start_at' -> 'startAt'."""
     if not name:
         return name
-    out = name[0].lower() + name[1:]
+    if "_" in name:
+        head, *rest = name.split("_")
+        out = head + "".join(p[:1].upper() + p[1:] for p in rest)
+    else:
+        out = name[0].lower() + name[1:]
     if out.endswith("ID"):
         out = out[:-2] + "Id"
     return out

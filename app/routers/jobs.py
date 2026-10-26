@@ -45,7 +45,9 @@ def get_job_tasks(job_id: int, db: Session = Depends(get_db)):
 def get_job_dependencies(job_id: int, db: Session = Depends(get_db)):
     task_ids = select(Task.TaskID).where(Task.JobID == job_id)
     return db.scalars(
-        select(TaskDependency).where(TaskDependency.SuccessorTaskID.in_(task_ids))
+        select(TaskDependency)
+        .where(TaskDependency.SuccessorTaskID.in_(task_ids))
+        .order_by(TaskDependency.DependencyID)
     ).all()
 
 

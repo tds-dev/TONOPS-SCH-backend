@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  (register all tables)
 from app.core.config import get_settings
-from app.routers import jobs, masters
+from app.routers import jobs, masters, plans
 
 API_PREFIX = "/api/v1"
 
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in [*masters.routers, *jobs.routers]:
+for r in [*masters.routers, *jobs.routers, plans.router]:
     app.include_router(r, prefix=API_PREFIX)
 
 

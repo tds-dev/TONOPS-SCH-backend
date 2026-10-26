@@ -17,7 +17,8 @@ from app.models.transactions import Job, PlanAssignment, Task, TaskDependency, T
 
 def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: float) -> int:
     """Duration in whole minutes = setup + fixed + quantity × minutes per unit."""
-    return int(setup + fixed + math.ceil(float(quantity or 0) * float(minutes_per_unit or 0)))
+    run = round(float(quantity or 0) * float(minutes_per_unit or 0), 6)  # 0.1 × 1200 = 120.000…01
+    return int(setup + fixed + math.ceil(run))
 
 
 def resolve_routing(db: Session, job: Job) -> Routing:
