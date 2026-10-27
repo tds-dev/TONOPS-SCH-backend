@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # 既定はローカルの SQL Server（Windows 認証）の TONOPS-SCH データベース
     database_url: str = (
         "mssql+pyodbc://@localhost/TONOPS-SCH"
-        "?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+        "?driver=ODBC+Driver+17+for+SQL+Server"
     )
     cors_origins: str = "http://localhost:4200"
     worker_poll_seconds: float = 2.0
