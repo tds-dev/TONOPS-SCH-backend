@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# 設定・ローカル DB（接続情報やパスワードを含むためコミットしない）
+.env
+*.db
+
+# エディター
+.vscode/
+.idea/
