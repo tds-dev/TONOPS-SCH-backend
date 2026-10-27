@@ -1,6 +1,6 @@
 """データベースエンジン、セッションファクトリ、宣言的ベースクラス。
 
-本番は SQL Server（mssql+pyodbc）、ローカル開発とテストは SQLite で動作する。
+SQL Server（mssql+pyodbc、DB 名 TONOPS-SCH）で動作する。テストはインメモリの SQLite を使う。
 SQL Server のマイグレーションが安定するよう、制約名は固定の命名規則に従う。
 """
 from collections.abc import Iterator

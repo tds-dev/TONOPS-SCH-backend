@@ -9,7 +9,7 @@ from app.routers import board, jobs, masters, plans
 API_PREFIX = "/api/v1"
 
 app = FastAPI(
-    title="Scheduler Platform API",
+    title="TONOPS-SCH API",
     version="0.1.0",
     description="Domain-neutral production / project scheduler (v0.1).",
 )

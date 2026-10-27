@@ -7,7 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = "sqlite:///./scheduler_dev.db"
+    # 既定はローカルの SQL Server（Windows 認証）の TONOPS-SCH データベース
+    database_url: str = (
+        "mssql+pyodbc://@localhost/TONOPS-SCH"
+        "?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+    )
     cors_origins: str = "http://localhost:4200"
     worker_poll_seconds: float = 2.0
     # 認証を導入するまでの CreatedBy / UpdatedBy の既定値

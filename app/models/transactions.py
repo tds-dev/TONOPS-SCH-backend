@@ -6,20 +6,18 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Date,
-    DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
     Numeric,
-    String,
-    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
 from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
+from app.models.types import DateTime, String, Text
 
 # SQLite は INTEGER PRIMARY KEY のみ自動採番するため、BIGINT は SQL Server でのみ使う。
 BigId = BigInteger().with_variant(Integer, "sqlite")

@@ -1,7 +1,8 @@
 """全テーブル共通の列（監査列、論理削除）。"""
-from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy import Boolean, Column
 
 from app.core.timeutil import utcnow
+from app.models.types import DateTime, String
 
 
 class AuditMixin:

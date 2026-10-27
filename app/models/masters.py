@@ -5,12 +5,10 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Integer,
     Numeric,
     SmallInteger,
-    String,
     Time,
     UniqueConstraint,
 )
@@ -18,6 +16,7 @@ from sqlalchemy.orm import relationship
 
 from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
+from app.models.types import DateTime, String
 
 RESOURCE_KINDS = ["MACHINE", "PERSON", "TEAM", "ROOM", "OTHER"]
 ENTITY_TYPES = ["ITEM", "RESOURCE", "JOB", "TASK"]

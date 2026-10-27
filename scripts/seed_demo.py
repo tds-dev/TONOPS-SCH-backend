@@ -6,8 +6,10 @@ from app import models  # noqa: F401
 from app.core.db import Base, SessionLocal, engine
 from app.models.masters import Organization
 from app.services.demo_seed import seed_demo
+from scripts.create_database import ensure_database
 
 if __name__ == "__main__":
+    ensure_database()
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         if db.query(Organization).filter_by(OrganizationCode="DEMO").first():
