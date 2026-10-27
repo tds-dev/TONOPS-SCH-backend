@@ -1,6 +1,6 @@
-"""Plans, solver runs and their results (Phase 2).
+"""計画、ソルバー実行とその結果（フェーズ2）。
 
-Approve / discard, the board view and manual edits follow in Phase 3.
+承認・破棄、ボード表示、手動編集はフェーズ3 で追加する。
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
@@ -34,9 +34,9 @@ class PlanCreateBody(ApiModel):
 
 
 class SolveBody(ApiModel):
-    scope: str = "FULL"  # FULL or REPAIR
+    scope: str = "FULL"  # FULL または REPAIR
     time_limit_sec: int | None = None
-    wait: bool = False  # run inside the request (development / tests); otherwise the worker runs it
+    wait: bool = False  # リクエスト内で実行（開発・テスト用）。通常はワーカーが実行する
 
 
 class AssignmentView(ApiModel):
@@ -76,7 +76,7 @@ def list_plans(
     plan_status: str | None = Query(None, alias="status"),
     db: Session = Depends(get_db),
 ):
-    """Filter with ?siteId=1&status=DRAFT,MASTER."""
+    """?siteId=1&status=DRAFT,MASTER で絞り込む。"""
     stmt = select(Plan).order_by(Plan.HorizonStart.desc(), Plan.PlanID.desc())
     if site_id is not None:
         stmt = stmt.where(Plan.SiteID == site_id)
@@ -100,7 +100,7 @@ def post_solve(
     plan_id: int, body: SolveBody, response: Response,
     db: Session = Depends(get_db), user: str = Depends(current_user),
 ):
-    """Queue a solve. With `wait: true` the solve runs inside the request."""
+    """計算をキューに登録する。`wait: true` の場合はリクエスト内で計算する。"""
     if body.scope not in ("FULL", "REPAIR"):
         raise HTTPException(422, "scope must be FULL or REPAIR")
     run = queue_run(db, _plan_or_404(db, plan_id), user, body.scope, body.time_limit_sec)
@@ -125,7 +125,7 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
 
 @router.post("/solver-runs/{run_id}/cancel", response_model=RunRead)
 def cancel_run(run_id: int, db: Session = Depends(get_db)):
-    """Queued runs stop at once; running ones stop within a few seconds and keep the best plan found."""
+    """待機中の実行は即座に、実行中のものは数秒以内に停止し、それまでの最良解を残す。"""
     run = get_run(run_id, db)
     if run.Status in ("QUEUED", "RUNNING"):
         run.Status = "CANCELLED"
@@ -171,7 +171,7 @@ def get_violations(plan_id: int, db: Session = Depends(get_db)):
 
 @router.get("/rule-types", response_model=list[RuleTypeView], tags=["Configuration"])
 def list_rule_types():
-    """Available rule plugins and the JSON Schema of their parameters (drives the rule editor form)."""
+    """利用可能なルールプラグインとパラメータの JSON Schema（ルール編集フォームに使う）。"""
     return [
         RuleTypeView(type_key=p.type_key, label=p.label, description=p.description,
                      supports_soft=p.supports_soft, params_schema=p.params_schema)

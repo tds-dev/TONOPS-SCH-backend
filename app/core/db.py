@@ -1,8 +1,7 @@
-"""Database engine, session factory and declarative base.
+"""データベースエンジン、セッションファクトリ、宣言的ベースクラス。
 
-Works with SQL Server (mssql+pyodbc) in production and SQLite for local
-development and tests. Constraint names follow a fixed convention so that
-SQL Server migrations stay stable.
+本番は SQL Server（mssql+pyodbc）、ローカル開発とテストは SQLite で動作する。
+SQL Server のマイグレーションが安定するよう、制約名は固定の命名規則に従う。
 """
 from collections.abc import Iterator
 
@@ -30,13 +29,13 @@ def make_engine(url: str, **kwargs) -> Engine:
         engine = create_engine(url, connect_args={"check_same_thread": False}, **kwargs)
 
         @event.listens_for(engine, "connect")
-        def _fk_on(dbapi_conn, _):  # SQLite ignores FKs unless asked
+        def _fk_on(dbapi_conn, _):  # SQLite は明示しないと外部キーを無視する
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA foreign_keys=ON")
             cur.close()
 
         return engine
-    # fast_executemany speeds up bulk inserts of plan assignments on SQL Server
+    # fast_executemany で SQL Server への計画割付の一括登録を高速化
     if url.startswith("mssql+pyodbc"):
         kwargs.setdefault("fast_executemany", True)
     return create_engine(url, pool_pre_ping=True, **kwargs)

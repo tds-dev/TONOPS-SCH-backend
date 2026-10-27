@@ -1,4 +1,4 @@
-"""Phase 2: create a draft plan for the demo plant and solve it through the API."""
+"""フェーズ2: デモ工場の下書き計画を作成し、API 経由で計算する。"""
 from datetime import timedelta
 
 import pytest
@@ -32,7 +32,7 @@ def test_create_and_solve_demo_plan(client, seeded):
     plan = make_plan(client, seeded["siteId"])
     assert plan["status"] == "DRAFT"
     assert plan["planNo"] == "P-20261027-01"
-    assert plan["basePlanId"] is None  # no MASTER yet
+    assert plan["basePlanId"] is None  # まだ MASTER はない
 
     r = client.post(f"/api/v1/plans/{plan['planId']}/solve", json={"wait": True, "timeLimitSec": 15})
     assert r.status_code == 200, r.text
@@ -51,7 +51,7 @@ def test_create_and_solve_demo_plan(client, seeded):
     kpis = client.get(f"/api/v1/plans/{plan['planId']}/kpis").json()
     assert kpis["scheduled_tasks"] == 21 and kpis["unscheduled_tasks"] == 0
 
-    # a second solve while nothing is running is allowed; the run list keeps history
+    # 実行中がなければ 2 回目の計算も可能。実行履歴は残る
     client.post(f"/api/v1/plans/{plan['planId']}/solve", json={"wait": True, "timeLimitSec": 5})
     assert len(client.get(f"/api/v1/plans/{plan['planId']}/solver-runs").json()) == 2
 
@@ -62,8 +62,8 @@ def test_queued_run_is_picked_by_worker_claim(client, seeded, db_session):
     plan = make_plan(client, seeded["siteId"], name="worker test")
     r = client.post(f"/api/v1/plans/{plan['planId']}/solve", json={"timeLimitSec": 5})
     assert r.status_code == 202 and r.json()["status"] == "QUEUED"
-    # a second request while queued is refused
+    # 待機中に 2 回目を依頼すると拒否される
     assert client.post(f"/api/v1/plans/{plan['planId']}/solve", json={}).status_code == 409
     run_id = claim_next(db_session)
     assert run_id == r.json()["runId"]
-    assert claim_next(db_session) is None  # nothing else queued
+    assert claim_next(db_session) is None  # 他に待機中はない

@@ -1,4 +1,4 @@
-"""Master tables (M_*). Column names are PascalCase, matching the design doc."""
+"""マスタテーブル（M_*）。列名は設計書に合わせて PascalCase。"""
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -25,7 +25,7 @@ DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
 TIME_UNITS = ["MINUTE", "DAY"]
 
 
-# ---------------------------------------------------------------- tenancy
+# ---------------------------------------------------------------- テナント
 class Organization(AuditMixin, SoftDeleteMixin, Base):
     """組織マスタ"""
 
@@ -50,7 +50,7 @@ class Site(AuditMixin, SoftDeleteMixin, Base):
     )
 
 
-# ---------------------------------------------------------------- calendar
+# ---------------------------------------------------------------- カレンダー
 class Calendar(AuditMixin, SoftDeleteMixin, Base):
     """カレンダーマスタ"""
 
@@ -68,7 +68,7 @@ class Calendar(AuditMixin, SoftDeleteMixin, Base):
 
 
 class CalendarPattern(AuditMixin, Base):
-    """稼働パターンマスタ — weekly shifts in site local time."""
+    """稼働パターンマスタ — 拠点の現地時間による週次シフト。"""
 
     __tablename__ = "M_CalendarPatterns"
     __table_args__ = (CheckConstraint("DayOfWeek BETWEEN 1 AND 7", name="DayOfWeek"),)
@@ -76,16 +76,16 @@ class CalendarPattern(AuditMixin, Base):
     CalendarID = Column(
         Integer, ForeignKey("M_Calendars.CalendarID", ondelete="CASCADE"), nullable=False
     )
-    DayOfWeek = Column(SmallInteger, nullable=False)  # 1 = Mon ... 7 = Sun
+    DayOfWeek = Column(SmallInteger, nullable=False)  # 1 = 月 … 7 = 日
     StartTime = Column(Time, nullable=False)
-    EndTime = Column(Time, nullable=False)  # <= StartTime means "crosses midnight"
+    EndTime = Column(Time, nullable=False)  # StartTime 以下は「日をまたぐ」の意味
     ShiftName = Column(String(50), nullable=True)
     ValidFrom = Column(Date, nullable=True)
     ValidTo = Column(Date, nullable=True)
 
 
 class CalendarException(AuditMixin, Base):
-    """稼働例外マスタ — holidays, stops (IsWorking=0) or overtime (IsWorking=1)."""
+    """稼働例外マスタ — 休日・停止（IsWorking=0）または残業（IsWorking=1）。"""
 
     __tablename__ = "M_CalendarExceptions"
     ExceptionID = Column(Integer, primary_key=True, autoincrement=True)
@@ -98,7 +98,7 @@ class CalendarException(AuditMixin, Base):
     Reason = Column(String(100), nullable=True)
 
 
-# ---------------------------------------------------------------- resources
+# ---------------------------------------------------------------- リソース
 class ResourceGroup(AuditMixin, SoftDeleteMixin, Base):
     """リソースグループマスタ"""
 
@@ -133,7 +133,7 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     SortOrder = Column(Integer, nullable=False, default=0)
 
 
-# ---------------------------------------------------------------- configuration
+# ---------------------------------------------------------------- 設定
 class AttributeDefinition(AuditMixin, Base):
     """属性定義マスタ"""
 
@@ -155,7 +155,7 @@ class AttributeDefinition(AuditMixin, Base):
 
 
 class Rule(AuditMixin, Base):
-    """制約ルールマスタ — one instance of a rule plugin, scoped by a selector."""
+    """制約ルールマスタ — ルールプラグインの 1 インスタンス。対象はセレクターで絞り込む。"""
 
     __tablename__ = "M_Rules"
     RuleID = Column(Integer, primary_key=True, autoincrement=True)
@@ -187,7 +187,7 @@ class ChangeoverMatrix(AuditMixin, Base):
 
 
 class ChangeoverEntry(AuditMixin, Base):
-    """段取り替え明細マスタ — FromValue/ToValue '*' means any value."""
+    """段取り替え明細マスタ — FromValue/ToValue の '*' は任意の値。"""
 
     __tablename__ = "M_ChangeoverEntries"
     __table_args__ = (UniqueConstraint("MatrixID", "FromValue", "ToValue"),)
@@ -203,7 +203,7 @@ class ChangeoverEntry(AuditMixin, Base):
 
 
 class PlanProfile(AuditMixin, Base):
-    """計画プロファイルマスタ — objective weights and solver limits."""
+    """計画プロファイルマスタ — 目的関数の重みとソルバーの上限。"""
 
     __tablename__ = "M_PlanProfiles"
     __table_args__ = (CheckConstraint(in_check("TimeUnit", TIME_UNITS), name="TimeUnit"),)
@@ -217,7 +217,7 @@ class PlanProfile(AuditMixin, Base):
     IsDefault = Column(Boolean, nullable=False, default=False)
 
 
-# ---------------------------------------------------------------- templates
+# ---------------------------------------------------------------- テンプレート
 class Item(AuditMixin, SoftDeleteMixin, Base):
     """品目マスタ"""
 
@@ -268,7 +268,7 @@ class RoutingStep(AuditMixin, Base):
 
 
 class RoutingStepResource(AuditMixin, Base):
-    """工程リソース候補マスタ — eligible resource or group for a step."""
+    """工程リソース候補マスタ — 工程を実行できるリソースまたはグループ。"""
 
     __tablename__ = "M_RoutingStepResources"
     __table_args__ = (

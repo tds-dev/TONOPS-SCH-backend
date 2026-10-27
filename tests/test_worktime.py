@@ -1,16 +1,16 @@
-"""Working-time expansion (pure functions)."""
+"""稼働時間の展開（純粋関数）。"""
 from datetime import datetime, time
 
 from app.services.worktime import ExceptionSpec, PatternSpec, expand_working_time, merge, subtract
 
-TZ = "Asia/Tokyo"  # UTC+9, no DST
+TZ = "Asia/Tokyo"  # UTC+9、夏時間なし
 
 
 def test_two_shifts_on_a_weekday():
-    # Tue 2026-10-27 06:00–12:00 and 13:00–22:00 JST
+    # 2026-10-27（火）06:00–12:00 と 13:00–22:00 JST
     patterns = [PatternSpec(2, time(6), time(12)), PatternSpec(2, time(13), time(22))]
-    start = datetime(2026, 10, 26, 15, 0)  # Tue 00:00 JST
-    end = datetime(2026, 10, 27, 15, 0)  # Wed 00:00 JST
+    start = datetime(2026, 10, 26, 15, 0)  # 火 00:00 JST
+    end = datetime(2026, 10, 27, 15, 0)  # 水 00:00 JST
     got = expand_working_time(patterns, [], start, end, TZ)
     assert got == [
         (datetime(2026, 10, 26, 21, 0), datetime(2026, 10, 27, 3, 0)),
@@ -19,8 +19,8 @@ def test_two_shifts_on_a_weekday():
 
 
 def test_night_shift_crosses_midnight():
-    patterns = [PatternSpec(1, time(22), time(6))]  # Mon 22:00 -> Tue 06:00
-    start = datetime(2026, 10, 25, 15, 0)  # Mon 00:00 JST
+    patterns = [PatternSpec(1, time(22), time(6))]  # 月 22:00 -> 火 06:00
+    start = datetime(2026, 10, 25, 15, 0)  # 月 00:00 JST
     end = datetime(2026, 10, 27, 15, 0)
     got = expand_working_time(patterns, [], start, end, TZ)
     assert got == [(datetime(2026, 10, 26, 13, 0), datetime(2026, 10, 26, 21, 0))]
@@ -31,8 +31,8 @@ def test_holiday_and_overtime_exceptions():
     start = datetime(2026, 10, 26, 15, 0)
     end = datetime(2026, 10, 27, 15, 0)
     exceptions = [
-        ExceptionSpec(datetime(2026, 10, 27, 1, 0), datetime(2026, 10, 27, 2, 0), False),  # 10–11 stop
-        ExceptionSpec(datetime(2026, 10, 27, 13, 0), datetime(2026, 10, 27, 14, 0), True),  # 22–23 overtime
+        ExceptionSpec(datetime(2026, 10, 27, 1, 0), datetime(2026, 10, 27, 2, 0), False),  # 10–11 停止
+        ExceptionSpec(datetime(2026, 10, 27, 13, 0), datetime(2026, 10, 27, 14, 0), True),  # 22–23 残業
     ]
     got = expand_working_time(patterns, exceptions, start, end, TZ)
     assert got == [

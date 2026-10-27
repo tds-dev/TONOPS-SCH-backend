@@ -1,9 +1,9 @@
-"""Execute one solver run end to end: snapshot → CP-SAT → write results.
+"""ソルバー実行を 1 件、最後まで処理する: スナップショット → CP-SAT → 結果の書込み。
 
-Results written to the plan:
-  T_PlanAssignments  replaced (locked rows keep IsLocked / Source)
-  T_PlanKpis         replaced
-  T_PlanViolations   replaced (late jobs, unscheduled tasks, rule issues)
+計画に書き込む結果:
+  T_PlanAssignments  置換（ロック行は IsLocked / Source を保持）
+  T_PlanKpis         置換
+  T_PlanViolations   置換（納期遅れ、未割付タスク、ルール違反）
 """
 import time
 import traceback
@@ -87,8 +87,8 @@ def _cancel_checker(factory: sessionmaker, run_id: int) -> Callable[[], bool]:
 
 
 def execute_run(db: Session, run_id: int, session_factory: sessionmaker | None = None) -> SolverRun:
-    """Run a QUEUED (or already claimed RUNNING) solver run synchronously."""
-    from app.engine.model_builder import solve_problem  # OR-Tools imported only when solving
+    """QUEUED（またはワーカーが取得済みの RUNNING）の実行を同期で処理する。"""
+    from app.engine.model_builder import solve_problem  # OR-Tools は計算時にのみ import する
 
     factory = session_factory or sessionmaker(bind=db.get_bind(), expire_on_commit=False)
     run = db.get(SolverRun, run_id)

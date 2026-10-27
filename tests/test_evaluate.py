@@ -1,4 +1,4 @@
-"""Schedule checker and KPIs (pure Python, no OR-Tools)."""
+"""スケジュールのチェッカーと KPI（純粋 Python、OR-Tools 不要）。"""
 from app.engine.evaluate import SAssignment, check_schedule, compute_kpis
 from app.engine.problem import matches
 from tests.engine_fixtures import two_machine_problem, weekday_rule
@@ -9,8 +9,8 @@ def codes(violations, severity=None):
 
 
 def good_schedule():
-    # M-01: A(job1) 0–90, A(job3) 90–180 ; M-02: B(job2) 0–90, C(job4) 120–210
-    # P-01: packs 30 min after each mix, one at a time
+    # M-01: A(ジョブ1) 0–90, A(ジョブ3) 90–180 ; M-02: B(ジョブ2) 0–90, C(ジョブ4) 120–210
+    # P-01: 各配合の 30 分後に 1 件ずつ包装
     return [
         SAssignment(11, 1, 0, 90), SAssignment(13, 1, 90, 180),
         SAssignment(12, 2, 0, 90), SAssignment(14, 2, 120, 210, setup=30),
@@ -27,10 +27,10 @@ def test_valid_schedule_has_no_hard_violations():
 def test_detects_overlap_calendar_dependency_and_unscheduled():
     p = two_machine_problem()
     sched = good_schedule()
-    sched[1] = SAssignment(13, 1, 60, 150)  # overlaps job1 on M-01
-    sched[7] = SAssignment(24, 3, 330, 390)  # crosses the 12:00–13:00 break
-    sched[4] = SAssignment(21, 3, 100, 160)  # only 10 min after mixing (needs 30)
-    del sched[5]  # job2 packing unscheduled
+    sched[1] = SAssignment(13, 1, 60, 150)  # M-01 でジョブ1 と重なる
+    sched[7] = SAssignment(24, 3, 330, 390)  # 12:00–13:00 の休憩をまたぐ
+    sched[4] = SAssignment(21, 3, 100, 160)  # 配合の 10 分後しかない（30 分必要）
+    del sched[5]  # ジョブ2 の包装が未割付
     got = codes(check_schedule(p, sched), "HARD")
     assert "OVERLAP" in got and "OUTSIDE_CALENDAR" in got and "DEPENDENCY" in got and "UNSCHEDULED" in got
 
@@ -38,18 +38,18 @@ def test_detects_overlap_calendar_dependency_and_unscheduled():
 def test_forbidden_and_short_changeovers():
     p = two_machine_problem()
     sched = good_schedule()
-    # B then A on M-02 is forbidden; A then C needs 45 min
+    # M-02 で B→A は禁止。A→C は 45 分必要
     sched[2] = SAssignment(12, 2, 0, 90)
     sched[0] = SAssignment(11, 2, 100, 190)
     sched[3] = SAssignment(14, 1, 200, 290)
     sched[1] = SAssignment(13, 1, 100, 190)
     got = codes(check_schedule(p, sched), "HARD")
     assert "FORBIDDEN_SEQUENCE" in got
-    assert "SETUP_TOO_SHORT" in got  # A(13) ends 190, C(14) starts 200 on M-01
+    assert "SETUP_TOO_SHORT" in got  # M-01 で A(13) は 190 に終了、C(14) は 200 に開始
 
 
 def test_weekday_rule_check():
-    # Horizon starts Tuesday; forbid Tuesday for family C
+    # 計画期間は火曜開始。系統C の火曜を禁止
     p = two_machine_problem(rules=[weekday_rule([3, 4, 5])])
     got = check_schedule(p, good_schedule())
     assert "WEEKDAY" in codes(got, "HARD")
@@ -57,7 +57,7 @@ def test_weekday_rule_check():
 
 def test_kpis_and_late_jobs():
     p = two_machine_problem()
-    p.jobs[1].due = 150  # job 1 finishes at 180 -> 30 min late
+    p.jobs[1].due = 150  # ジョブ1 は 180 に完了 -> 30 分遅れ
     sched = good_schedule()
     kpi = compute_kpis(p, sched)
     assert kpi["late_jobs"] == 1 and kpi["total_lateness_min"] == 30
@@ -78,5 +78,5 @@ def test_selector_matching():
 def test_local_days_cover_horizon():
     p = two_machine_problem()
     days = p.local_days()
-    assert [d.isoweekday() for d, _, _ in days] == [2, 3, 4]  # Tue 06:00 → Thu 06:00
+    assert [d.isoweekday() for d, _, _ in days] == [2, 3, 4]  # 火 06:00 → 木 06:00
     assert days[0][1] == 0 and days[-1][2] == p.horizon

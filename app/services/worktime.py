@@ -1,8 +1,7 @@
-"""Working-time calculation (pure functions, no database).
+"""稼働時間の計算（純粋関数、DB 非依存）。
 
-`expand_working_time` turns weekly patterns (site local time) plus exceptions
-(UTC) into a sorted list of non-overlapping UTC intervals. The scheduling
-engine reuses it.
+`expand_working_time` は週次パターン（拠点の現地時間）と例外（UTC）から、
+重なりのない UTC 区間のソート済みリストを作る。スケジューリングエンジンでも使う。
 """
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -10,12 +9,12 @@ from zoneinfo import ZoneInfo
 
 from app.core.timeutil import to_utc_naive
 
-Interval = tuple[datetime, datetime]  # naive UTC, [start, end)
+Interval = tuple[datetime, datetime]  # naive な UTC、[開始, 終了)
 
 
 @dataclass(frozen=True)
 class PatternSpec:
-    day_of_week: int  # 1 = Mon ... 7 = Sun
+    day_of_week: int  # 1 = 月 … 7 = 日
     start: time
     end: time
     valid_from: date | None = None
@@ -24,8 +23,8 @@ class PatternSpec:
 
 @dataclass(frozen=True)
 class ExceptionSpec:
-    start: datetime  # naive UTC
-    end: datetime  # naive UTC
+    start: datetime  # naive な UTC
+    end: datetime  # naive な UTC
     is_working: bool
 
 
@@ -70,9 +69,9 @@ def expand_working_time(
     end: datetime,
     tz: str,
 ) -> list[Interval]:
-    """Working intervals (naive UTC) between `start` and `end` (naive UTC)."""
+    """`start` から `end` まで（naive な UTC）の稼働区間（naive な UTC）。"""
     zone = ZoneInfo(tz)
-    # Walk local dates, one day before start (night shifts crossing midnight)
+    # 現地の日付を、開始の前日から順にたどる（日をまたぐ夜勤のため）
     first_local = start.replace(tzinfo=ZoneInfo("UTC")).astimezone(zone).date() - timedelta(days=1)
     last_local = end.replace(tzinfo=ZoneInfo("UTC")).astimezone(zone).date()
     base: list[Interval] = []

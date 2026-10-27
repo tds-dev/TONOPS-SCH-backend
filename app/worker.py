@@ -1,9 +1,9 @@
-"""Solver worker: polls T_SolverRuns for QUEUED runs and executes them.
+"""ソルバーワーカー: T_SolverRuns の QUEUED をポーリングして実行する。
 
     python -m app.worker
 
-Run one or more alongside the API. A run is claimed with a conditional
-UPDATE (Status QUEUED → RUNNING), so several workers never take the same run.
+API と並行して 1 つ以上起動する。実行の取得は条件付き UPDATE
+（Status QUEUED → RUNNING）で行うため、複数ワーカーが同じ実行を取ることはない。
 """
 import logging
 import time

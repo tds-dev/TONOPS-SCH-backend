@@ -1,11 +1,11 @@
-"""Shared column sets used by every table (audit columns, logical delete)."""
+"""全テーブル共通の列（監査列、論理削除）。"""
 from sqlalchemy import Boolean, Column, DateTime, String
 
 from app.core.timeutil import utcnow
 
 
 class AuditMixin:
-    """CreatedAt / CreatedBy / UpdatedAt / UpdatedBy, as in 工程くん."""
+    """CreatedAt / CreatedBy / UpdatedAt / UpdatedBy（工程くんと同じ）。"""
 
     CreatedAt = Column(DateTime, nullable=False, default=utcnow)
     CreatedBy = Column(String(254), nullable=True)
@@ -21,6 +21,6 @@ AUDIT_COLUMNS = {"CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy"}
 
 
 def in_check(column: str, values: list[str]) -> str:
-    """SQL text for a CHECK (col IN (...)) constraint."""
+    """CHECK (col IN (...)) 制約の SQL 文字列。"""
     quoted = ",".join(f"'{v}'" for v in values)
     return f"{column} IN ({quoted})"

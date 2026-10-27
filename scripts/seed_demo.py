@@ -1,4 +1,4 @@
-"""Load demo data (one plant, 6 machines, 7 jobs).
+"""デモデータを登録する（1 工場、設備 6 台、ジョブ 7 件）。
 
     python -m scripts.seed_demo
 """

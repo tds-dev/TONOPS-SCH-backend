@@ -1,4 +1,4 @@
-"""Phase 1: master-data CRUD, task generation, working time."""
+"""フェーズ1: マスタの CRUD、タスク生成、稼働時間。"""
 
 
 def test_health(client):
@@ -20,13 +20,13 @@ def test_resource_crud_camel_case_and_soft_delete(client, seeded):
     r = client.post("/api/v1/resources", json=body, headers={"X-User-Email": "test@example.com"})
     assert r.status_code == 201, r.text
     res = r.json()
-    assert res["resourceKind"] == "MACHINE"  # default applied
+    assert res["resourceKind"] == "MACHINE"  # 既定値が適用される
     assert res["createdBy"] == "test@example.com"
 
     r = client.patch(f"/api/v1/resources/{res['resourceId']}", json={"resourceName": "配合機 3号"})
     assert r.json()["resourceName"] == "配合機 3号"
 
-    # duplicate code in the same site -> 409
+    # 同一拠点でコード重複 -> 409
     assert client.post("/api/v1/resources", json=body).status_code == 409
 
     assert client.delete(f"/api/v1/resources/{res['resourceId']}").status_code == 204
@@ -38,16 +38,16 @@ def test_resource_crud_camel_case_and_soft_delete(client, seeded):
 
 def test_generated_tasks_options_and_dependencies(client, seeded):
     jobs = client.get("/api/v1/jobs", params={"siteId": seeded["siteId"]}).json()
-    job = next(j for j in jobs if j["jobNo"] == "JB-1041")  # 1,200 kg of A-200
+    job = next(j for j in jobs if j["jobNo"] == "JB-1041")  # A-200 を 1,200 kg
     tasks = client.get(f"/api/v1/jobs/{job['jobId']}/tasks").json()
     assert [t["taskName"] for t in tasks] == ["配合", "充填", "包装"]
     assert tasks[0]["attributesJSON"] == {"family": "A"}
-    # mix: 0 setup + 1200 × 0.12 = 144 min, fill: 15 + 120 = 135, pack: 10 + 96 = 106
+    # 配合: 段取り 0 + 1200 × 0.12 = 144 分、充填: 15 + 120 = 135、包装: 10 + 96 = 106
     assert [t["options"][0]["durationMin"] for t in tasks] == [144, 135, 106]
     deps = client.get(f"/api/v1/jobs/{job['jobId']}/dependencies").json()
     assert [(d["dependencyType"], d["lagMin"]) for d in deps] == [("FS", 60), ("FS", 0)]
 
-    # regenerating without replace is refused; with replace it rebuilds
+    # replace なしの再生成は拒否、replace ありなら作り直す
     assert client.post(f"/api/v1/jobs/{job['jobId']}/generate-tasks").status_code == 409
     r = client.post(f"/api/v1/jobs/{job['jobId']}/generate-tasks", params={"replace": "true"})
     assert r.status_code == 200 and len(r.json()) == 3

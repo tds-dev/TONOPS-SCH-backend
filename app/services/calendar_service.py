@@ -1,7 +1,7 @@
-"""Load calendars from the database and expand them to working intervals.
+"""DB からカレンダーを読み込み、稼働区間に展開する。
 
-Inheritance: a calendar without its own patterns uses its parent's patterns.
-Exceptions from the whole chain (child and parents) all apply.
+継承: 自身のパターンを持たないカレンダーは親カレンダーのパターンを使う。
+例外は継承チェーン全体（子と親）のものがすべて適用される。
 """
 from datetime import datetime
 
@@ -12,7 +12,7 @@ from app.services.worktime import ExceptionSpec, Interval, PatternSpec, expand_w
 
 
 def calendar_specs(db: Session, calendar_id: int) -> tuple[list[PatternSpec], list[ExceptionSpec]]:
-    """Load patterns and exceptions for a calendar, following ParentCalendarID."""
+    """ParentCalendarID をたどってカレンダーのパターンと例外を読み込む。"""
     patterns: list[PatternSpec] = []
     exceptions: list[ExceptionSpec] = []
     seen: set[int] = set()

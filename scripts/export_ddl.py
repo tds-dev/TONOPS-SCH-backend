@@ -1,9 +1,8 @@
-"""Write SQL Server DDL for all tables to db/schema_sqlserver.sql.
+"""全テーブルの SQL Server 用 DDL を db/schema_sqlserver.sql に出力する。
 
     python -m scripts.export_ddl
 
-Useful for DBA review or creating the schema by hand in SSMS.
-No database connection is needed.
+DBA レビューや SSMS での手動作成に使う。DB への接続は不要。
 """
 from pathlib import Path
 

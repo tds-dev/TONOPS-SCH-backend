@@ -1,8 +1,8 @@
-"""allowed_weekdays: matching tasks may only run on the listed weekdays
-(site local time, 1 = Mon ... 7 = Sun). Hard rule.
+"""allowed_weekdays: 対象タスクは指定した曜日にのみ実行できる
+（拠点の現地時間、1 = 月 … 7 = 日）。必須ルール。
 
-Example (M_Rules): SelectorJSON {"family": "C"}, ParamsJSON {"weekdays": [1,2,3,4,5]}
-→ family C is never produced on Saturday or Sunday.
+例（M_Rules）: SelectorJSON {"family": "C"}, ParamsJSON {"weekdays": [1,2,3,4,5]}
+→ 系統C は土曜・日曜に生産しない。
 """
 from app.engine.problem import Problem, PRule, matches
 from app.engine.result import SAssignment, Violation, fmt

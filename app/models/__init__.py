@@ -1,4 +1,4 @@
-"""Import every model so Base.metadata knows all tables."""
+"""すべてのモデルを import し、Base.metadata に全テーブルを登録する。"""
 from app.models.masters import (  # noqa: F401
     AttributeDefinition,
     Calendar,

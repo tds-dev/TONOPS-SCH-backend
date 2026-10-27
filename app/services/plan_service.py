@@ -1,4 +1,4 @@
-"""Creating plans and queueing solver runs."""
+"""計画の作成とソルバー実行のキュー登録。"""
 from datetime import datetime
 
 from fastapi import HTTPException, status
@@ -19,7 +19,7 @@ def next_plan_no(db: Session, site: Site, horizon_start: datetime) -> str:
 
 
 def current_master(db: Session, site_id: int, at: datetime) -> Plan | None:
-    """The MASTER plan covering `at` (latest horizon start wins)."""
+    """`at` を含む MASTER 計画（計画開始が最も遅いものを優先）。"""
     return db.scalars(
         select(Plan)
         .where(Plan.SiteID == site_id, Plan.Status == "MASTER", Plan.HorizonEnd > at)

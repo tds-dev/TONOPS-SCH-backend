@@ -1,16 +1,15 @@
-"""Load everything a solve needs from the database into a `Problem`.
+"""計算に必要なデータをすべて DB から読み込み `Problem` を作る。
 
-What is included:
-  * resources of the plan's site (not deleted) with working windows from
-    their calendar (or the site default calendar)
-  * jobs of the site that are not DONE / CANCELLED, owned by the scheduler and
-    released before the horizon end; their non-summary, unfinished tasks
-  * resource options (group options expanded to each member resource)
-  * dependencies between included tasks
-  * locks: locked assignments of this plan and of its base plan, plus base-plan
-    work that starts inside the frozen window
-  * hints: all other assignments of this plan (or the base plan) for warm start
-  * active changeover matrices and rules of the site
+対象:
+  * 計画の拠点のリソース（未削除）と、そのカレンダー（なければ拠点の既定
+    カレンダー）から求めた稼働枠
+  * 拠点のジョブのうち DONE / CANCELLED 以外、スケジューラ管理、計画期間終了前に
+    着手可能なもの。その非集約・未完了タスク
+  * リソース候補（グループ指定は所属リソースごとに展開）
+  * 対象タスク間の依存関係
+  * ロック: この計画と元計画のロック済み割付、および確定期間内に始まる元計画の作業
+  * ヒント: それ以外のこの計画（または元計画）の割付。初期解として使う
+  * 拠点の有効な段取り替えマトリクスとルール
 """
 from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session
@@ -56,7 +55,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     if scope == "REPAIR":
         weights.setdefault("stability", 20)
 
-    # ---- resources and calendars
+    # ---- リソースとカレンダー
     resources: dict[int, PResource] = {}
     rows = db.scalars(
         select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag.is_(False))
@@ -65,7 +64,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     for r in rows:
         cal_id = r.CalendarID or site.DefaultCalendarID
         if cal_id is None:
-            windows = [(0, horizon)]  # no calendar: always available
+            windows = [(0, horizon)]  # カレンダーなし: 常に稼働
         else:
             if cal_id not in calendar_cache:
                 calendar_cache[cal_id] = _windows(working_time(db, cal_id, start, end, tz), start, horizon)
@@ -79,7 +78,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         if r.ResourceGroupID:
             members.setdefault(r.ResourceGroupID, []).append(r.ResourceID)
 
-    # ---- jobs and tasks
+    # ---- ジョブとタスク
     jobs_rows = db.scalars(
         select(Job).where(
             Job.SiteID == site.SiteID,
@@ -102,7 +101,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         )
     ).all()
 
-    # ---- previous positions: this plan first, else the base plan
+    # ---- 前回の位置: この計画を優先し、なければ元計画
     def assignments_of(plan_id: int | None) -> dict[int, PlanAssignment]:
         if plan_id is None:
             return {}
@@ -121,7 +120,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         release = job_release.get(t.JobID, 0)
         if t.EarliestStartAt:
             release = max(release, to_min(t.EarliestStartAt))
-        release = max(release, frozen_end)  # nothing new starts inside the frozen window
+        release = max(release, frozen_end)  # 確定期間内には新しい作業を開始しない
         task = PTask(
             id=t.TaskID, job_id=t.JobID, name=f"{jobs[t.JobID].no} {t.TaskName}",
             attrs=dict(t.AttributesJSON or {}), options=options, release=release,
@@ -148,7 +147,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         if d.PredecessorTaskID in tasks
     ]
 
-    # ---- changeovers and rules
+    # ---- 段取り替えとルール
     changeovers = []
     for mx in db.scalars(
         select(ChangeoverMatrix).where(ChangeoverMatrix.SiteID == site.SiteID, ChangeoverMatrix.IsActive.is_(True))
@@ -158,7 +157,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
             id=mx.MatrixID, attribute=mx.AttributeKey, resource_ids=rids, default=int(mx.DefaultMinutes or 0),
             entries={(e.FromValue, e.ToValue): (int(e.SetupMinutes or 0), bool(e.IsForbidden)) for e in mx.entries},
         ))
-    plan_day = utc_to_local(start, tz).date()  # rule validity is checked on the local start date
+    plan_day = utc_to_local(start, tz).date()  # ルールの有効期間は現地の開始日で判定する
     rules = [
         PRule(r.RuleID, r.RuleTypeKey, r.RuleName, dict(r.SelectorJSON or {}), dict(r.ParamsJSON or {}),
               bool(r.IsHard), int(r.Weight or 100))

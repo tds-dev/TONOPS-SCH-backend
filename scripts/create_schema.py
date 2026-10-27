@@ -1,7 +1,7 @@
-"""Create all tables in the database configured by DATABASE_URL.
+"""DATABASE_URL で指定した DB に全テーブルを作成する。
 
-    python -m scripts.create_schema            # create missing tables
-    python -m scripts.create_schema --drop     # drop everything first (dev only!)
+    python -m scripts.create_schema            # 未作成のテーブルを作成
+    python -m scripts.create_schema --drop     # 先にすべて削除（開発用のみ！）
 """
 import sys
 

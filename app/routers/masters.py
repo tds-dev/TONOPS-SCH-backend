@@ -1,5 +1,5 @@
-"""Master-data endpoints: plain CRUD from the generic factory, plus
-calendar working-time expansion."""
+"""マスタデータのエンドポイント: 汎用ファクトリによる CRUD と、
+カレンダーの稼働時間展開。"""
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -47,7 +47,7 @@ def get_working_time(
     end: datetime = Query(..., alias="to"),
     db: Session = Depends(get_db),
 ):
-    """Expanded working intervals (UTC). Used to shade non-working time on the board."""
+    """展開した稼働時間（UTC）。ボード上の非稼働時間の網掛けに使う。"""
     cal = db.get(m.Calendar, calendar_id)
     if cal is None:
         raise HTTPException(404, f"Calendar {calendar_id} not found")

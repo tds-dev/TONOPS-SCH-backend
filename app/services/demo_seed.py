@@ -1,7 +1,7 @@
-"""Demo data matching the UI mock: one plant, mixing → filling → packing.
+"""UI モックに合わせたデモデータ: 1 工場、配合 → 充填 → 包装。
 
-Dates are relative to "tomorrow 06:00 site time", so the demo always plans
-the near future. Used by `scripts/seed_demo.py` and by the tests.
+日付は「翌日 06:00（拠点時刻）」を基準にするため、デモは常に直近の将来を計画する。
+`scripts/seed_demo.py` とテストで使う。
 """
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -18,7 +18,7 @@ USER = "seed"
 
 
 def demo_start(now: datetime | None = None) -> datetime:
-    """Tomorrow 06:00 local, as naive UTC."""
+    """翌日 06:00（現地時刻）を naive な UTC で返す。"""
     local_now = (now or datetime.now(ZoneInfo(TZ))).astimezone(ZoneInfo(TZ))
     tomorrow = local_now.date() + timedelta(days=1)
     return to_utc_naive(datetime.combine(tomorrow, time(6, 0)), TZ)
@@ -35,7 +35,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     db.add(site)
     db.flush()
 
-    # Mon–Sat 06:00–12:00 and 13:00–22:00 (lunch break 12–13)
+    # 月〜土 06:00–12:00 と 13:00–22:00（昼休み 12–13）
     cal = m.Calendar(SiteID=site.SiteID, CalendarCode="STD", CalendarName="標準カレンダー", CreatedBy=USER)
     for dow in range(1, 7):
         cal.patterns.append(m.CalendarPattern(DayOfWeek=dow, StartTime=time(6), EndTime=time(12), ShiftName="午前"))
@@ -66,7 +66,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         Label="系統", DataType="ENUM", EnumValuesJSON=["A", "B", "C"], CreatedBy=USER,
     ))
 
-    # Changeovers on the mixers, by product family. Same family = no setup.
+    # 配合機の段取り替え（製品系統別）。同一系統は段取りなし。
     matrix = m.ChangeoverMatrix(
         SiteID=site.SiteID, MatrixName="配合 系統切替", AttributeKey="family",
         ResourceGroupID=groups["MIX"].ResourceGroupID, DefaultMinutes=0, CreatedBy=USER,
@@ -86,7 +86,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         TimeLimitSec=30, CreatedBy=USER,
     ))
 
-    # Items with a 3-step routing; minutes per kg differ by step.
+    # 3 工程の工程ルートを持つ品目。kg あたりの分は工程ごとに異なる。
     items = {}
     for code, fam in [("A-200", "A"), ("A-310", "A"), ("B-110", "B"), ("B-140", "B"), ("B-150", "B"), ("C-020", "C")]:
         item = m.Item(SiteID=site.SiteID, ItemCode=code, ItemName=f"品目 {code}", Unit="kg",
@@ -95,7 +95,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         db.flush()
         routing = m.Routing(ItemID=item.ItemID, RoutingName=f"{code} 標準", Revision=1, IsDefault=True, CreatedBy=USER)
         for no, name, grp, setup, mpu, lag in [
-            (10, "配合", "MIX", 0, 0.12, 60),   # 60 min cooling before filling
+            (10, "配合", "MIX", 0, 0.12, 60),   # 充填までに 60 分の冷却
             (20, "充填", "FIL", 15, 0.10, 0),
             (30, "包装", "PAC", 10, 0.08, 0),
         ]:

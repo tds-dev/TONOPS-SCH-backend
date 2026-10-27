@@ -1,4 +1,4 @@
-"""Jobs, tasks and dependencies."""
+"""ジョブ、タスク、依存関係。"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ def post_generate_tasks(
     db: Session = Depends(get_db),
     user: str = Depends(current_user),
 ):
-    """Expand the job's routing into tasks, resource options and dependencies."""
+    """ジョブの工程ルートを展開し、タスク・リソース候補・依存関係を作成する。"""
     job = db.get(Job, job_id)
     if job is None or job.DeleteFlag:
         raise HTTPException(404, f"Job {job_id} not found")
@@ -52,7 +52,7 @@ def get_job_dependencies(job_id: int, db: Session = Depends(get_db)):
 
 
 routers = [
-    job_extra,  # registered first so /jobs/{id}/tasks is not shadowed
+    job_extra,  # /jobs/{id}/tasks が隠れないよう先に登録する
     crud_router(Job, "/jobs", "Jobs", order_by="DueAt"),
     crud_router(Task, "/tasks", "Jobs", order_by="Sequence"),
     crud_router(TaskResourceOption, "/task-resource-options", "Jobs"),

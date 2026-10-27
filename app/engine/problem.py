@@ -1,5 +1,5 @@
-"""The scheduling problem as plain data. Times are integer minutes from the
-plan's horizon start (0 .. horizon). No database or OR-Tools imports here."""
+"""スケジューリング問題を素のデータで表す。時刻は計画期間開始からの
+整数分（0 .. horizon）。DB や OR-Tools はここでは import しない。"""
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -11,15 +11,15 @@ class PResource:
     id: int
     code: str
     name: str
-    capacity: int  # 1 = one task at a time
-    windows: list[tuple[int, int]]  # working time, minutes [start, end)
+    capacity: int  # 1 = 同時に 1 タスクのみ
+    windows: list[tuple[int, int]]  # 稼働時間（分）[開始, 終了)
     group_id: int | None = None
 
 
 @dataclass
 class POption:
     resource_id: int
-    duration: int  # minutes, includes the option's fixed setup
+    duration: int  # 分。候補ごとの固定段取りを含む
     priority: int = 1
 
 
@@ -37,10 +37,10 @@ class PTask:
     name: str
     attrs: dict[str, Any]
     options: list[POption]
-    release: int = 0  # earliest start (minutes)
-    deadline: int | None = None  # task-level deadline (minutes)
-    lock: PLock | None = None  # fixed position (locked / frozen / in progress)
-    hint: PLock | None = None  # previous position, for warm start and stability
+    release: int = 0  # 最早開始（分）
+    deadline: int | None = None  # タスク単位の期限（分）
+    lock: PLock | None = None  # 固定位置（ロック・確定期間・作業中）
+    hint: PLock | None = None  # 前回の位置（初期解と安定性に使用）
 
 
 @dataclass
@@ -56,19 +56,19 @@ class PDependency:
 class PJob:
     id: int
     no: str
-    due: int | None  # minutes, may be negative (already late)
-    priority: int = 50  # 1 = highest
+    due: int | None  # 分。負の値もありうる（既に遅れている）
+    priority: int = 50  # 1 = 最優先
 
 
 @dataclass
 class PChangeover:
-    """Sequence-dependent setup on a set of resources, keyed by one attribute."""
+    """リソース群に対する順序依存の段取り。1 つの属性をキーとする。"""
 
     id: int
     attribute: str
     resource_ids: set[int]
     default: int
-    entries: dict[tuple[str, str], tuple[int, bool]]  # (from, to) -> (minutes, forbidden)
+    entries: dict[tuple[str, str], tuple[int, bool]]  # (切替前, 切替後) -> (分, 禁止)
 
     def lookup(self, frm: Any, to: Any) -> tuple[int, bool]:
         f, t = str(frm), str(to)
@@ -93,8 +93,8 @@ class PRule:
 
 @dataclass
 class Problem:
-    horizon_start: datetime  # naive UTC
-    horizon: int  # minutes
+    horizon_start: datetime  # naive な UTC
+    horizon: int  # 分
     tz: str
     resources: dict[int, PResource]
     tasks: dict[int, PTask]
@@ -112,7 +112,7 @@ class Problem:
         return int((dt - self.horizon_start).total_seconds() // 60)
 
     def local_days(self) -> list[tuple[date, int, int]]:
-        """Each local calendar day overlapping the horizon: (date, start_min, end_min)."""
+        """計画期間に重なる現地の各暦日: (日付, 開始分, 終了分)。"""
         zone = ZoneInfo(self.tz)
         utc = ZoneInfo("UTC")
         start_local = self.horizon_start.replace(tzinfo=utc).astimezone(zone)
@@ -132,13 +132,13 @@ class Problem:
 
 
 def matches(selector: dict[str, Any], attrs: dict[str, Any]) -> bool:
-    """Rule selector against task attributes.
+    """ルールのセレクターをタスク属性と照合する。
 
-    {"family": "A"}                       equality
-    {"family": {"in": ["A", "B"]}}        membership
-    {"family": {"ne": "C"}}               not equal
-    {"family": {"notIn": ["C"]}}          not a member
-    {}                                    matches every task
+    {"family": "A"}                       一致
+    {"family": {"in": ["A", "B"]}}        いずれかに一致
+    {"family": {"ne": "C"}}               不一致
+    {"family": {"notIn": ["C"]}}          いずれにも不一致
+    {}                                    すべてのタスクに一致
     """
     for key, cond in (selector or {}).items():
         value = attrs.get(key)

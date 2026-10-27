@@ -1,4 +1,4 @@
-"""Application settings, read from environment variables or a .env file."""
+"""アプリケーション設定。環境変数または .env ファイルから読み込む。"""
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./scheduler_dev.db"
     cors_origins: str = "http://localhost:4200"
     worker_poll_seconds: float = 2.0
-    # Used for CreatedBy / UpdatedBy until authentication is added.
+    # 認証を導入するまでの CreatedBy / UpdatedBy の既定値
     default_user: str = "system"
 
     @property

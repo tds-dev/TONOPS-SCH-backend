@@ -1,8 +1,8 @@
-"""FastAPI application: `uvicorn app.main:app --reload`."""
+"""FastAPI アプリケーション: `uvicorn app.main:app --reload`。"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import models  # noqa: F401  (register all tables)
+from app import models  # noqa: F401  （全テーブルを登録）
 from app.core.config import get_settings
 from app.routers import jobs, masters, plans
 

@@ -1,4 +1,4 @@
-"""Transaction tables (T_*): demand, plans, solver runs, actuals."""
+"""トランザクションテーブル（T_*）: 需要、計画、ソルバー実行、実績。"""
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -21,7 +21,7 @@ from sqlalchemy.orm import relationship
 from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
 
-# SQLite only auto-increments INTEGER PRIMARY KEY; use BIGINT on SQL Server only.
+# SQLite は INTEGER PRIMARY KEY のみ自動採番するため、BIGINT は SQL Server でのみ使う。
 BigId = BigInteger().with_variant(Integer, "sqlite")
 
 JOB_KINDS = ["ORDER", "PROJECT"]
@@ -38,7 +38,7 @@ ACTUAL_STATUSES = ["IN_PROGRESS", "DONE", "SUSPENDED"]
 ACTUAL_SOURCES = ["MANUAL", "PMS", "IMPORT"]
 
 
-# ---------------------------------------------------------------- demand
+# ---------------------------------------------------------------- 需要
 class Job(AuditMixin, SoftDeleteMixin, Base):
     """ジョブ（オーダー・プロジェクト）"""
 
@@ -61,7 +61,7 @@ class Job(AuditMixin, SoftDeleteMixin, Base):
     CustomerName = Column(String(100), nullable=True)
     ReleaseAt = Column(DateTime, nullable=True)
     DueAt = Column(DateTime, nullable=True)
-    Priority = Column(Integer, nullable=False, default=50)  # 1 = highest
+    Priority = Column(Integer, nullable=False, default=50)  # 1 = 最優先
     Status = Column(String(20), nullable=False, default="OPEN")
     PlanOwner = Column(String(20), nullable=False, default="SCHEDULER")
     AttributesJSON = Column(JSON, nullable=True)
@@ -71,7 +71,7 @@ class Job(AuditMixin, SoftDeleteMixin, Base):
 
 
 class Task(AuditMixin, Base):
-    """タスク — the unit the engine schedules (unless IsSummary)."""
+    """タスク — エンジンがスケジュールする単位（IsSummary の場合を除く）。"""
 
     __tablename__ = "T_Tasks"
     __table_args__ = (
@@ -137,9 +137,9 @@ class TaskDependency(AuditMixin, Base):
     MaxLagMin = Column(Integer, nullable=True)
 
 
-# ---------------------------------------------------------------- planning
+# ---------------------------------------------------------------- 計画
 class Plan(AuditMixin, Base):
-    """計画 — one version: DRAFT / MASTER / SUPERSEDED / DISCARDED / ARCHIVED."""
+    """計画 — 1 つの版: DRAFT / MASTER / SUPERSEDED / DISCARDED / ARCHIVED。"""
 
     __tablename__ = "T_Plans"
     __table_args__ = (
@@ -159,15 +159,15 @@ class Plan(AuditMixin, Base):
     ApprovedAt = Column(DateTime, nullable=True)
     ApprovedBy = Column(String(254), nullable=True)
     Memo = Column(String(500), nullable=True)
-    # Optimistic concurrency. SQL Server's rowversion is not portable to SQLite,
-    # so we use an integer version counter managed by SQLAlchemy.
+    # 楽観的排他制御。SQL Server の rowversion は SQLite に移植できないため、
+    # SQLAlchemy が管理する整数のバージョンカウンタを使う。
     RowVer = Column(Integer, nullable=False, default=1)
 
     __mapper_args__ = {"version_id_col": RowVer}
 
 
 class PlanAssignment(AuditMixin, Base):
-    """計画割付 — a task on a resource at a time, within one plan."""
+    """計画割付 — 1 つの計画内で、タスクをリソースと時刻に割り付けたもの。"""
 
     __tablename__ = "T_PlanAssignments"
     __table_args__ = (
@@ -180,7 +180,7 @@ class PlanAssignment(AuditMixin, Base):
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), nullable=False)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=False)
-    StartAt = Column(DateTime, nullable=False)  # UTC, includes setup
+    StartAt = Column(DateTime, nullable=False)  # UTC。作業開始時刻（段取りは SetupMinutes として直前に置く）
     EndAt = Column(DateTime, nullable=False)  # UTC
     SetupMinutes = Column(Integer, nullable=False, default=0)
     Units = Column(Numeric(5, 2), nullable=False, default=1)
@@ -192,7 +192,7 @@ class PlanAssignment(AuditMixin, Base):
 
 
 class SolverRun(AuditMixin, Base):
-    """ソルバー実行 — also the work queue polled by the worker."""
+    """ソルバー実行 — ワーカーがポーリングする作業キューも兼ねる。"""
 
     __tablename__ = "T_SolverRuns"
     __table_args__ = (
@@ -240,7 +240,7 @@ class PlanViolation(AuditMixin, Base):
     Message = Column(String(500), nullable=False)
 
 
-# ---------------------------------------------------------------- execution
+# ---------------------------------------------------------------- 実行
 class Actual(AuditMixin, Base):
     """実績"""
 

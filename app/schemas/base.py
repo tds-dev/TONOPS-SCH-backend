@@ -1,9 +1,9 @@
-"""Pydantic schema helpers.
+"""Pydantic スキーマの補助。
 
-API JSON uses camelCase (`resourceName`) while models use PascalCase
-(`ResourceName`). `ApiModel` converts automatically and accepts both on input.
-`schemas_for(model)` builds Read / Create / Update schemas straight from a
-SQLAlchemy model so the master-data CRUD stays in sync with the tables.
+API の JSON は camelCase（`resourceName`）、モデルは PascalCase（`ResourceName`）。
+`ApiModel` が自動で変換し、入力はどちらの形式も受け付ける。
+`schemas_for(model)` は SQLAlchemy モデルから Read / Create / Update スキーマを
+直接生成するため、マスタの CRUD は常にテーブル定義と一致する。
 """
 import datetime as dt
 from decimal import Decimal
@@ -26,7 +26,7 @@ def _iso_utc(value: dt.datetime) -> str:
     return value.isoformat() + "Z" if value.tzinfo is None else value.isoformat()
 
 
-# Stored naive UTC; accepted with any offset; returned as "...Z".
+# 保存は naive な UTC。入力は任意のオフセット可。出力は "...Z"。
 UtcDatetime = Annotated[
     dt.datetime,
     AfterValidator(_to_naive_utc),
@@ -57,10 +57,10 @@ class ApiModel(BaseModel):
 
 
 def python_type(col_type: TypeEngine) -> Any:
-    """Map a SQLAlchemy column type to the Python type used in the API."""
+    """SQLAlchemy の列型を API で使う Python の型に対応付ける。"""
     if isinstance(col_type, Boolean):
         return bool
-    if isinstance(col_type, Integer):  # also BigInteger / SmallInteger
+    if isinstance(col_type, Integer):  # BigInteger / SmallInteger も含む
         return int
     if isinstance(col_type, (Numeric, Float)):
         return float
@@ -84,7 +84,7 @@ _cache: dict[type, tuple[type[ApiModel], type[ApiModel], type[ApiModel]]] = {}
 
 
 def schemas_for(model: type) -> tuple[type[ApiModel], type[ApiModel], type[ApiModel]]:
-    """Return (Read, Create, Update) Pydantic models for a SQLAlchemy model."""
+    """SQLAlchemy モデルから (Read, Create, Update) の Pydantic モデルを返す。"""
     if model in _cache:
         return _cache[model]
     read_fields: dict[str, Any] = {}
@@ -95,7 +95,7 @@ def schemas_for(model: type) -> tuple[type[ApiModel], type[ApiModel], type[ApiMo
         name = col.key
         py = python_type(col.type)
         read_fields[name] = (Optional[py], None)
-        # Surrogate identity keys are server-generated; composite keys stay writable.
+        # 代理キー（自動採番）はサーバー側で生成。複合キーは書込み可のまま。
         is_identity = col.primary_key and single_pk and py is int
         if is_identity or name in AUDIT_COLUMNS or name == "RowVer":
             continue
@@ -113,5 +113,5 @@ def schemas_for(model: type) -> tuple[type[ApiModel], type[ApiModel], type[ApiMo
 
 
 def coerce(value: Any) -> Any:
-    """Decimal -> float for responses built by hand."""
+    """手組みのレスポンス用に Decimal を float に変換する。"""
     return float(value) if isinstance(value, Decimal) else value

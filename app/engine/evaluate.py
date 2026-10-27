@@ -1,7 +1,7 @@
-"""Check a schedule against a Problem and compute KPIs. Pure Python.
+"""スケジュールを Problem と照合して検証し、KPI を算出する（純粋 Python）。
 
-Used after every solve (KPIs + issue list), and in Phase 3 to validate a
-manual drag-and-drop move before it is saved.
+毎回の計算後（KPI と課題一覧）と、フェーズ3 で手動のドラッグ＆ドロップを
+保存する前の検証に使う。
 """
 from collections import defaultdict
 from itertools import pairwise
@@ -22,7 +22,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
     by_task = {a.task_id: a for a in assignments}
     tasks = problem.tasks
 
-    # Unscheduled tasks
+    # 未割付のタスク
     for t in tasks.values():
         if t.id not in by_task:
             out.append(Violation("HARD", "UNSCHEDULED", f"{t.name}（タスク {t.id}）が未割付です", task_id=t.id))
@@ -33,7 +33,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
             continue
         res = problem.resources.get(a.resource_id)
         if a.locked:
-            continue  # locked work is accepted as it is
+            continue  # ロック済みの作業はそのまま受け入れる
         if not any(o.resource_id == a.resource_id for o in t.options):
             out.append(Violation("HARD", "NOT_ELIGIBLE", f"{t.name} は {res.name if res else a.resource_id} で実行できません", task_id=t.id))
         if res and not _inside(res.windows, a.start, a.end):
@@ -41,7 +41,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
         if a.start < t.release:
             out.append(Violation("HARD", "BEFORE_RELEASE", f"{t.name} が着手可能日時 {fmt(problem, t.release)} より前に開始しています", task_id=t.id))
 
-    # Overlaps per unary resource (setup counts as busy time)
+    # 単一能力リソースの重なり（段取り時間も占有として扱う）
     per_res: dict[int, list[SAssignment]] = defaultdict(list)
     for a in assignments:
         per_res[a.resource_id].append(a)
@@ -53,7 +53,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
         for prev, cur in pairwise(items):
             if cur.start - cur.setup < prev.end:
                 out.append(Violation("HARD", "OVERLAP", f"{res.name} で {fmt(problem, cur.start)} に作業が重なっています", task_id=cur.task_id))
-        # Changeover checks between consecutive tasks
+        # 連続するタスク間の段取り替えチェック
         for co in problem.changeovers:
             if rid not in co.resource_ids:
                 continue
@@ -68,7 +68,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
                 elif cur.start - prev.end < need:
                     out.append(Violation("HARD", "SETUP_TOO_SHORT", f"{res.name}: {pv}→{cv} の段取りに {need}分必要です", task_id=cur.task_id))
 
-    # Dependencies
+    # 依存関係
     for d in problem.dependencies:
         p, s = by_task.get(d.pred), by_task.get(d.succ)
         if p is None or s is None:
@@ -80,13 +80,13 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
         if d.max_lag is not None and gap > d.max_lag:
             out.append(Violation("HARD", "MAX_LAG", f"{tasks[d.succ].name} は {tasks[d.pred].name} の後 {d.max_lag}分以内に開始する必要があります", task_id=d.succ))
 
-    # Rule plugins
+    # ルールプラグイン
     for rule in problem.rules:
         plugin = get_plugin(rule.type_key)
         if plugin is not None:
             out.extend(plugin.check(problem, rule, assignments))
 
-    # Late jobs and late tasks (soft: they are allowed, but cost)
+    # ジョブ・タスクの納期遅れ（推奨扱い: 許容するがコストになる）
     for job_id, end, due in job_finishes(problem, by_task):
         if due is not None and end > due:
             job = problem.jobs[job_id]
@@ -99,7 +99,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
 
 
 def job_finishes(problem: Problem, by_task: dict[int, SAssignment]) -> list[tuple[int, int, int | None]]:
-    """(job_id, finish minute, due minute) for jobs with at least one scheduled task."""
+    """(job_id, 完了分, 納期分) を、割付済みタスクが 1 件以上あるジョブについて返す。"""
     finish: dict[int, int] = {}
     for a in by_task.values():
         t = problem.tasks.get(a.task_id)

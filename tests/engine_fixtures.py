@@ -1,4 +1,4 @@
-"""Small hand-built problems for engine tests (no database)."""
+"""エンジンテスト用の小さな手組み問題（DB なし）。"""
 from datetime import datetime
 
 from app.engine.problem import (
@@ -12,16 +12,16 @@ from app.engine.problem import (
     PTask,
 )
 
-# Tuesday 2026-10-27 06:00 JST
+# 2026-10-27（火）06:00 JST
 START = datetime(2026, 10, 26, 21, 0)
 DAY = 24 * 60
 
 
 def two_machine_problem(**overrides) -> Problem:
-    """Two mixers (06:00–12:00, 13:00–22:00 each day for 2 days), 4 jobs of 2 tasks.
+    """配合機 2 台（2 日間、各日 06:00–12:00, 13:00–22:00）、2 タスクのジョブ 4 件。
 
-    Task 1x = mixing (either mixer), task 2x = packing on the packer, 30 min after mixing.
-    Families: job 1 A, job 2 B, job 3 A, job 4 C.
+    タスク 1x = 配合（どちらの配合機でも可）、タスク 2x = 包装機での包装（配合の 30 分後）。
+    系統: ジョブ1 A、ジョブ2 B、ジョブ3 A、ジョブ4 C。
     """
     windows = []
     for d in range(2):

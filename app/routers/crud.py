@@ -1,16 +1,15 @@
-"""Generic CRUD router factory for master tables.
+"""マスタテーブル用の汎用 CRUD ルーター生成。
 
     router = crud_router(Resource, "/resources", "Resources")
 
-gives:
+で次のエンドポイントができる:
     GET    /resources?siteId=1&resourceGroupId=2&includeDeleted=false
     GET    /resources/{id}
     POST   /resources
     PATCH  /resources/{id}
-    DELETE /resources/{id}      (sets DeleteFlag when the table has one)
+    DELETE /resources/{id}      （DeleteFlag 列があれば論理削除）
 
-Any query parameter whose name matches a column (camelCase) is used as an
-equality filter.
+列名（camelCase）と一致するクエリパラメータは、等価条件の絞り込みに使う。
 """
 from typing import Any
 

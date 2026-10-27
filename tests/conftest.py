@@ -1,4 +1,4 @@
-"""Test fixtures: an in-memory SQLite database per test, seeded with demo data."""
+"""テスト用フィクスチャ: テストごとにデモデータ入りのインメモリ SQLite を用意する。"""
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -12,13 +12,13 @@ from app.core.db import Base, get_db, make_engine
 from app.main import app
 from app.services.demo_seed import seed_demo
 
-# Monday 2026-10-26 10:00 JST -> demo horizon starts Tuesday 06:00 JST
+# 2026-10-26（月）10:00 JST -> デモの計画期間は火曜 06:00 JST から
 FIXED_NOW = datetime(2026, 10, 26, 10, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
 
 
 @pytest.fixture()
 def db_session():
-    engine = make_engine("sqlite://", poolclass=StaticPool)  # one shared in-memory connection
+    engine = make_engine("sqlite://", poolclass=StaticPool)  # インメモリ接続を 1 本共有
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     session = Session()

@@ -1,17 +1,17 @@
-"""Problem -> CP-SAT model, and solving it.
+"""Problem -> CP-SAT モデルの構築と求解。
 
-Model (all times integer minutes from horizon start):
-  * each task: start/end, `scheduled` flag, one optional interval per eligible
-    resource; exactly one chosen when scheduled
-  * resources: no-overlap (capacity 1) or cumulative (capacity > 1); non-working
-    time is added as fixed blocked intervals, so tasks run inside one window
-  * dependencies FS/SS/FF/SF with min and max lag
-  * changeovers: per resource, an AddCircuit over its tasks; an arc i→j forces
-    end_i + setup(i,j) <= start_j; forbidden pairs get no arc
-  * locked tasks are fixed in place
-  * objective: lateness (weighted by job priority), unscheduled tasks, total
-    setup, makespan, stability vs. the previous plan
-  * rule plugins add their own constraints (app.engine.rules)
+モデル（時刻はすべて計画期間開始からの整数分）:
+  * 各タスク: 開始・終了、`scheduled` フラグ、対象リソースごとの任意区間。
+    割付する場合はちょうど 1 つを選ぶ
+  * リソース: 重なり禁止（能力 1）または累積制約（能力 > 1）。非稼働時間は
+    固定のブロック区間として追加するため、タスクは 1 つの稼働枠内で実行される
+  * 依存関係 FS/SS/FF/SF（最小・最大ラグ付き）
+  * 段取り替え: リソースごとに AddCircuit を使用。アーク i→j は
+    end_i + setup(i,j) <= start_j を課す。禁止の組合せにはアークを張らない
+  * ロック済みタスクは位置を固定
+  * 目的関数: 納期遅れ（ジョブ優先度で重み付け）、未割付タスク、段取り時間合計、
+    最終完了時刻、前回計画からの変動（安定性）
+  * ルールプラグインが独自の制約を追加する（app.engine.rules）
 """
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,7 +25,7 @@ from app.engine.rules import get_plugin
 from app.services.worktime import subtract
 
 DEFAULT_WEIGHTS = {"lateness": 1000, "unscheduled": 100000, "setup": 10, "makespan": 1, "stability": 0}
-MAX_CIRCUIT_NODES = 80  # above this, sequence-dependent setups are ignored on that resource
+MAX_CIRCUIT_NODES = 80  # これを超えるとそのリソースの順序依存段取りは無視する
 
 
 @dataclass
@@ -42,7 +42,7 @@ class TaskVars:
     start: Any
     end: Any
     scheduled: Any
-    interval: Any  # task-level optional interval (any resource)
+    interval: Any  # タスク単位の任意区間（リソースを問わない）
     options: list[OptVar] = field(default_factory=list)
 
 
@@ -51,8 +51,8 @@ class BuildContext:
     problem: Problem
     model: cp_model.CpModel
     task_vars: dict[int, TaskVars] = field(default_factory=dict)
-    objective: list[tuple[Any, int]] = field(default_factory=list)  # (expr, coefficient)
-    # (literal, from_task, to_task, resource_id, setup minutes)
+    objective: list[tuple[Any, int]] = field(default_factory=list)  # (式, 係数)
+    # (リテラル, 前タスク, 後タスク, リソースID, 段取り分)
     setup_arcs: list[tuple[Any, int, int, int, int]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -65,7 +65,7 @@ class BuildContext:
 
 
 def priority_factor(priority: int) -> int:
-    """Lateness multiplier ×10: priority 1 → 49 (4.9×), 50 → 30, 100 → 10."""
+    """納期遅れの倍率×10: 優先度 1 → 49（4.9倍）、50 → 30、100 → 10。"""
     p = max(1, min(int(priority or 50), 100))
     return 10 + (100 - p) * 10 // 25
 
@@ -126,7 +126,7 @@ def _add_resources(ctx: BuildContext) -> None:
         ivs = [ov.interval for tv in ctx.task_vars.values() for ov in tv.options if ov.resource_id == r.id]
         if not ivs:
             continue
-        # Locked work is accepted as it is, even if a planner placed it in non-working time
+        # ロック済みの作業は、計画者が非稼働時間に置いた場合でもそのまま受け入れる
         locked = [(tv.task.lock.start, tv.task.lock.end) for tv in ctx.task_vars.values()
                   if tv.task.lock is not None and tv.task.lock.resource_id == r.id]
         blocked = subtract(_gaps(r.windows, p.horizon), locked) if locked else _gaps(r.windows, p.horizon)
@@ -201,7 +201,7 @@ def _add_dependencies(ctx: BuildContext) -> None:
 
 def _add_objective(ctx: BuildContext) -> None:
     m, p, H = ctx.model, ctx.problem, ctx.problem.horizon
-    # Locked work copied from a base plan may end after this horizon
+    # 元計画からコピーしたロック作業は、この計画期間の終了後に終わる場合がある
     HM = max([H] + [t.lock.end for t in p.tasks.values() if t.lock is not None])
     late_w, unsched_w = ctx.weight("lateness"), ctx.weight("unscheduled")
     by_job: dict[int, list[TaskVars]] = {}
@@ -216,8 +216,8 @@ def _add_objective(ctx: BuildContext) -> None:
         job_end = m.NewIntVar(0, HM, f"jend{job_id}")
         for tv in tvs:
             m.Add(job_end >= tv.end).OnlyEnforceIf(tv.scheduled)
-            # An unscheduled task counts as finishing at the horizon end, so
-            # leaving work out is never cheaper than doing it late.
+            # 未割付のタスクは計画期間の終了時に完了したものとみなす。
+            # これにより、作業を外す方が遅れて行うより安くなることはない。
             m.Add(job_end >= H).OnlyEnforceIf(tv.scheduled.Not())
         late = m.NewIntVar(0, HM + abs(job.due), f"late{job_id}")
         m.Add(late >= job_end - job.due)
@@ -248,7 +248,7 @@ def _add_objective(ctx: BuildContext) -> None:
             ctx.add_penalty(dev, stab_w)
             for ov in tv.options:
                 if ov.resource_id == h.resource_id:
-                    ctx.add_penalty(1 - ov.presence, stab_w * 60)  # moving machine ≈ 1 h shift
+                    ctx.add_penalty(1 - ov.presence, stab_w * 60)  # 設備の変更は約 1 時間のずれとみなす
 
     if ctx.objective:
         m.Minimize(sum(coef * expr for expr, coef in ctx.objective))
@@ -270,7 +270,7 @@ def build_model(problem: Problem) -> BuildContext:
     return ctx
 
 
-# ---------------------------------------------------------------- solving
+# ---------------------------------------------------------------- 求解
 @dataclass
 class SolveResult:
     status: str  # OPTIMAL / FEASIBLE / INFEASIBLE / MODEL_INVALID / UNKNOWN
@@ -296,7 +296,7 @@ class _Progress(cp_model.CpSolverSolutionCallback):
                     "bound": self.BestObjectiveBound(),
                     "wallTime": round(self.WallTime(), 2),
                 })
-            except Exception:  # progress reporting must never break the solve
+            except Exception:  # 進捗報告の失敗で計算を止めてはならない
                 pass
         if self.should_stop and self.should_stop():
             self.StopSearch()

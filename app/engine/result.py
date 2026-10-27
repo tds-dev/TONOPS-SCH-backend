@@ -1,4 +1,4 @@
-"""Shared result types for the engine (pure Python)."""
+"""エンジン共通の結果型（純粋 Python）。"""
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
@@ -9,9 +9,9 @@ from app.engine.problem import Problem
 class SAssignment:
     task_id: int
     resource_id: int
-    start: int  # minutes from horizon start (processing start)
+    start: int  # 計画期間開始からの分（作業開始時刻）
     end: int
-    setup: int = 0  # sequence-dependent setup immediately before `start`
+    setup: int = 0  # `start` の直前に置く順序依存の段取り時間
     locked: bool = False
 
 
@@ -26,7 +26,7 @@ class Violation:
 
 
 def fmt(problem: Problem, minute: int) -> str:
-    """Minute offset -> 'MM/DD HH:MM' in site time (for messages)."""
+    """分オフセット -> 拠点時刻の 'MM/DD HH:MM'（メッセージ用）。"""
     local = problem.to_dt(minute).replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo(problem.tz))
     return local.strftime("%m/%d %H:%M")
 

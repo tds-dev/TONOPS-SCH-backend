@@ -1,9 +1,9 @@
-"""Turning a job into schedulable tasks.
+"""ジョブをスケジュール可能なタスクに変換する。
 
-`generate_tasks` expands the job's routing (or its item's default routing)
-into T_Tasks, T_TaskResourceOptions and FS dependencies between consecutive
-steps. Task attributes = item attributes, overridden by step, then job
-attributes, so rule selectors such as {"family": "A"} work on tasks.
+`generate_tasks` はジョブの工程ルート（またはその品目の既定ルート）を展開し、
+T_Tasks、T_TaskResourceOptions、連続する工程間の FS 依存関係を作成する。
+タスク属性 = 品目属性を工程属性、さらにジョブ属性で上書きしたもの。
+これにより {"family": "A"} のようなルールのセレクターがタスクに効く。
 """
 import math
 
@@ -16,7 +16,7 @@ from app.models.transactions import Job, PlanAssignment, Task, TaskDependency, T
 
 
 def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: float) -> int:
-    """Duration in whole minutes = setup + fixed + quantity × minutes per unit."""
+    """所要時間（整数分）= 段取り + 固定 + 数量 × 単位当たり時間。"""
     run = round(float(quantity or 0) * float(minutes_per_unit or 0), 6)  # 0.1 × 1200 = 120.000…01
     return int(setup + fixed + math.ceil(run))
 
