@@ -92,3 +92,16 @@ def expand_working_time(
     working = merge(base + [(x.start, x.end) for x in exceptions if x.is_working])
     working = subtract(working, [(x.start, x.end) for x in exceptions if not x.is_working])
     return clip(working, start, end)
+
+
+def gaps(windows: list[tuple[int, int]], horizon: int) -> list[tuple[int, int]]:
+    """稼働枠（分）の補集合 = 0..horizon の非稼働区間（分）。"""
+    out, cursor = [], 0
+    for s, e in sorted(windows):
+        s, e = max(0, s), min(horizon, e)
+        if s > cursor:
+            out.append((cursor, s))
+        cursor = max(cursor, e)
+    if cursor < horizon:
+        out.append((cursor, horizon))
+    return out

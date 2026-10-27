@@ -236,6 +236,7 @@ class PlanViolation(AuditMixin, Base):
     RuleID = Column(Integer, ForeignKey("M_Rules.RuleID"), nullable=True)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     Severity = Column(String(10), nullable=False)
+    ViolationCode = Column(String(30), nullable=False, default="OTHER")  # UNSCHEDULED, OVERLAP, LATE_JOB など
     Penalty = Column(Numeric(18, 2), nullable=True)
     Message = Column(String(500), nullable=False)
 

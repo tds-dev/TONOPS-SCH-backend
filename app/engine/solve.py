@@ -8,6 +8,7 @@
 import time
 import traceback
 from collections.abc import Callable
+from dataclasses import replace
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -41,15 +42,25 @@ def write_results(db: Session, plan: Plan, problem: Problem, assignments: list[S
             IsLocked=locked, Source=(prev.Source if locked and prev else "SOLVER"), CreatedBy=user,
         ))
 
+    write_evaluation(db, plan, problem, assignments, user)
+
+
+def write_evaluation(db: Session, plan: Plan, problem: Problem, assignments: list[SAssignment], user: str) -> None:
+    """KPI と違反を計算し直して T_PlanKpis / T_PlanViolations を置き換える。
+
+    課題一覧にはロック済みの割付も含めてすべての問題を載せる（計画者が非稼働時間に
+    置いたロック作業なども見えるようにする）。
+    """
+    checked = [replace(a, locked=False) for a in assignments]
     db.execute(delete(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))
-    for key, value in compute_kpis(problem, assignments).items():
+    for key, value in compute_kpis(problem, checked).items():
         db.add(PlanKpi(PlanID=plan.PlanID, KpiKey=key, KpiValue=value))
 
     db.execute(delete(PlanViolation).where(PlanViolation.PlanID == plan.PlanID))
-    for v in check_schedule(problem, assignments):
+    for v in check_schedule(problem, checked):
         db.add(PlanViolation(
             PlanID=plan.PlanID, RuleID=v.rule_id, TaskID=v.task_id, Severity=v.severity,
-            Penalty=v.penalty, Message=v.message[:500], CreatedBy=user,
+            ViolationCode=v.code, Penalty=v.penalty, Message=v.message[:500], CreatedBy=user,
         ))
 
 

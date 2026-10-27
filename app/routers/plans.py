@@ -1,11 +1,15 @@
-"""計画、ソルバー実行とその結果（フェーズ2）。
+"""計画、ソルバー実行とその結果、計画のライフサイクル（承認・破棄・複製）。
 
-承認・破棄、ボード表示、手動編集はフェーズ3 で追加する。
+ボード表示・手動編集・比較・配台表は app/routers/board.py。
 """
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import db as dbmod
 from app.core.db import get_db
 from app.engine.rules import all_plugins
 from app.engine.solve import execute_run
@@ -13,6 +17,7 @@ from app.models.masters import Resource
 from app.models.transactions import Job, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, UtcDatetime, coerce, schemas_for
+from app.services.plan_lifecycle import approve_plan, copy_plan, discard_plan
 from app.services.plan_service import create_plan, queue_run
 
 PlanRead, _, _ = schemas_for(Plan)
@@ -177,3 +182,58 @@ def list_rule_types():
                      supports_soft=p.supports_soft, params_schema=p.params_schema)
         for p in all_plugins()
     ]
+
+
+# ---------------------------------------------------------------- ライフサイクル（フェーズ3）
+class ApproveBody(ApiModel):
+    force: bool = False  # 必須制約の違反があっても承認する
+
+
+class CopyBody(ApiModel):
+    plan_name: str | None = None
+
+
+@router.post("/plans/{plan_id}/approve", response_model=PlanRead)
+def post_approve(plan_id: int, body: ApproveBody | None = None,
+                 db: Session = Depends(get_db), user: str = Depends(current_user)):
+    """下書きをマスタにする。重なる既存のマスタは置換済（SUPERSEDED）または破棄（DISCARDED）になる。"""
+    return approve_plan(db, _plan_or_404(db, plan_id), user, force=bool(body and body.force))
+
+
+@router.post("/plans/{plan_id}/discard", response_model=PlanRead)
+def post_discard(plan_id: int, db: Session = Depends(get_db), user: str = Depends(current_user)):
+    """下書きを破棄する。"""
+    return discard_plan(db, _plan_or_404(db, plan_id), user)
+
+
+@router.post("/plans/{plan_id}/copy", response_model=PlanRead, status_code=status.HTTP_201_CREATED)
+def post_copy(plan_id: int, body: CopyBody | None = None,
+              db: Session = Depends(get_db), user: str = Depends(current_user)):
+    """割付ごと複製した新しい下書きを作る（what-if 用）。"""
+    return copy_plan(db, _plan_or_404(db, plan_id), user, body.plan_name if body else None)
+
+
+@router.get("/solver-runs/{run_id}/events")
+def run_events(run_id: int):
+    """計算の進捗を Server-Sent Events で送る。完了・失敗・キャンセルで終了する。
+
+    ストリームはリクエストより長く続くため、DB セッションは generator 内で開く。
+    """
+    def stream():
+        last = None
+        while True:
+            with dbmod.SessionLocal() as s:
+                run = s.get(SolverRun, run_id)
+                if run is None:
+                    yield 'event: error\ndata: {"message": "not found"}\n\n'
+                    return
+                payload = RunRead.model_validate(run).model_dump_json(by_alias=True)
+                done = run.Status in ("SUCCEEDED", "FAILED", "CANCELLED")
+            if payload != last:
+                yield f"data: {payload}\n\n"
+                last = payload
+            if done:
+                return
+            time.sleep(1)
+
+    return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})

@@ -22,7 +22,7 @@ from ortools.sat.python import cp_model
 from app.engine.problem import PChangeover, Problem, PTask
 from app.engine.result import SAssignment
 from app.engine.rules import get_plugin
-from app.services.worktime import subtract
+from app.services.worktime import gaps, subtract
 
 DEFAULT_WEIGHTS = {"lateness": 1000, "unscheduled": 100000, "setup": 10, "makespan": 1, "stability": 0}
 MAX_CIRCUIT_NODES = 80  # これを超えるとそのリソースの順序依存段取りは無視する
@@ -68,18 +68,6 @@ def priority_factor(priority: int) -> int:
     """納期遅れの倍率×10: 優先度 1 → 49（4.9倍）、50 → 30、100 → 10。"""
     p = max(1, min(int(priority or 50), 100))
     return 10 + (100 - p) * 10 // 25
-
-
-def _gaps(windows: list[tuple[int, int]], horizon: int) -> list[tuple[int, int]]:
-    gaps, cursor = [], 0
-    for s, e in sorted(windows):
-        s, e = max(0, s), min(horizon, e)
-        if s > cursor:
-            gaps.append((cursor, s))
-        cursor = max(cursor, e)
-    if cursor < horizon:
-        gaps.append((cursor, horizon))
-    return gaps
 
 
 def _add_tasks(ctx: BuildContext) -> None:
@@ -129,12 +117,12 @@ def _add_resources(ctx: BuildContext) -> None:
         # ロック済みの作業は、計画者が非稼働時間に置いた場合でもそのまま受け入れる
         locked = [(tv.task.lock.start, tv.task.lock.end) for tv in ctx.task_vars.values()
                   if tv.task.lock is not None and tv.task.lock.resource_id == r.id]
-        blocked = subtract(_gaps(r.windows, p.horizon), locked) if locked else _gaps(r.windows, p.horizon)
-        gaps = [m.NewIntervalVar(s, e - s, e, f"gap{r.id}_{s}") for s, e in blocked]
+        blocked = subtract(gaps(r.windows, p.horizon), locked) if locked else gaps(r.windows, p.horizon)
+        blocks = [m.NewIntervalVar(s, e - s, e, f"gap{r.id}_{s}") for s, e in blocked]
         if r.capacity <= 1:
-            m.AddNoOverlap(ivs + gaps)
+            m.AddNoOverlap(ivs + blocks)
         else:
-            m.AddCumulative(ivs + gaps, [1] * len(ivs) + [r.capacity] * len(gaps), r.capacity)
+            m.AddCumulative(ivs + blocks, [1] * len(ivs) + [r.capacity] * len(blocks), r.capacity)
 
 
 def _changeover_for(problem: Problem, resource_id: int) -> PChangeover | None:
