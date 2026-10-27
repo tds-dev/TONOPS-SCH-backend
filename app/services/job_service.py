@@ -8,7 +8,7 @@ T_Tasks、T_TaskResourceOptions、連続する工程間の FS 依存関係を作
 import math
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, false, select
 from sqlalchemy.orm import Session
 
 from app.models.masters import Item, Routing
@@ -27,7 +27,7 @@ def resolve_routing(db: Session, job: Job) -> Routing:
     elif job.ItemID:
         routing = db.scalars(
             select(Routing)
-            .where(Routing.ItemID == job.ItemID, Routing.DeleteFlag.is_(False))
+            .where(Routing.ItemID == job.ItemID, Routing.DeleteFlag == false())
             .order_by(Routing.IsDefault.desc(), Routing.Revision.desc())
         ).first()
     else:

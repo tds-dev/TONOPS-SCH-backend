@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import false, select, true
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import to_utc_naive, utc_to_local
@@ -26,7 +26,7 @@ def default_color_attribute(db: Session, site_id: int) -> str | None:
     """色分けの既定属性: 拠点の有効な段取り替えマトリクスの属性（段取りの単位なので見分けたい）。"""
     return db.scalar(
         select(ChangeoverMatrix.AttributeKey)
-        .where(ChangeoverMatrix.SiteID == site_id, ChangeoverMatrix.IsActive.is_(True))
+        .where(ChangeoverMatrix.SiteID == site_id, ChangeoverMatrix.IsActive == true())
         .order_by(ChangeoverMatrix.MatrixID)
     )
 
@@ -49,7 +49,7 @@ def build_board(
     # ---- リソース（グループ順・表示順）
     groups = {g.ResourceGroupID: g for g in db.scalars(select(ResourceGroup).where(ResourceGroup.SiteID == site.SiteID))}
     res_rows = db.scalars(
-        select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag.is_(False))
+        select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag == false())
     ).all()
     if resource_group_id is not None:
         res_rows = [r for r in res_rows if r.ResourceGroupID == resource_group_id]

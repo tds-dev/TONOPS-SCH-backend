@@ -11,7 +11,7 @@
   * ヒント: それ以外のこの計画（または元計画）の割付。初期解として使う
   * 拠点の有効な段取り替えマトリクスとルール
 """
-from sqlalchemy import false, or_, select
+from sqlalchemy import false, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import utc_to_local
@@ -58,7 +58,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # ---- リソースとカレンダー
     resources: dict[int, PResource] = {}
     rows = db.scalars(
-        select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag.is_(False))
+        select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag == false())
     ).all()
     calendar_cache: dict[int, list[tuple[int, int]]] = {}
     for r in rows:
@@ -79,27 +79,26 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
             members.setdefault(r.ResourceGroupID, []).append(r.ResourceID)
 
     # ---- ジョブとタスク
-    jobs_rows = db.scalars(
-        select(Job).where(
-            Job.SiteID == site.SiteID,
-            Job.DeleteFlag.is_(False),
-            Job.Status.notin_(["DONE", "CANCELLED"]),
-            Job.PlanOwner == "SCHEDULER",
-            or_(Job.ReleaseAt.is_(None), Job.ReleaseAt < end),
-        )
-    ).all()
+    job_filter = (
+        Job.SiteID == site.SiteID,
+        Job.DeleteFlag == false(),
+        Job.Status.notin_(["DONE", "CANCELLED"]),
+        Job.PlanOwner == "SCHEDULER",
+        or_(Job.ReleaseAt.is_(None), Job.ReleaseAt < end),
+    )
+    jobs_rows = db.scalars(select(Job).where(*job_filter)).all()
     jobs = {
         j.JobID: PJob(id=j.JobID, no=j.JobNo, due=to_min(j.DueAt) if j.DueAt else None, priority=j.Priority)
         for j in jobs_rows
     }
     job_release = {j.JobID: max(0, to_min(j.ReleaseAt)) if j.ReleaseAt else 0 for j in jobs_rows}
-    task_rows = db.scalars(
-        select(Task).where(
-            Task.JobID.in_(list(jobs)) if jobs else false(),
-            Task.IsSummary.is_(False),
-            Task.Status.notin_(["DONE", "CANCELLED"]),
-        )
-    ).all()
+    # IN 句は値のリストではなくサブクエリにする（SQL Server のパラメータ上限 2,100 を超えないように）
+    task_filter = (
+        Task.JobID.in_(select(Job.JobID).where(*job_filter)),
+        Task.IsSummary == false(),
+        Task.Status.notin_(["DONE", "CANCELLED"]),
+    )
+    task_rows = db.scalars(select(Task).where(*task_filter)).all()
 
     # ---- 前回の位置: この計画を優先し、なければ元計画
     def assignments_of(plan_id: int | None) -> dict[int, PlanAssignment]:
@@ -140,9 +139,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         PDependency(d.PredecessorTaskID, d.SuccessorTaskID, d.DependencyType, int(d.LagMin or 0),
                     int(d.MaxLagMin) if d.MaxLagMin is not None else None)
         for d in db.scalars(
-            select(TaskDependency).where(
-                TaskDependency.SuccessorTaskID.in_(list(tasks)) if tasks else false()
-            )
+            select(TaskDependency).where(TaskDependency.SuccessorTaskID.in_(select(Task.TaskID).where(*task_filter)))
         )
         if d.PredecessorTaskID in tasks
     ]
@@ -150,7 +147,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # ---- 段取り替えとルール
     changeovers = []
     for mx in db.scalars(
-        select(ChangeoverMatrix).where(ChangeoverMatrix.SiteID == site.SiteID, ChangeoverMatrix.IsActive.is_(True))
+        select(ChangeoverMatrix).where(ChangeoverMatrix.SiteID == site.SiteID, ChangeoverMatrix.IsActive == true())
     ):
         rids = set(members.get(mx.ResourceGroupID, [])) if mx.ResourceGroupID else set(resources)
         changeovers.append(PChangeover(
@@ -161,7 +158,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     rules = [
         PRule(r.RuleID, r.RuleTypeKey, r.RuleName, dict(r.SelectorJSON or {}), dict(r.ParamsJSON or {}),
               bool(r.IsHard), int(r.Weight or 100))
-        for r in db.scalars(select(Rule).where(Rule.SiteID == site.SiteID, Rule.IsActive.is_(True)))
+        for r in db.scalars(select(Rule).where(Rule.SiteID == site.SiteID, Rule.IsActive == true()))
         if (r.ValidFrom is None or r.ValidFrom <= plan_day) and (r.ValidTo is None or r.ValidTo >= plan_day)
     ]
 

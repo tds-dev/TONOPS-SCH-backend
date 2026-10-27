@@ -2,9 +2,10 @@
 from datetime import date, datetime, time, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
+from app.core.db import chunks
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
 from app.models.masters import Item, Resource, ResourceGroup, Site
@@ -47,8 +48,9 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     task_ids = {c.task_id for c in changes}
     info = {
         t.TaskID: (j.JobNo, t.TaskName)
-        for t, j in db.execute(select(Task, Job).join(Job, Job.JobID == Task.JobID).where(Task.TaskID.in_(task_ids)))
-    } if task_ids else {}
+        for ids in chunks(task_ids)
+        for t, j in db.execute(select(Task, Job).join(Job, Job.JobID == Task.JobID).where(Task.TaskID.in_(ids)))
+    }
     res = {r.ResourceID: r for r in db.scalars(select(Resource).where(Resource.SiteID == plan_a.SiteID))}
 
     def slot_view(s: Slot | None):
@@ -94,14 +96,15 @@ def dispatch_list(db: Session, site_id: int, day: date, resource_group_id: int |
     task_ids = [a.TaskID for a in rows]
     detail = {
         t.TaskID: (t, j, item)
+        for ids in chunks(task_ids)
         for t, j, item in db.execute(
             select(Task, Job, Item).join(Job, Job.JobID == Task.JobID).outerjoin(Item, Item.ItemID == Job.ItemID)
-            .where(Task.TaskID.in_(task_ids))
+            .where(Task.TaskID.in_(ids))
         )
-    } if task_ids else {}
+    }
     groups = {g.ResourceGroupID: g for g in db.scalars(select(ResourceGroup).where(ResourceGroup.SiteID == site_id))}
     resources = [
-        r for r in db.scalars(select(Resource).where(Resource.SiteID == site_id, Resource.DeleteFlag.is_(False)))
+        r for r in db.scalars(select(Resource).where(Resource.SiteID == site_id, Resource.DeleteFlag == false()))
         if resource_group_id is None or r.ResourceGroupID == resource_group_id
     ]
     resources.sort(key=lambda r: (groups[r.ResourceGroupID].SortOrder if r.ResourceGroupID in groups else 9999, r.SortOrder))

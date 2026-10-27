@@ -45,6 +45,17 @@ engine = make_engine(get_settings().database_url)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
+# SQL Server は 1 つの SQL に渡せるパラメータが 2,100 個まで。IN 句の値はこの件数ずつに分ける
+IN_CHUNK = 1000
+
+
+def chunks(values, size: int = IN_CHUNK) -> Iterator[list]:
+    """IN 句用に値を分割する（SQL Server のパラメータ上限対策）。"""
+    items = list(values)
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
+
 def get_db() -> Iterator[Session]:
     db = SessionLocal()
     try:

@@ -14,7 +14,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import false, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -67,7 +67,7 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
             if col is not None:
                 stmt = stmt.where(col == _parse(value, python_type(col.type)))
         if has_delete_flag and params.get("includeDeleted", "false").lower() != "true":
-            stmt = stmt.where(model.DeleteFlag.is_(False))
+            stmt = stmt.where(model.DeleteFlag == false())
         sort_col = model.__table__.columns.get(order_by) if order_by else None
         stmt = stmt.order_by(sort_col if sort_col is not None else pk)
         return db.scalars(stmt).all()
