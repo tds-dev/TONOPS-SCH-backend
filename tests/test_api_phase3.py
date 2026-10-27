@@ -135,3 +135,11 @@ def test_sse_streams_until_finished(client, seeded, db_session, monkeypatch):
     with client.stream("GET", f"{API}/solver-runs/{run_id}/events") as r:
         body = "".join(r.iter_text())
     assert body.startswith("data: ") and '"SUCCEEDED"' in body
+
+
+def test_plan_create_accepts_site_local_time(client, seeded):
+    # オフセットなし = 拠点の現地時刻（JST）→ UTC で保存
+    plan = client.post(f"{API}/plans", json={
+        "siteId": seeded["siteId"], "horizonStart": "2026-10-27T06:00:00", "horizonEnd": "2026-10-30T06:00:00",
+    }).json()
+    assert plan["horizonStart"] == "2026-10-26T21:00:00Z"

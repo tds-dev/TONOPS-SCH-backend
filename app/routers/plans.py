@@ -3,6 +3,7 @@
 ボード表示・手動編集・比較・配台表は app/routers/board.py。
 """
 import time
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
@@ -11,9 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.core import db as dbmod
 from app.core.db import get_db
+from app.core.timeutil import to_utc_naive
 from app.engine.rules import all_plugins
 from app.engine.solve import execute_run
-from app.models.masters import Resource
+from app.models.masters import Resource, Site
 from app.models.transactions import Job, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, UtcDatetime, coerce, schemas_for
@@ -29,8 +31,8 @@ router = APIRouter(tags=["Plans"])
 
 class PlanCreateBody(ApiModel):
     site_id: int
-    horizon_start: UtcDatetime
-    horizon_end: UtcDatetime
+    horizon_start: datetime  # オフセットなしは拠点の現地時刻、ありはそのまま UTC に変換
+    horizon_end: datetime
     plan_name: str | None = None
     profile_id: int | None = None
     base_plan_id: int | None = None
@@ -92,7 +94,13 @@ def list_plans(
 
 @router.post("/plans", response_model=PlanRead, status_code=status.HTTP_201_CREATED)
 def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = Depends(current_user)):
-    return create_plan(db, user=user, **body.model_dump())
+    site = db.get(Site, body.site_id)
+    if site is None:
+        raise HTTPException(404, f"拠点 {body.site_id} が見つかりません")
+    data = body.model_dump()
+    data["horizon_start"] = to_utc_naive(body.horizon_start, site.TimeZone)
+    data["horizon_end"] = to_utc_naive(body.horizon_end, site.TimeZone)
+    return create_plan(db, user=user, **data)
 
 
 @router.get("/plans/{plan_id}", response_model=PlanRead)
