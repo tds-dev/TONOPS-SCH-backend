@@ -1,6 +1,10 @@
 <!-- アプリの構成、利用手順、APIとDBの対応を説明する資料。 -->
 # TONOPS-SCH-backend
 
+> 2026-10-30: 計算実行の保存先を `T_SolverRunResult` へ変更。既存DBのテーブル名は手動で変更してから利用する。列・保存値と `/solver-runs` のAPIは維持する。`DataBase/query` 内の新規作成SQLも同じ名称へ更新済み。実DBへの変更は行っていない。
+
+> 2026-10-30: 拠点のモデル・APIをLocation系へ統一。`/api/v1/locations` と `locationId` を使い、DBでは `M_Locations`・`LocationID`・`LocationCode`・`LocationName` を参照する。実DBと `DataBase/query` 内の保存済みSQLは今回変更していない。既存DBを手動で改称してから利用する。初期設定プログラムは既存テーブルの改称を行わない。
+
 > 2026-10-30: プログラムとAPIはOrder/Ordersへ改称。DBもT_Orders・OrderID等へ変更される前提で動作する。実DBの変更は未実施のため、DB側の名称変更後に利用する。既存のSYSTEM_OVERVIEW.md等に記載されたJob名は変更前の構成を含む。現行APIは/api/v1/orders。
 
 
@@ -96,11 +100,13 @@ python -m DataBase.setup_database
 * アプリの接続設定に従い、DBがなければ作成して、未作成のテーブルを追加します。
 * 既存のテーブルは変更しません（未作成のテーブルだけ作ります）。
 * デモ組織が登録済みの場合は、デモデータの追加をスキップします。
+* 拠点は`M_Locations`に作成し、関連テーブルは`LocationID`で紐付けます。手動実行用SQLも同じ定義です。
 
 工場A（配合 → 充填 → 包装、設備 6 台）、標準カレンダー（月〜土 06:00–12:00 / 13:00–22:00）、
 品目 6 件、オーダー 7 件（翌日 06:00 以降が納期）、段取り替えマトリクス、制約ルール 1 件、計画プロファイル「納期優先」を登録します。
 
 既存の列名・テーブル名の変更は、この初期設定では行いません。別途DBの定義変更が必要です。
+旧`M_Sites`・`SiteID`が残るDBを使う場合は、先に`M_Locations`・`LocationID`等へ移行してください。
 SQLファイルや実行結果のファイル出力は行いません。既存の手動実行用SQLは`DataBase/query`フォルダにあります。
 
 ---
@@ -129,7 +135,7 @@ cd %USERPROFILE%\Documents\TONOPS-SCH-backend
 python -m app.worker
 ```
 
-画面の「計算実行」は計算依頼を `T_SolverRuns` に登録するだけで、**実際の計算はワーカーが行います**。
+画面の「計算実行」は計算依頼を `T_SolverRunResult` に登録するだけで、**実際の計算はワーカーが行います**。
 ワーカーが起動していないと、計算は「待機中」のまま進みません（起動すると待機中の依頼から順に処理します）。
 
 ### 3.3 フロントエンド
@@ -150,13 +156,13 @@ python -m app.worker
 ### 4.2 Swagger UI から（画面なし）
 
 1. `POST /api/v1/plans`:
-   `{"siteId": 1, "horizonStart": "2026-10-28T06:00:00", "horizonEnd": "2026-10-31T06:00:00", "planName": "第44週・計画A"}`
+   `{"locationId": 1, "horizonStart": "2026-10-28T06:00:00", "horizonEnd": "2026-10-31T06:00:00", "planName": "第44週・計画A"}`
    （オフセットなしの日時は拠点の現地時刻。日付は翌日にしてください）
 2. `POST /api/v1/plans/{planId}/solve` に `{"timeLimitSec": 20}`
    （ワーカーなしで試す場合は `{"wait": true}` を付けるとリクエスト内で計算します）
 3. `GET /api/v1/solver-runs/{runId}` で `status` が `SUCCEEDED` になるまで確認
 4. `GET /api/v1/plans/{planId}/board`、`/kpis`、`/violations` で結果を確認
-5. `POST /api/v1/plans/{planId}/approve` → `GET /api/v1/dispatch?siteId=1&date=2026-10-28`
+5. `POST /api/v1/plans/{planId}/approve` → `GET /api/v1/dispatch?locationId=1&date=2026-10-28`
 
 ---
 
@@ -166,7 +172,7 @@ python -m app.worker
 TONOPS-SCH-backend/
 ├── app/
 │   ├── main.py                 FastAPI アプリ（ルーター登録、CORS、/health）
-│   ├── worker.py               ソルバーワーカー（T_SolverRuns をポーリング）
+│   ├── worker.py               ソルバーワーカー（T_SolverRunResult をポーリング）
 │   ├── core/                   設定（config）、DB エンジン（db）、時刻ユーティリティ（timeutil）
 │   ├── models/                 SQLAlchemy モデル
 │   │   ├── masters.py          M_* マスタテーブル
@@ -237,7 +243,7 @@ Order系へ変更したSQLファイルの内容と実行順は、[DB作成・初
   監査列 `CreatedAt/By`、`UpdatedAt/By`、論理削除 `DeleteFlag`（工程くんと同じ）。
 * 日時は DB に **naive な UTC** で保存。API は `...Z` 形式で返し、入力は任意のオフセットを受け付けます。
   例外: 計画ボード・配台表・計画作成は **拠点の現地時刻（オフセットなし）** でやり取りします。
-* API の JSON は camelCase（`resourceName`、`siteId`）。
+* API の JSON は camelCase（`resourceName`、`locationId`）。
 * 認証は未実装。`CreatedBy` / `UpdatedBy` には `X-User-Email` ヘッダーの値（なければ `system`）を記録します。
 * コメント・docstring・メッセージは日本語。
 * マイグレーションツール（Alembic）は未導入。既存DBの列追加・改称は別途定義変更が必要です。

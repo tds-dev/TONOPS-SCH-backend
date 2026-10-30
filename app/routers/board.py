@@ -20,6 +20,7 @@ from app.services.edit_service import ChangeRequest, evaluate_edit, save_edit
 router = APIRouter(tags=["Board"])
 
 
+# 画面から送信する一件の割付変更。
 class AssignmentChange(ApiModel):
     assignment_id: int | None = None  # 既存の割付（ボードのイベント ID）
     task_id: int | None = None  # 未割付タスクを配置する場合
@@ -31,12 +32,14 @@ class AssignmentChange(ApiModel):
     row_ver: int | None = None  # 楽観的排他制御（ボードの rowVer をそのまま返す）
 
 
+# 割付変更の一覧と、移動した作業の固定設定。
 class EditBody(ApiModel):
     changes: list[AssignmentChange]
     lock_moved: bool = True  # 手動で動かしたタスクをロックする（再計算で動かさない）
     force: bool = False  # 必須制約の違反があっても保存する
 
 
+# 手動編集で検出した制約違反の応答項目。
 class ViolationOut(ApiModel):
     severity: str
     code: str
@@ -45,6 +48,7 @@ class ViolationOut(ApiModel):
     rule_id: int | None = None
 
 
+# 手動編集の検証結果・違反・評価値の応答項目。
 class EditOut(ApiModel):
     ok: bool
     errors: list[str]
@@ -54,6 +58,7 @@ class EditOut(ApiModel):
     changed_task_ids: list[int]
 
 
+# 計画を取得し、存在しない場合は見つからない理由を返す。
 def _plan_or_404(db: Session, plan_id: int) -> Plan:
     plan = db.get(Plan, plan_id)
     if plan is None:
@@ -61,11 +66,14 @@ def _plan_or_404(db: Session, plan_id: int) -> Plan:
     return plan
 
 
+# APIで受け取った割付編集を、検証処理へ渡す形式にする。
 def _requests(body: EditBody) -> list[ChangeRequest]:
     return [ChangeRequest(**c.model_dump()) for c in body.changes]
 
 
+# 手動編集の検証結果を、APIの応答形式へ変換する。
 def _out(result) -> EditOut:
+    # 一件の制約違反をAPIの応答形式へ変換する。
     def v(x: Violation) -> ViolationOut:
         return ViolationOut(severity=x.severity, code=x.code, message=x.message, task_id=x.task_id, rule_id=x.rule_id)
 
@@ -109,10 +117,11 @@ def patch_assignments(plan_id: int, body: EditBody, db: Session = Depends(get_db
 
 @router.get("/dispatch")
 def get_dispatch(
-    site_id: int = Query(..., alias="siteId"),
+    # 取得・作成の対象となる拠点の識別番号。
+    location_id: int = Query(..., alias="locationId"),
     day: date = Query(..., alias="date"),
     resource_group_id: int | None = Query(None, alias="resourceGroupId"),
     db: Session = Depends(get_db),
 ):
     """配台表: マスタ計画の指定日（現地時間）の割付をリソース別・開始順に返す。"""
-    return dispatch_list(db, site_id, day, resource_group_id)
+    return dispatch_list(db, location_id, day, resource_group_id)

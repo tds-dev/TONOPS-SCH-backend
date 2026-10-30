@@ -1,4 +1,4 @@
-"""
+r"""
 --------------------------------------------------------------------------------------------------------------
 
 DB新規作成・テーブル作成・デモデータ登録実行方法
@@ -10,12 +10,12 @@ Set-Location -LiteralPath 'C:\Users\taisei_fujita\Desktop\TONOPS-SCH-backend\TON
 python -m DataBase.setup_database
 
 --------------------------------------------------------------------------------------------------------------
-"""
-"""
 DataBase配下のDB・テーブル作成とデモデータ登録を行う初期設定用プログラム。
 
 バックエンドのルートで python -m DataBase.setup_database を実行する。
 query配下のSQLはSSMS用として保持し、この処理ではモデルから直接DBを操作する。
+拠点はLocationモデルを使い、M_LocationsとLocationID等の定義で作成・登録する。
+計算実行の保存先は、SolverRunモデルのT_SolverRunResultとして作成する。
 """
 import argparse
 
@@ -76,9 +76,9 @@ def connection_help(url: URL, exc: DBAPIError) -> str:
 
 
 def setup_database() -> None:
-    """DB作成、未作成テーブルの追加、未登録デモデータの追加を順に行う。"""
+    """DB作成、Location形式の未作成テーブル追加、未登録デモデータ追加を順に行う。"""
     ensure_database()
-    # モデル定義を使い、作成済みのテーブルとデータは保持する。
+    # M_Locations・T_SolverRunResult等の現在のモデル定義を使い、既存のテーブルとデータは保持する。
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         # 既存の登録済み判定を維持し、デモ組織があれば重複登録しない。

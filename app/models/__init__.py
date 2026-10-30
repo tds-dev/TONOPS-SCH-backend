@@ -15,7 +15,7 @@ from app.models.masters import (  # noqa: F401
     RoutingStep,
     RoutingStepResource,
     Rule,
-    Site,
+    Location,
 )
 from app.models.transactions import (  # noqa: F401
     Actual,

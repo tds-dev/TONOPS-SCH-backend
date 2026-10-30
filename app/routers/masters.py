@@ -14,7 +14,7 @@ from app.services.calendar_service import working_time
 
 routers = [
     crud_router(m.Organization, "/organizations", "Organizations"),
-    crud_router(m.Site, "/sites", "Sites"),
+    crud_router(m.Location, "/locations", "Locations"),
     crud_router(m.Calendar, "/calendars", "Calendars"),
     crud_router(m.CalendarPattern, "/calendar-patterns", "Calendars", order_by="DayOfWeek"),
     crud_router(m.CalendarException, "/calendar-exceptions", "Calendars", order_by="StartAt"),
@@ -32,6 +32,7 @@ routers = [
 ]
 
 
+# カレンダーから求めた稼働時間の開始と終了。
 class WorkingInterval(ApiModel):
     start: UtcDatetime
     end: UtcDatetime
@@ -51,8 +52,9 @@ def get_working_time(
     cal = db.get(m.Calendar, calendar_id)
     if cal is None:
         raise HTTPException(404, f"Calendar {calendar_id} not found")
-    site = db.get(m.Site, cal.SiteID)
-    tz = site.TimeZone if site else "UTC"
+    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    location = db.get(m.Location, cal.LocationID)
+    tz = location.TimeZone if location else "UTC"
     s, e = to_utc_naive(start), to_utc_naive(end)
     if e <= s:
         raise HTTPException(422, "'to' must be after 'from'")

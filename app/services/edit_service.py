@@ -17,11 +17,12 @@ from app.engine.problem import Problem
 from app.engine.result import SAssignment, Violation
 from app.engine.snapshot import build_problem
 from app.engine.solve import write_evaluation
-from app.models.masters import Site
+from app.models.masters import Location
 from app.models.transactions import Plan, PlanAssignment
 from app.services.plan_lifecycle import NON_BLOCKING_HARD
 
 
+# 割付IDやタスクIDを使って指定する手動編集の要求。
 @dataclass
 class ChangeRequest:
     assignment_id: int | None = None
@@ -34,6 +35,7 @@ class ChangeRequest:
     row_ver: int | None = None
 
 
+# 手動編集の検証で得た割付・違反・評価値。
 @dataclass
 class EditResult:
     ok: bool
@@ -44,6 +46,7 @@ class EditResult:
     changed_task_ids: list[int] = field(default_factory=list)
 
 
+# 手動編集の検証に使う計算条件と現在の割付を読み込む。
 def _load(db: Session, plan: Plan) -> tuple[Problem, dict[int, PlanAssignment], list[SAssignment]]:
     problem = build_problem(db, plan)
     rows = {a.TaskID: a for a in db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == plan.PlanID))}
@@ -55,9 +58,10 @@ def _load(db: Session, plan: Plan) -> tuple[Problem, dict[int, PlanAssignment], 
     return problem, rows, current
 
 
+# 画面から受け取った変更要求を、拠点の時刻設定で検証用の形式へ変換する。
 def _to_changes(db: Session, plan: Plan, problem: Problem, rows: dict[int, PlanAssignment],
                 requests: list[ChangeRequest]) -> list[Change]:
-    tz = db.get(Site, plan.SiteID).TimeZone
+    tz = db.get(Location, plan.LocationID).TimeZone
     by_id = {a.AssignmentID: a for a in rows.values()}
     out = []
     for r in requests:

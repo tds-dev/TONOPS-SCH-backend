@@ -1,3 +1,4 @@
+<!-- SCHの実装フェーズごとの機能と確認事項を記録する資料。 -->
 # 実装フェーズ
 
 > フェーズ 4 までは 1 つのリポジトリ（`backend/` と `frontend/`）で開発し、その後
@@ -33,7 +34,7 @@
   * 目的関数: 優先度で重み付けした納期遅れ、未割付タスク、段取り、最終完了時刻
 * `engine/rules/`: プラグインのレジストリ。組込みは `allowed_weekdays`。
 * `engine/evaluate.py`: 純粋なチェッカー → 違反（日本語メッセージ）と KPI。
-* `engine/solve.py` + `app/worker.py`: 待機中の `T_SolverRuns` を実行し、割付・KPI・
+* `engine/solve.py` + `app/worker.py`: 待機中の `T_SolverRunResult` を実行し、割付・KPI・
   違反を書き込む。進捗は `ProgressJSON`。キャンセル対応。
 * API: `POST/GET /plans`、`POST /plans/{id}/solve`（開発用に `wait: true`）、
   `GET /solver-runs/{id}`、`POST /solver-runs/{id}/cancel`、
@@ -65,7 +66,7 @@
   `rowVer` による楽観的排他制御（不一致は 409）。新たな必須違反は `force: true` なしでは 422。
   手動で動かしたタスクは既定でロックされ、Source は MANUAL。KPI と違反を再計算。
 * `GET /plans/compare?a=&b=`: KPI 差分（良化・悪化）と、差異のあるタスク一覧。
-* `GET /dispatch?siteId=&date=`: マスタ計画の配台表（リソース別、開始順）。
+* `GET /dispatch?locationId=&date=`: マスタ計画の配台表（リソース別、開始順）。
 * `GET /solver-runs/{id}/events`: 進捗の Server-Sent Events。
 * `T_PlanViolations` に `ViolationCode` 列を追加（承認・編集で未割付を区別するため）。
   既存DBの定義変更は別途実施する。新規DBの初期設定は`python -m DataBase.setup_database`で行う。
@@ -76,7 +77,7 @@ Angular 21（スタンドアロンコンポーネント、signal、新しい制�
 デザインキャンバスの青・白のトークンを `src/styles.css` に定義。画面はすべて遅延読み込み。
 
 * `services/`・`interfaces/`（当初は `core/`）: API の型、API クライアント（`api.service.ts`、SSE も含む）、
-  拠点の選択（`site.service.ts`、右上のセレクト）、通知、表示用の変換（状態ラベル・日時）、
+  拠点の選択（`location.service.ts`、右上のセレクト）、通知、表示用の変換（状態ラベル・日時）、
   API エラーを通知に出すインターセプター。
 * ダッシュボード: マスタ計画の KPI、下書きの計画、納期が近いジョブ（3 日以内）、リソース負荷。
 * ジョブ: 状態フィルタ・検索、詳細パネル（タスク、割付候補、依存関係）、タスク生成。

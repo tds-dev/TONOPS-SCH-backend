@@ -17,7 +17,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import utcnow
-from app.models.masters import Site
+from app.models.masters import Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.services.plan_service import next_plan_no
 
@@ -25,17 +25,20 @@ from app.services.plan_service import next_plan_no
 NON_BLOCKING_HARD = {"UNSCHEDULED"}
 
 
+# 下書き以外の計画に対する変更を拒否する。
 def _require_draft(plan: Plan) -> None:
     if plan.Status != "DRAFT":
         raise HTTPException(status.HTTP_409_CONFLICT, f"下書きの計画のみ操作できます（現在: {plan.Status}）")
 
 
+# 対象計画で待機中または実行中の計算要求を調べる。
 def _active_run(db: Session, plan_id: int) -> int | None:
     return db.scalar(
         select(SolverRun.RunID).where(SolverRun.PlanID == plan_id, SolverRun.Status.in_(["QUEUED", "RUNNING"]))
     )
 
 
+# 拠点内の計画状態と割付を確認し、対象計画をマスタ計画にする。
 def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Plan:
     _require_draft(plan)
     if _active_run(db, plan.PlanID):
@@ -58,11 +61,11 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
         )
 
     # 拠点行をロック（SQL Server では UPDLOCK）して、同じ拠点の同時承認を直列化する
-    db.execute(select(Site).where(Site.SiteID == plan.SiteID).with_for_update())
+    db.execute(select(Location).where(Location.LocationID == plan.LocationID).with_for_update())
 
     overlapping = db.scalars(
         select(Plan).where(
-            Plan.SiteID == plan.SiteID,
+            Plan.LocationID == plan.LocationID,
             Plan.PlanID != plan.PlanID,
             Plan.Status == "MASTER",
             Plan.HorizonStart < plan.HorizonEnd,
@@ -78,7 +81,7 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
     # 既に SUPERSEDED の計画も、新計画の開始以降は無効にする
     for old in db.scalars(
         select(Plan).where(
-            Plan.SiteID == plan.SiteID, Plan.Status == "SUPERSEDED",
+            Plan.LocationID == plan.LocationID, Plan.Status == "SUPERSEDED",
             Plan.SupersededAt > plan.HorizonStart, Plan.HorizonStart < plan.HorizonStart,
         )
     ):
@@ -96,6 +99,7 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
     return plan
 
 
+# 下書きであることを確認して計画を破棄する。
 def discard_plan(db: Session, plan: Plan, user: str) -> Plan:
     _require_draft(plan)
     if _active_run(db, plan.PlanID):
@@ -108,9 +112,10 @@ def discard_plan(db: Session, plan: Plan, user: str) -> Plan:
 
 def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Plan:
     """割付・KPI・違反ごと複製した新しい下書きを作る（what-if 用）。"""
-    site = db.get(Site, plan.SiteID)
+    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    location = db.get(Location, plan.LocationID)
     new = Plan(
-        SiteID=plan.SiteID, PlanNo=next_plan_no(db, site, plan.HorizonStart),
+        LocationID=plan.LocationID, PlanNo=next_plan_no(db, location, plan.HorizonStart),
         PlanName=name or f"{plan.PlanName}（コピー）", Status="DRAFT",
         HorizonStart=plan.HorizonStart, HorizonEnd=plan.HorizonEnd, ProfileID=plan.ProfileID,
         BasePlanID=plan.BasePlanID, Memo=plan.Memo, CreatedBy=user,
@@ -134,7 +139,7 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
     return new
 
 
-def master_assignments(db: Session, site_id: int, start: datetime, end: datetime) -> list[PlanAssignment]:
+def master_assignments(db: Session, location_id: int, start: datetime, end: datetime) -> list[PlanAssignment]:
     """[start, end) に重なるマスタ計画の割付。
 
     MASTER の割付と、SUPERSEDED の計画のうち SupersededAt より前に始まる割付を合わせる。
@@ -142,7 +147,7 @@ def master_assignments(db: Session, site_id: int, start: datetime, end: datetime
     """
     plans = db.scalars(
         select(Plan).where(
-            Plan.SiteID == site_id, Plan.Status.in_(["MASTER", "SUPERSEDED"]),
+            Plan.LocationID == location_id, Plan.Status.in_(["MASTER", "SUPERSEDED"]),
             Plan.HorizonStart < end, Plan.HorizonEnd > start,
         )
     ).all()

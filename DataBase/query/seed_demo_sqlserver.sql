@@ -26,52 +26,52 @@ INSERT INTO [M_AttributeDefinitions] ([AttributeDefID], [OrganizationID], [Entit
 SET IDENTITY_INSERT [M_AttributeDefinitions] OFF;
 SET @IdentityTable = NULL;
 
--- M_Sites: 1件
-SET @IdentityTable = N'M_Sites';
-SET IDENTITY_INSERT [M_Sites] ON;
-INSERT INTO [M_Sites] ([SiteID], [OrganizationID], [SiteCode], [SiteName], [TimeZone], [DefaultCalendarID], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'PLANT-A', N'工場A', N'Asia/Tokyo', NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-SET IDENTITY_INSERT [M_Sites] OFF;
+-- M_Locations: 1件
+SET @IdentityTable = N'M_Locations';
+SET IDENTITY_INSERT [M_Locations] ON;
+INSERT INTO [M_Locations] ([LocationID], [OrganizationID], [LocationCode], [LocationName], [TimeZone], [DefaultCalendarID], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'PLANT-A', N'工場A', N'Asia/Tokyo', NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+SET IDENTITY_INSERT [M_Locations] OFF;
 SET @IdentityTable = NULL;
 
 -- M_Calendars: 1件
 SET @IdentityTable = N'M_Calendars';
 SET IDENTITY_INSERT [M_Calendars] ON;
-INSERT INTO [M_Calendars] ([CalendarID], [SiteID], [CalendarCode], [CalendarName], [ParentCalendarID], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'STD', N'標準カレンダー', NULL, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [CalendarCode], [CalendarName], [ParentCalendarID], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'STD', N'標準カレンダー', NULL, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Calendars] OFF;
 SET @IdentityTable = NULL;
 
 -- M_Items: 6件
 SET @IdentityTable = N'M_Items';
 SET IDENTITY_INSERT [M_Items] ON;
-INSERT INTO [M_Items] ([ItemID], [SiteID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'A-200', N'品目 A-200', N'kg', N'{"family": "A"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Items] ([ItemID], [SiteID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'A-310', N'品目 A-310', N'kg', N'{"family": "A"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Items] ([ItemID], [SiteID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'B-110', N'品目 B-110', N'kg', N'{"family": "B"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Items] ([ItemID], [SiteID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'B-140', N'品目 B-140', N'kg', N'{"family": "B"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Items] ([ItemID], [SiteID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'B-150', N'品目 B-150', N'kg', N'{"family": "B"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Items] ([ItemID], [SiteID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'C-020', N'品目 C-020', N'kg', N'{"family": "C"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Items] ([ItemID], [LocationID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'A-200', N'品目 A-200', N'kg', N'{"family": "A"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Items] ([ItemID], [LocationID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'A-310', N'品目 A-310', N'kg', N'{"family": "A"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Items] ([ItemID], [LocationID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'B-110', N'品目 B-110', N'kg', N'{"family": "B"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Items] ([ItemID], [LocationID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'B-140', N'品目 B-140', N'kg', N'{"family": "B"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Items] ([ItemID], [LocationID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'B-150', N'品目 B-150', N'kg', N'{"family": "B"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Items] ([ItemID], [LocationID], [ItemCode], [ItemName], [Unit], [AttributesJSON], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'C-020', N'品目 C-020', N'kg', N'{"family": "C"}', '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Items] OFF;
 SET @IdentityTable = NULL;
 
 -- M_PlanProfiles: 1件
 SET @IdentityTable = N'M_PlanProfiles';
 SET IDENTITY_INSERT [M_PlanProfiles] ON;
-INSERT INTO [M_PlanProfiles] ([ProfileID], [SiteID], [ProfileName], [TimeUnit], [ObjectiveWeightsJSON], [TimeLimitSec], [FrozenWindowHours], [IsDefault], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'納期優先', N'MINUTE', N'{"lateness": 1000, "setup": 10, "makespan": 1, "unscheduled": 100000}', 30, 0, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL);
+INSERT INTO [M_PlanProfiles] ([ProfileID], [LocationID], [ProfileName], [TimeUnit], [ObjectiveWeightsJSON], [TimeLimitSec], [FrozenWindowHours], [IsDefault], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'納期優先', N'MINUTE', N'{"lateness": 1000, "setup": 10, "makespan": 1, "unscheduled": 100000}', 30, 0, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_PlanProfiles] OFF;
 SET @IdentityTable = NULL;
 
 -- M_ResourceGroups: 3件
 SET @IdentityTable = N'M_ResourceGroups';
 SET IDENTITY_INSERT [M_ResourceGroups] ON;
-INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [SiteID], [GroupCode], [GroupName], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'MIX', N'配合', 0, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [SiteID], [GroupCode], [GroupName], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'FIL', N'充填', 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [SiteID], [GroupCode], [GroupName], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'PAC', N'包装', 2, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [LocationID], [GroupCode], [GroupName], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'MIX', N'配合', 0, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [LocationID], [GroupCode], [GroupName], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'FIL', N'充填', 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [LocationID], [GroupCode], [GroupName], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'PAC', N'包装', 2, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_ResourceGroups] OFF;
 SET @IdentityTable = NULL;
 
 -- M_Rules: 1件
 SET @IdentityTable = N'M_Rules';
 SET IDENTITY_INSERT [M_Rules] ON;
-INSERT INTO [M_Rules] ([RuleID], [SiteID], [RuleTypeKey], [RuleName], [SelectorJSON], [ParamsJSON], [IsHard], [Weight], [ValidFrom], [ValidTo], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'allowed_weekdays', N'系統Cは土曜生産しない', N'{"family": "C"}', N'{"weekdays": [1, 2, 3, 4, 5]}', 1, 100, NULL, NULL, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL);
+INSERT INTO [M_Rules] ([RuleID], [LocationID], [RuleTypeKey], [RuleName], [SelectorJSON], [ParamsJSON], [IsHard], [Weight], [ValidFrom], [ValidTo], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'allowed_weekdays', N'系統Cは土曜生産しない', N'{"family": "C"}', N'{"weekdays": [1, 2, 3, 4, 5]}', 1, 100, NULL, NULL, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_Rules] OFF;
 SET @IdentityTable = NULL;
 
@@ -96,19 +96,19 @@ SET @IdentityTable = NULL;
 -- M_ChangeoverMatrices: 1件
 SET @IdentityTable = N'M_ChangeoverMatrices';
 SET IDENTITY_INSERT [M_ChangeoverMatrices] ON;
-INSERT INTO [M_ChangeoverMatrices] ([MatrixID], [SiteID], [MatrixName], [AttributeKey], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'配合 系統切替', N'family', 1, 0, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL);
+INSERT INTO [M_ChangeoverMatrices] ([MatrixID], [LocationID], [MatrixName], [AttributeKey], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'配合 系統切替', N'family', 1, 0, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_ChangeoverMatrices] OFF;
 SET @IdentityTable = NULL;
 
 -- M_Resources: 6件
 SET @IdentityTable = N'M_Resources';
 SET IDENTITY_INSERT [M_Resources] ON;
-INSERT INTO [M_Resources] ([ResourceID], [SiteID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, 1, N'M-01', N'配合機 M-01', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 0, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [SiteID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, 1, N'M-02', N'配合機 M-02', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [SiteID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, 2, N'F-01', N'充填機 F-01', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 2, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [SiteID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, 2, N'F-02', N'充填機 F-02', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 3, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [SiteID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, 3, N'P-01', N'包装機 P-01', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 4, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [SiteID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, 3, N'P-02', N'包装機 P-02', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 5, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, 1, N'M-01', N'配合機 M-01', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 0, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, 1, N'M-02', N'配合機 M-02', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 1, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, 2, N'F-01', N'充填機 F-01', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 2, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, 2, N'F-02', N'充填機 F-02', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 3, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, 3, N'P-01', N'包装機 P-01', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 4, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceCode], [ResourceName], [ResourceType], [Capacity], [DailyCapacityHours], [CalendarID], [CostPerHour], [AttributesJSON], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, 3, N'P-02', N'包装機 P-02', N'MACHINE', 1.00, NULL, 1, NULL, NULL, 5, '2026-10-30T02:28:24.000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Resources] OFF;
 SET @IdentityTable = NULL;
 
@@ -163,13 +163,13 @@ SET @IdentityTable = NULL;
 -- T_Orders: 7件
 SET @IdentityTable = N'T_Orders';
 SET IDENTITY_INSERT [T_Orders] ON;
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'JB-1041', N'JB-1041 品目 A-200', N'ORDER', NULL, 1, 1, 1200.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-01T03:00:00.000000', 10, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'JB-1043', N'JB-1043 品目 B-110', N'ORDER', NULL, 3, 3, 800.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-01T06:00:00.000000', 50, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'JB-1044', N'JB-1044 品目 C-020', N'ORDER', NULL, 6, 6, 2000.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-01T09:00:00.000000', 50, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'JB-1045', N'JB-1045 品目 B-150', N'ORDER', NULL, 5, 5, 600.000, NULL, '2026-10-30T21:00:00.000000', '2026-10-31T11:00:00.000000', 10, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'JB-1046', N'JB-1046 品目 B-140', N'ORDER', NULL, 4, 4, 900.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-02T01:00:00.000000', 50, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'JB-1047', N'JB-1047 品目 A-310', N'ORDER', NULL, 2, 2, 1500.000, NULL, '2026-10-30T21:00:00.000000', '2026-10-31T07:00:00.000000', 10, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [SiteID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 1, N'JB-1048', N'JB-1048 品目 B-110', N'ORDER', NULL, 3, 3, 400.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-02T00:00:00.000000', 90, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'JB-1041', N'JB-1041 品目 A-200', N'ORDER', NULL, 1, 1, 1200.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-01T03:00:00.000000', 10, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'JB-1043', N'JB-1043 品目 B-110', N'ORDER', NULL, 3, 3, 800.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-01T06:00:00.000000', 50, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'JB-1044', N'JB-1044 品目 C-020', N'ORDER', NULL, 6, 6, 2000.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-01T09:00:00.000000', 50, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'JB-1045', N'JB-1045 品目 B-150', N'ORDER', NULL, 5, 5, 600.000, NULL, '2026-10-30T21:00:00.000000', '2026-10-31T11:00:00.000000', 10, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'JB-1046', N'JB-1046 品目 B-140', N'ORDER', NULL, 4, 4, 900.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-02T01:00:00.000000', 50, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'JB-1047', N'JB-1047 品目 A-310', N'ORDER', NULL, 2, 2, 1500.000, NULL, '2026-10-30T21:00:00.000000', '2026-10-31T07:00:00.000000', 10, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [OrderNo], [OrderName], [OrderType], [ParentOrderID], [ItemID], [RoutingID], [Quantity], [CustomerName], [ReleaseAt], [DueAt], [Priority], [Status], [PlanOwner], [AttributesJSON], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 1, N'JB-1048', N'JB-1048 品目 B-110', N'ORDER', NULL, 3, 3, 400.000, NULL, '2026-10-30T21:00:00.000000', '2026-11-02T00:00:00.000000', 90, N'OPEN', N'SCHEDULER', NULL, NULL, '2026-10-30T02:28:24.000000', N'seed', '2026-10-30T02:28:24.000000', NULL, 0);
 SET IDENTITY_INSERT [T_Orders] OFF;
 SET @IdentityTable = NULL;
 
@@ -272,7 +272,7 @@ SET IDENTITY_INSERT [T_TaskResourceOptions] OFF;
 SET @IdentityTable = NULL;
 
 -- 拠点の標準カレンダー等、後から参照先ができる項目を設定する。
-UPDATE [M_Sites] SET [DefaultCalendarID] = 1 WHERE [SiteID] = 1;
+UPDATE [M_Locations] SET [DefaultCalendarID] = 1 WHERE [LocationID] = 1;
 COMMIT TRANSACTION;
 END TRY
 BEGIN CATCH

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.snapshot import build_problem
-from app.models.masters import ChangeoverMatrix, Item, Resource, ResourceGroup, Site
+from app.models.masters import ChangeoverMatrix, Item, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
 from app.schemas.base import coerce
 from app.services.worktime import gaps
@@ -18,19 +18,21 @@ from app.services.worktime import gaps
 SEVERITY_ORDER = {"HARD": 0, "SOFT": 1, "INFO": 2}
 
 
+# UTCの日時を、拠点の現地時刻を表す文字列へ変換する。
 def _local(dt: datetime, tz: str) -> str:
     return utc_to_local(dt, tz).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
-def default_color_attribute(db: Session, site_id: int) -> str | None:
+def default_color_attribute(db: Session, location_id: int) -> str | None:
     """色分けの既定属性: 拠点の有効な段取り替えマトリクスの属性（段取りの単位なので見分けたい）。"""
     return db.scalar(
         select(ChangeoverMatrix.AttributeKey)
-        .where(ChangeoverMatrix.SiteID == site_id, ChangeoverMatrix.IsActive == true())
+        .where(ChangeoverMatrix.LocationID == location_id, ChangeoverMatrix.IsActive == true())
         .order_by(ChangeoverMatrix.MatrixID)
     )
 
 
+# 計画の拠点に属する設備・割付・違反情報をボード表示用にまとめる。
 def build_board(
     db: Session,
     plan: Plan,
@@ -39,17 +41,18 @@ def build_board(
     resource_group_id: int | None = None,
     color_by: str | None = None,
 ) -> dict:
-    site = db.get(Site, plan.SiteID)
-    tz = site.TimeZone
+    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    location = db.get(Location, plan.LocationID)
+    tz = location.TimeZone
     start = to_utc_naive(start, tz) if start else plan.HorizonStart
     end = to_utc_naive(end, tz) if end else plan.HorizonEnd
-    color_by = color_by or default_color_attribute(db, site.SiteID)
+    color_by = color_by or default_color_attribute(db, location.LocationID)
     problem = build_problem(db, plan)
 
     # ---- リソース（グループ順・表示順）
-    groups = {g.ResourceGroupID: g for g in db.scalars(select(ResourceGroup).where(ResourceGroup.SiteID == site.SiteID))}
+    groups = {g.ResourceGroupID: g for g in db.scalars(select(ResourceGroup).where(ResourceGroup.LocationID == location.LocationID))}
     res_rows = db.scalars(
-        select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag == false())
+        select(Resource).where(Resource.LocationID == location.LocationID, Resource.DeleteFlag == false())
     ).all()
     if resource_group_id is not None:
         res_rows = [r for r in res_rows if r.ResourceGroupID == resource_group_id]

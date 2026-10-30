@@ -16,12 +16,14 @@ from sqlalchemy.types import TypeEngine
 from app.models.base import AUDIT_COLUMNS
 
 
+# 時差情報がある日時をUTCへ揃えて、保存用に時差情報を外す。
 def _to_naive_utc(value: dt.datetime) -> dt.datetime:
     if value.tzinfo is not None:
         value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
     return value
 
 
+# APIへ返す日時を、UTCであることが分かる文字列にする。
 def _iso_utc(value: dt.datetime) -> str:
     return value.isoformat() + "Z" if value.tzinfo is None else value.isoformat()
 
@@ -35,7 +37,7 @@ UtcDatetime = Annotated[
 
 
 def to_camel(name: str) -> str:
-    """'ResourceName' -> 'resourceName', 'SiteID' -> 'siteId', 'start_at' -> 'startAt'."""
+    """'ResourceName' -> 'resourceName', 'LocationID' -> 'locationId', 'start_at' -> 'startAt'."""
     if not name:
         return name
     if "_" in name:
@@ -48,6 +50,7 @@ def to_camel(name: str) -> str:
     return out
 
 
+# API項目名の変換とモデルからの読み取りを共通化する基底の型。
 class ApiModel(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,

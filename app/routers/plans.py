@@ -15,7 +15,7 @@ from app.core.db import get_db
 from app.core.timeutil import to_utc_naive
 from app.engine.rules import all_plugins
 from app.engine.solve import execute_run
-from app.models.masters import Resource, Site
+from app.models.masters import Resource, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, UtcDatetime, coerce, schemas_for
@@ -29,8 +29,10 @@ ViolationRead, _, _ = schemas_for(PlanViolation)
 router = APIRouter(tags=["Plans"])
 
 
+# 計画作成時に受け取る所属拠点・期間・計算条件。
 class PlanCreateBody(ApiModel):
-    site_id: int
+    # 取得・作成の対象となる拠点の識別番号。
+    location_id: int
     horizon_start: datetime  # オフセットなしは拠点の現地時刻、ありはそのまま UTC に変換
     horizon_end: datetime
     plan_name: str | None = None
@@ -40,12 +42,14 @@ class PlanCreateBody(ApiModel):
     memo: str | None = None
 
 
+# 計算対象の範囲・制限時間・完了待機の指定。
 class SolveBody(ApiModel):
     scope: str = "FULL"  # FULL または REPAIR
     time_limit_sec: int | None = None
     wait: bool = False  # 同期計算を指定した場合はリクエスト内で実行する。通常はワーカーが実行する
 
 
+# 割付の表示に必要なオーダー・作業・設備・日時。
 class AssignmentView(ApiModel):
     assignment_id: int
     task_id: int
@@ -62,6 +66,7 @@ class AssignmentView(ApiModel):
     attributes: dict = {}
 
 
+# 制約ルールの種類と入力項目の定義。
 class RuleTypeView(ApiModel):
     type_key: str
     label: str
@@ -70,6 +75,7 @@ class RuleTypeView(ApiModel):
     params_schema: dict
 
 
+# 計画を取得し、存在しない場合は見つからない理由を返す。
 def _plan_or_404(db: Session, plan_id: int) -> Plan:
     plan = db.get(Plan, plan_id)
     if plan is None:
@@ -79,30 +85,34 @@ def _plan_or_404(db: Session, plan_id: int) -> Plan:
 
 @router.get("/plans", response_model=list[PlanRead])
 def list_plans(
-    site_id: int | None = Query(None, alias="siteId"),
+    # 取得・作成の対象となる拠点の識別番号。
+    location_id: int | None = Query(None, alias="locationId"),
     plan_status: str | None = Query(None, alias="status"),
     db: Session = Depends(get_db),
 ):
-    """?siteId=1&status=DRAFT,MASTER で絞り込む。"""
+    """?locationId=1&status=DRAFT,MASTER で絞り込む。"""
     stmt = select(Plan).order_by(Plan.HorizonStart.desc(), Plan.PlanID.desc())
-    if site_id is not None:
-        stmt = stmt.where(Plan.SiteID == site_id)
+    if location_id is not None:
+        stmt = stmt.where(Plan.LocationID == location_id)
     if plan_status:
         stmt = stmt.where(Plan.Status.in_(plan_status.upper().split(",")))
     return db.scalars(stmt).all()
 
 
+# 指定拠点の現地時刻をUTCへ変換して下書き計画を作成する。
 @router.post("/plans", response_model=PlanRead, status_code=status.HTTP_201_CREATED)
 def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = Depends(current_user)):
-    site = db.get(Site, body.site_id)
-    if site is None:
-        raise HTTPException(404, f"拠点 {body.site_id} が見つかりません")
+    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    location = db.get(Location, body.location_id)
+    if location is None:
+        raise HTTPException(404, f"拠点 {body.location_id} が見つかりません")
     data = body.model_dump()
-    data["horizon_start"] = to_utc_naive(body.horizon_start, site.TimeZone)
-    data["horizon_end"] = to_utc_naive(body.horizon_end, site.TimeZone)
+    data["horizon_start"] = to_utc_naive(body.horizon_start, location.TimeZone)
+    data["horizon_end"] = to_utc_naive(body.horizon_end, location.TimeZone)
     return create_plan(db, user=user, **data)
 
 
+# 指定した計画の情報を返す。
 @router.get("/plans/{plan_id}", response_model=PlanRead)
 def get_plan(plan_id: int, db: Session = Depends(get_db)):
     return _plan_or_404(db, plan_id)
@@ -123,11 +133,13 @@ def post_solve(
     return run
 
 
+# 対象計画の計算実行履歴を返す。
 @router.get("/plans/{plan_id}/solver-runs", response_model=list[RunRead])
 def list_runs(plan_id: int, db: Session = Depends(get_db)):
     return db.scalars(select(SolverRun).where(SolverRun.PlanID == plan_id).order_by(SolverRun.RunID.desc())).all()
 
 
+# 指定した計算実行の情報を返す。
 @router.get("/solver-runs/{run_id}", response_model=RunRead)
 def get_run(run_id: int, db: Session = Depends(get_db)):
     run = db.get(SolverRun, run_id)
@@ -146,6 +158,7 @@ def cancel_run(run_id: int, db: Session = Depends(get_db)):
     return run
 
 
+# 対象計画の割付と、表示に必要な作業・設備情報を返す。
 @router.get("/plans/{plan_id}/assignments", response_model=list[AssignmentView])
 def list_assignments(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)
@@ -168,12 +181,14 @@ def list_assignments(plan_id: int, db: Session = Depends(get_db)):
     ]
 
 
+# 対象計画の評価値を項目名でまとめて返す。
 @router.get("/plans/{plan_id}/kpis", response_model=dict[str, float])
 def get_kpis(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)
     return {k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan_id))}
 
 
+# 対象計画で検出した制約違反を返す。
 @router.get("/plans/{plan_id}/violations", response_model=list[ViolationRead])
 def get_violations(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)
@@ -197,6 +212,7 @@ class ApproveBody(ApiModel):
     force: bool = False  # 必須制約の違反があっても承認する
 
 
+# 計画を複製するときの名称。
 class CopyBody(ApiModel):
     plan_name: str | None = None
 
@@ -227,6 +243,7 @@ def run_events(run_id: int):
 
     ストリームはリクエストより長く続くため、DB セッションは generator 内で開く。
     """
+    # 計算の状態が完了するまで、進捗をイベントとして順に返す。
     def stream():
         last = None
         while True:

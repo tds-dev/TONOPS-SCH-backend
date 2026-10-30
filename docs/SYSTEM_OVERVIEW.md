@@ -53,15 +53,15 @@ flowchart LR
   FE -- "REST (JSON)" --> API
   FE -- "SSE（計算の進捗）" --> API
   API -- "SQLAlchemy" --> DB
-  API -- "計算依頼を登録<br/>T_SolverRuns (QUEUED)" --> DB
+  API -- "計算依頼を登録<br/>T_SolverRunResult (QUEUED)" --> DB
   W -- "ポーリング・依頼の取得" --> DB
   W --> ENG
   ENG -- "割付・KPI・違反を保存" --> DB
 ```
 
 * **API** は画面からのリクエストを処理します。計算（数十秒〜数分）は API の中では行わず、
-  `T_SolverRuns` に依頼（`QUEUED`）を登録してすぐに返します。
-* **ソルバーワーカー** は `T_SolverRuns` を数秒ごとに確認し、依頼を 1 件ずつ取り出して
+  `T_SolverRunResult` に依頼（`QUEUED`）を登録してすぐに返します。
+* **ソルバーワーカー** は `T_SolverRunResult` を数秒ごとに確認し、依頼を 1 件ずつ取り出して
   （条件付き UPDATE で `RUNNING` に変更 = 二重実行防止）計算します。進捗は `ProgressJSON` に書き込みます。
 * **画面** は計算の進捗を Server-Sent Events（`GET /solver-runs/{id}/events`）で受け取り、完了したらボードを再読み込みします。
 * ワーカーは複数起動できます（依頼の取得は排他制御済み）。キューは DB のテーブルなので、Redis などは不要です。
@@ -87,7 +87,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | 用語 | テーブル | 説明 |
 |---|---|---|
 | 組織 | M_Organizations | 会社。属性定義の単位 |
-| 拠点 | M_Sites | 工場・事業所。タイムゾーンと既定カレンダーを持つ。左サイドバーのアプリ名の下で切り替え |
+| 拠点 | M_Locations | 工場・事業所。タイムゾーンと既定カレンダーを持つ。左サイドバーのアプリ名の下で切り替え |
 | カレンダー | M_Calendars ほか | 稼働時間（週次のシフト＋例外）。リソースごとに設定、未設定なら拠点の既定 |
 | リソースグループ | M_ResourceGroups | 同種のリソースのまとまり（例: 配合、充填、包装） |
 | リソース | M_Resources | 作業を行うもの。設備・人・チーム・部屋など（`ResourceKind`） |
@@ -99,7 +99,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | 依存関係 | T_TaskDependencies | タスク間の順序（FS/SS/FF/SF とラグ） |
 | 計画 | T_Plans | スケジュールの 1 つの版。下書き → マスタ（承認） |
 | 割付 | T_PlanAssignments | 計画内で「タスク × リソース × 時刻」を決めたもの |
-| 計算（ソルバー実行） | T_SolverRuns | エンジンによる自動計画の 1 回分。作業キューも兼ねる |
+| 計算（ソルバー実行） | T_SolverRunResult | エンジンによる自動計画の 1 回分。作業キューも兼ねる |
 | 段取り替え | M_ChangeoverMatrices | 同じリソースで属性値が変わるときに必要な時間（例: 系統 A→C は 45 分） |
 | 制約ルール | M_Rules | プラグインで実装された追加の制約（例: 系統 C は平日のみ） |
 | 計画プロファイル | M_PlanProfiles | 目的関数の重み・計算時間の上限など、計算の方針 |
@@ -277,35 +277,35 @@ stateDiagram-v2
 
 ```mermaid
 erDiagram
-  M_Organizations ||--o{ M_Sites : ""
+  M_Organizations ||--o{ M_Locations : ""
   M_Organizations ||--o{ M_AttributeDefinitions : ""
-  M_Sites ||--o{ M_Calendars : ""
+  M_Locations ||--o{ M_Calendars : ""
   M_Calendars ||--o{ M_CalendarPatterns : ""
   M_Calendars ||--o{ M_CalendarExceptions : ""
-  M_Sites ||--o{ M_ResourceGroups : ""
-  M_Sites ||--o{ M_Resources : ""
+  M_Locations ||--o{ M_ResourceGroups : ""
+  M_Locations ||--o{ M_Resources : ""
   M_ResourceGroups ||--o{ M_Resources : ""
   M_Calendars ||--o{ M_Resources : ""
-  M_Sites ||--o{ M_Items : ""
+  M_Locations ||--o{ M_Items : ""
   M_Items ||--o{ M_Routings : ""
   M_Routings ||--o{ M_RoutingSteps : ""
   M_RoutingSteps ||--o{ M_RoutingStepResources : ""
-  M_Sites ||--o{ M_Rules : ""
-  M_Sites ||--o{ M_ChangeoverMatrices : ""
+  M_Locations ||--o{ M_Rules : ""
+  M_Locations ||--o{ M_ChangeoverMatrices : ""
   M_ChangeoverMatrices ||--o{ M_ChangeoverEntries : ""
-  M_Sites ||--o{ M_PlanProfiles : ""
-  M_Sites ||--o{ T_Jobs : ""
+  M_Locations ||--o{ M_PlanProfiles : ""
+  M_Locations ||--o{ T_Jobs : ""
   M_Items ||--o{ T_Jobs : ""
   T_Jobs ||--o{ T_Tasks : ""
   M_RoutingSteps ||--o{ T_Tasks : "生成元"
   T_Tasks ||--o{ T_TaskResourceOptions : ""
   T_Tasks ||--o{ T_TaskDependencies : "前/後"
-  M_Sites ||--o{ T_Plans : ""
+  M_Locations ||--o{ T_Plans : ""
   M_PlanProfiles ||--o{ T_Plans : ""
   T_Plans ||--o{ T_PlanAssignments : ""
   T_Tasks ||--o{ T_PlanAssignments : ""
   M_Resources ||--o{ T_PlanAssignments : ""
-  T_Plans ||--o{ T_SolverRuns : ""
+  T_Plans ||--o{ T_SolverRunResult : ""
   T_Plans ||--o{ T_PlanKpis : ""
   T_Plans ||--o{ T_PlanViolations : ""
   T_Tasks ||--o{ T_Actuals : ""
@@ -321,12 +321,12 @@ erDiagram
 | OrganizationName | NVARCHAR(100) | |
 | DeleteFlag | BIT | |
 
-#### M_Sites（拠点）
+#### M_Locations（拠点）
 | 列 | 型 | 説明 |
 |---|---|---|
-| SiteID | INT PK | |
+| LocationID | INT PK | |
 | OrganizationID | INT FK | |
-| SiteCode / SiteName | NVARCHAR | 組織内で SiteCode 一意 |
+| LocationCode / LocationName | NVARCHAR | 組織内で LocationCode 一意 |
 | TimeZone | NVARCHAR(50) | IANA 名（既定 `Asia/Tokyo`）。画面の表示・入力はこの時刻 |
 | DefaultCalendarID | INT FK NULL | リソースにカレンダーがない場合に使う |
 | DeleteFlag | BIT | |
@@ -335,7 +335,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | CalendarID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | CalendarCode / CalendarName | NVARCHAR | 拠点内で CalendarCode 一意 |
 | ParentCalendarID | INT FK NULL | 親のパターン・例外を継承（例: 拠点共通 → ライン別） |
 | DeleteFlag | BIT | |
@@ -363,7 +363,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | ResourceGroupID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | GroupCode / GroupName | NVARCHAR | 拠点内で GroupCode 一意 |
 | SortOrder | INT | 表示順 |
 | DeleteFlag | BIT | |
@@ -372,7 +372,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | ResourceID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | ResourceGroupID | INT FK NULL | |
 | ResourceCode / ResourceName | NVARCHAR | 拠点内で ResourceCode 一意 |
 | ResourceKind | NVARCHAR(20) | 値: `MACHINE` `PERSON` `TEAM` `ROOM` `OTHER` |
@@ -402,7 +402,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | RuleID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | RuleTypeKey | NVARCHAR(50) | プラグインの種類（`GET /rule-types` で一覧） |
 | RuleName | NVARCHAR(100) | |
 | SelectorJSON | NVARCHAR(MAX) | 対象タスクの条件（タスク属性で照合）。例 `{"family": "C"}`、`{"family": {"in": ["A","B"]}}`、`{}` = 全タスク |
@@ -416,7 +416,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | MatrixID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | MatrixName | NVARCHAR(100) | |
 | AttributeKey | NVARCHAR(50) | 切り替えの基準となるタスク属性（例: `family`）。ボードの色分けにも使う |
 | ResourceGroupID | INT FK NULL | 適用するグループ（NULL = 拠点の全リソース） |
@@ -437,7 +437,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | ProfileID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | ProfileName | NVARCHAR(100) | 例: 納期優先、段取り最小 |
 | TimeUnit | NVARCHAR(10) | 値: `MINUTE` `DAY`（現在は MINUTE のみ使用） |
 | ObjectiveWeightsJSON | NVARCHAR(MAX) | 目的関数の重み（[4.3](#43-目的関数最小化)） |
@@ -449,7 +449,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | ItemID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | ItemCode / ItemName | NVARCHAR | 拠点内で ItemCode 一意 |
 | Unit | NVARCHAR(10) | 数量の単位（kg など） |
 | AttributesJSON | NVARCHAR(MAX) | 例 `{"family": "A"}`。タスク生成時にタスクへ引き継ぐ |
@@ -493,7 +493,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | JobID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | JobNo | NVARCHAR(30) | 拠点内で一意（受注番号・プロジェクト番号） |
 | JobName | NVARCHAR(200) | |
 | JobKind | NVARCHAR(20) | 値: `ORDER`（受注）`PROJECT`（プロジェクト） |
@@ -553,7 +553,7 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | PlanID | INT PK | |
-| SiteID | INT FK | |
+| LocationID | INT FK | |
 | PlanNo | NVARCHAR(30) | `P-YYYYMMDD-NN`。拠点内で一意 |
 | PlanName | NVARCHAR(100) | |
 | Status | NVARCHAR(20) | 値: `DRAFT` `MASTER` `SUPERSEDED` `DISCARDED` `ARCHIVED` |
@@ -581,7 +581,7 @@ erDiagram
 
 索引: `IX_T_PlanAssignments_PlanID_ResourceID_StartAt`
 
-#### T_SolverRuns（ソルバー実行 = 作業キュー）
+#### T_SolverRunResult（ソルバー実行 = 作業キュー）
 | 列 | 型 | 説明 |
 |---|---|---|
 | RunID | INT PK | |
@@ -597,7 +597,7 @@ erDiagram
 | ProgressJSON | NVARCHAR(MAX) | `{solutions, objective, bound, wallTime, notes}` |
 | ErrorMessage | NVARCHAR(MAX) | |
 
-索引: `IX_T_SolverRuns_Status_RequestedAt`（ワーカーの取得用）
+索引: `IX_T_SolverRunResult_Status_RequestedAt`（ワーカーの取得用）
 
 #### T_PlanKpis（計画 KPI）
 | 列 | 型 | 説明 |
@@ -640,15 +640,15 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | 画面（URL） | 主な API | 参照（R） | 更新（W） |
 |---|---|---|---|
-| サイドバーの拠点選択（アプリ名の下） | `GET /sites` | M_Sites | — |
+| サイドバーの拠点選択（アプリ名の下） | `GET /locations` | M_Locations | — |
 | ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /jobs` | T_Plans, T_PlanKpis, T_Jobs, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
-| 計画一覧（`/plans`） | `GET /plans`、`GET /plan-profiles`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_PlanProfiles, M_Sites | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
-| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Jobs, M_Items, M_Resources, M_ResourceGroups, M_Calendars・Patterns・Exceptions, M_ChangeoverMatrices・Entries, M_Rules, M_PlanProfiles, T_PlanKpis, T_PlanViolations, T_SolverRuns | T_SolverRuns（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Jobs.Status（承認時 OPEN→PLANNED） |
+| 計画一覧（`/plans`） | `GET /plans`、`GET /plan-profiles`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_PlanProfiles, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
+| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Jobs, M_Items, M_Resources, M_ResourceGroups, M_Calendars・Patterns・Exceptions, M_ChangeoverMatrices・Entries, M_Rules, M_PlanProfiles, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Jobs.Status（承認時 OPEN→PLANNED） |
 | 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Jobs, M_Resources | T_Plans（承認・破棄） |
 | ジョブ（`/jobs`） | `GET /jobs`、`GET /items`、`GET /resources`、`GET /resource-groups`、`GET /jobs/{id}/tasks`、`GET /jobs/{id}/dependencies`、`POST /jobs/{id}/generate-tasks` | T_Jobs, M_Items, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, M_Resources, M_ResourceGroups, M_Routings・Steps・StepResources（タスク生成） | T_Tasks, T_TaskResourceOptions, T_TaskDependencies（タスク生成）, T_Jobs.RoutingID |
-| 配台表（`/dispatch`） | `GET /dispatch?siteId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Jobs, M_Items, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
+| 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Jobs, M_Items, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に工程候補・タスク候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
-| カレンダー（`/calendars`） | `/calendars`、`/calendar-patterns`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarPatterns, M_CalendarExceptions, M_Sites, M_Resources | M_Calendars, M_CalendarPatterns, M_CalendarExceptions |
+| カレンダー（`/calendars`） | `/calendars`、`/calendar-patterns`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarPatterns, M_CalendarExceptions, M_Locations, M_Resources | M_Calendars, M_CalendarPatterns, M_CalendarExceptions |
 | 品目・工程ルート（`/items`） | `/items`、`/routings`、`/routing-steps`、`/routing-step-resources` の CRUD | M_Items, M_Routings, M_RoutingSteps, M_RoutingStepResources, M_Resources, M_ResourceGroups。削除前にジョブ・タスクなどを確認 | M_Items, M_Routings, M_RoutingSteps, M_RoutingStepResources |
 | 制約ルール（`/rules`） | `/rules`、`/changeover-matrices`、`/changeover-entries` の CRUD、`GET /rule-types` | M_Rules, M_ChangeoverMatrices, M_ChangeoverEntries, M_ResourceGroups, サーバーのルール種類定義 | M_Rules, M_ChangeoverMatrices, M_ChangeoverEntries |
 | 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
@@ -667,13 +667,13 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 ### 8.1 マスタ・汎用 CRUD
 
 次のリソースは共通の CRUD を持ちます（`GET` 一覧 / `GET /{id}` / `POST` / `PATCH /{id}` / `DELETE /{id}`）。
-一覧は **列名（camelCase）のクエリパラメータで等価絞り込み** できます（例: `GET /resources?siteId=1&resourceGroupId=2`）。
+一覧は **列名（camelCase）のクエリパラメータで等価絞り込み** できます（例: `GET /resources?locationId=1&resourceGroupId=2`）。
 `DeleteFlag` のあるテーブルは DELETE で論理削除、一覧は既定で削除済みを除外（`includeDeleted=true` で含む）。
 
 | パス | テーブル | 並び順 |
 |---|---|---|
 | `/organizations` | M_Organizations | ID |
-| `/sites` | M_Sites | ID |
+| `/locations` | M_Locations | ID |
 | `/calendars` | M_Calendars | ID |
 | `/calendar-patterns` | M_CalendarPatterns | DayOfWeek |
 | `/calendar-exceptions` | M_CalendarExceptions | StartAt |
@@ -705,8 +705,8 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/plans?siteId=&status=DRAFT,MASTER` | 計画一覧（期間開始の新しい順） |
-| POST | `/plans` | 計画作成。`{siteId, horizonStart, horizonEnd, planName?, profileId?, basePlanId?, useMasterAsBase?, memo?}`。オフセットなしの日時は拠点の現地時刻 |
+| GET | `/plans?locationId=&status=DRAFT,MASTER` | 計画一覧（期間開始の新しい順） |
+| POST | `/plans` | 計画作成。`{locationId, horizonStart, horizonEnd, planName?, profileId?, basePlanId?, useMasterAsBase?, memo?}`。オフセットなしの日時は拠点の現地時刻 |
 | GET | `/plans/{planId}` | 計画 |
 | POST | `/plans/{planId}/solve` | 計算依頼。`{scope: "FULL"|"REPAIR", timeLimitSec?, wait?}` → 202 と実行情報。`wait: true` はリクエスト内で同期計算 |
 | GET | `/plans/{planId}/solver-runs` | 計算履歴（新しい順） |
@@ -729,7 +729,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | POST | `/plans/{planId}/assignments/validate` | 変更の検証（保存しない）→ `{ok, errors, hard, soft, kpis, changedTaskIds}` |
 | PATCH | `/plans/{planId}/assignments` | 変更の保存。`{changes: [...], lockMoved: true, force: false}`。エラー・新たな必須違反は 422、`rowVer` 不一致は 409 |
 | GET | `/plans/compare?a=&b=` | 計画 A（基準）と B の KPI 差分（`better`: B が良いか）と変更タスク（`MOVED` / `RESOURCE` / `ADDED` / `REMOVED`） |
-| GET | `/dispatch?siteId=&date=YYYY-MM-DD&resourceGroupId=` | マスタ計画の指定日（現地）の割付をリソース別・開始順に |
+| GET | `/dispatch?locationId=&date=YYYY-MM-DD&resourceGroupId=` | マスタ計画の指定日（現地）の割付をリソース別・開始順に |
 
 **変更（changes）の書き方**
 

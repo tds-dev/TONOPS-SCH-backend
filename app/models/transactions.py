@@ -44,13 +44,14 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     # 実DBもT_OrdersとOrder系の列名へ変更されることを前提とする。
     __tablename__ = "T_Orders"
     __table_args__ = (
-        UniqueConstraint("SiteID", "OrderNo"),
+        UniqueConstraint("LocationID", "OrderNo"),
         CheckConstraint(in_check("OrderType", ORDER_TYPE), name="OrderType"),
         CheckConstraint(in_check("Status", ORDER_STATUSES), name="Status"),
         CheckConstraint(in_check("PlanOwner", PLAN_OWNERS), name="PlanOwner"),
     )
     OrderID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     OrderNo = Column(String(30), nullable=False)
     OrderName = Column(String(200), nullable=False)
     # 受注かプロジェクトかを表す種別。保存値と動作は維持する。
@@ -145,11 +146,12 @@ class Plan(AuditMixin, Base):
 
     __tablename__ = "T_Plans"
     __table_args__ = (
-        UniqueConstraint("SiteID", "PlanNo"),
+        UniqueConstraint("LocationID", "PlanNo"),
         CheckConstraint(in_check("Status", PLAN_STATUSES), name="Status"),
     )
     PlanID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     PlanNo = Column(String(30), nullable=False)
     PlanName = Column(String(100), nullable=False)
     Status = Column(String(20), nullable=False, default="DRAFT")
@@ -196,24 +198,32 @@ class PlanAssignment(AuditMixin, Base):
 class SolverRun(AuditMixin, Base):
     """ソルバー実行 — ワーカーがポーリングする作業キューも兼ねる。"""
 
-    __tablename__ = "T_SolverRuns"
+    # 計算依頼・進捗・結果の保存先。手動で改称したDBテーブルを参照する。
+    __tablename__ = "T_SolverRunResult"
     __table_args__ = (
         CheckConstraint(in_check("Status", RUN_STATUSES), name="Status"),
         CheckConstraint(in_check("Scope", RUN_SCOPES), name="Scope"),
-        Index("IX_T_SolverRuns_Status_RequestedAt", "Status", "RequestedAt"),
+        # 待機中の計算依頼を受付順に探す索引。定義名もテーブル名へ揃える。
+        Index("IX_T_SolverRunResult_Status_RequestedAt", "Status", "RequestedAt"),
     )
+    # 計算実行の識別番号と、その計算を依頼した計画。
     RunID = Column(Integer, primary_key=True, autoincrement=True)
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID"), nullable=False)
+    # 実行状態と、全体計算・部分再計算の区分。
     Status = Column(String(20), nullable=False, default="QUEUED")
     Scope = Column(String(20), nullable=False, default="FULL")
+    # 依頼者と、受付・開始・終了の時刻。
     RequestedBy = Column(String(254), nullable=False)
     RequestedAt = Column(DateTime, nullable=False)
     StartedAt = Column(DateTime, nullable=True)
     FinishedAt = Column(DateTime, nullable=True)
+    # 計算の制限秒数と、計算エンジンが返す終了状態。
     TimeLimitSec = Column(Integer, nullable=False, default=60)
     SolverStatus = Column(String(20), nullable=True)
+    # 得られた計画の評価値と、計算中に求めた評価値の境界。
     ObjectiveValue = Column(Float, nullable=True)
     BestBound = Column(Float, nullable=True)
+    # 計算対象の作業数、進捗の詳細、失敗時の理由。
     TaskCount = Column(Integer, nullable=True)
     ProgressJSON = Column(JSON, nullable=True)
     ErrorMessage = Column(Text, nullable=True)

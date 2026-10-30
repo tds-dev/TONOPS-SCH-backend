@@ -4,5 +4,5 @@
     snapshot.py       DB -> Problem
     model_builder.py  Problem -> CP-SAT モデル（＋ルールプラグイン）
     evaluate.py       純粋関数: スケジュールの検証、KPI と違反の算出
-    solve.py          T_SolverRuns の 1 件を最後まで実行し結果を書き込む
+    solve.py          T_SolverRunResult の 1 件を最後まで実行し結果を書き込む
 """

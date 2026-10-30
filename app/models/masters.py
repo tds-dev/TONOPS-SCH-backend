@@ -36,15 +36,18 @@ class Organization(AuditMixin, SoftDeleteMixin, Base):
     OrganizationName = Column(String(100), nullable=False)
 
 
-class Site(AuditMixin, SoftDeleteMixin, Base):
+class Location(AuditMixin, SoftDeleteMixin, Base):
     """拠点マスタ"""
 
-    __tablename__ = "M_Sites"
-    __table_args__ = (UniqueConstraint("OrganizationID", "SiteCode"),)
-    SiteID = Column(Integer, primary_key=True, autoincrement=True)
+    __tablename__ = "M_Locations"
+    __table_args__ = (UniqueConstraint("OrganizationID", "LocationCode"),)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, primary_key=True, autoincrement=True)
     OrganizationID = Column(Integer, ForeignKey("M_Organizations.OrganizationID"), nullable=False)
-    SiteCode = Column(String(30), nullable=False)
-    SiteName = Column(String(100), nullable=False)
+    # 組織内で拠点を区別するコード。
+    LocationCode = Column(String(30), nullable=False)
+    # 画面の拠点選択欄に表示する名称。
+    LocationName = Column(String(100), nullable=False)
     TimeZone = Column(String(50), nullable=False, default="Asia/Tokyo")
     DefaultCalendarID = Column(
         Integer, ForeignKey("M_Calendars.CalendarID", use_alter=True), nullable=True
@@ -56,9 +59,10 @@ class Calendar(AuditMixin, SoftDeleteMixin, Base):
     """カレンダーマスタ"""
 
     __tablename__ = "M_Calendars"
-    __table_args__ = (UniqueConstraint("SiteID", "CalendarCode"),)
+    __table_args__ = (UniqueConstraint("LocationID", "CalendarCode"),)
     CalendarID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     CalendarCode = Column(String(30), nullable=False)
     CalendarName = Column(String(100), nullable=False)
     ParentCalendarID = Column(Integer, ForeignKey("M_Calendars.CalendarID"), nullable=True)
@@ -104,9 +108,10 @@ class ResourceGroup(AuditMixin, SoftDeleteMixin, Base):
     """リソースグループマスタ"""
 
     __tablename__ = "M_ResourceGroups"
-    __table_args__ = (UniqueConstraint("SiteID", "GroupCode"),)
+    __table_args__ = (UniqueConstraint("LocationID", "GroupCode"),)
     ResourceGroupID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     GroupCode = Column(String(30), nullable=False)
     GroupName = Column(String(100), nullable=False)
     SortOrder = Column(Integer, nullable=False, default=0)
@@ -117,11 +122,12 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
 
     __tablename__ = "M_Resources"
     __table_args__ = (
-        UniqueConstraint("SiteID", "ResourceCode"),
+        UniqueConstraint("LocationID", "ResourceCode"),
         CheckConstraint(in_check("ResourceType", RESOURCE_TYPE), name="ResourceType"),
     )
     ResourceID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     ResourceCode = Column(String(30), nullable=False)
     ResourceName = Column(String(100), nullable=False)
@@ -162,7 +168,8 @@ class Rule(AuditMixin, Base):
 
     __tablename__ = "M_Rules"
     RuleID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     RuleTypeKey = Column(String(50), nullable=False)
     RuleName = Column(String(100), nullable=False)
     SelectorJSON = Column(JSON, nullable=False, default=dict)
@@ -179,7 +186,8 @@ class ChangeoverMatrix(AuditMixin, Base):
 
     __tablename__ = "M_ChangeoverMatrices"
     MatrixID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     MatrixName = Column(String(100), nullable=False)
     AttributeKey = Column(String(50), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
@@ -211,7 +219,8 @@ class PlanProfile(AuditMixin, Base):
     __tablename__ = "M_PlanProfiles"
     __table_args__ = (CheckConstraint(in_check("TimeUnit", TIME_UNITS), name="TimeUnit"),)
     ProfileID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     ProfileName = Column(String(100), nullable=False)
     TimeUnit = Column(String(10), nullable=False, default="MINUTE")
     ObjectiveWeightsJSON = Column(JSON, nullable=False, default=dict)
@@ -225,9 +234,10 @@ class Item(AuditMixin, SoftDeleteMixin, Base):
     """品目マスタ"""
 
     __tablename__ = "M_Items"
-    __table_args__ = (UniqueConstraint("SiteID", "ItemCode"),)
+    __table_args__ = (UniqueConstraint("LocationID", "ItemCode"),)
     ItemID = Column(Integer, primary_key=True, autoincrement=True)
-    SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
+    # 拠点の識別番号。既存データのID値と所属関係は維持する。
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     ItemCode = Column(String(30), nullable=False)
     ItemName = Column(String(100), nullable=False)
     Unit = Column(String(10), nullable=True)

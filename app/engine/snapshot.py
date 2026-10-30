@@ -26,12 +26,13 @@ from app.engine.problem import (
     PRule,
     PTask,
 )
-from app.models.masters import ChangeoverMatrix, PlanProfile, Resource, Rule, Site
+from app.models.masters import ChangeoverMatrix, PlanProfile, Resource, Rule, Location
 from app.models.transactions import Order, Plan, PlanAssignment, Task, TaskDependency
 from app.services.calendar_service import working_time
 from app.services.worktime import Interval
 
 
+# 稼働時間の区間を、計画開始からの分数と計画期間内の範囲へ変換する。
 def _windows(intervals: list[Interval], problem_start, horizon: int) -> list[tuple[int, int]]:
     out = []
     for s, e in intervals:
@@ -43,10 +44,12 @@ def _windows(intervals: list[Interval], problem_start, horizon: int) -> list[tup
     return out
 
 
+# 計画の拠点に属する作業・設備・カレンダー・ルールを計算条件へまとめる。
 def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
-    site = db.get(Site, plan.SiteID)
+    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    location = db.get(Location, plan.LocationID)
     profile = db.get(PlanProfile, plan.ProfileID)
-    tz = site.TimeZone
+    tz = location.TimeZone
     start, end = plan.HorizonStart, plan.HorizonEnd
     horizon = int((end - start).total_seconds() // 60)
     to_min = lambda dt: int((dt - start).total_seconds() // 60)  # noqa: E731
@@ -58,11 +61,11 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # ---- リソースとカレンダー
     resources: dict[int, PResource] = {}
     rows = db.scalars(
-        select(Resource).where(Resource.SiteID == site.SiteID, Resource.DeleteFlag == false())
+        select(Resource).where(Resource.LocationID == location.LocationID, Resource.DeleteFlag == false())
     ).all()
     calendar_cache: dict[int, list[tuple[int, int]]] = {}
     for r in rows:
-        cal_id = r.CalendarID or site.DefaultCalendarID
+        cal_id = r.CalendarID or location.DefaultCalendarID
         if cal_id is None:
             windows = [(0, horizon)]  # カレンダーなし: 常に稼働
         else:
@@ -80,7 +83,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
 
     # ---- オーダーとタスク
     order_filter = (
-        Order.SiteID == site.SiteID,
+        Order.LocationID == location.LocationID,
         Order.DeleteFlag == false(),
         Order.Status.notin_(["DONE", "CANCELLED"]),
         Order.PlanOwner == "SCHEDULER",
@@ -147,7 +150,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # ---- 段取り替えとルール
     changeovers = []
     for mx in db.scalars(
-        select(ChangeoverMatrix).where(ChangeoverMatrix.SiteID == site.SiteID, ChangeoverMatrix.IsActive == true())
+        select(ChangeoverMatrix).where(ChangeoverMatrix.LocationID == location.LocationID, ChangeoverMatrix.IsActive == true())
     ):
         rids = set(members.get(mx.ResourceGroupID, [])) if mx.ResourceGroupID else set(resources)
         changeovers.append(PChangeover(
@@ -158,7 +161,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     rules = [
         PRule(r.RuleID, r.RuleTypeKey, r.RuleName, dict(r.SelectorJSON or {}), dict(r.ParamsJSON or {}),
               bool(r.IsHard), int(r.Weight or 100))
-        for r in db.scalars(select(Rule).where(Rule.SiteID == site.SiteID, Rule.IsActive == true()))
+        for r in db.scalars(select(Rule).where(Rule.LocationID == location.LocationID, Rule.IsActive == true()))
         if (r.ValidFrom is None or r.ValidFrom <= plan_day) and (r.ValidTo is None or r.ValidTo >= plan_day)
     ]
 
