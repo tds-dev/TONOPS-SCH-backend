@@ -18,7 +18,7 @@
   （`app/services/worktime.py`、`GET /calendars/{id}/working-time`）。
 * `POST /jobs/{id}/generate-tasks`: 工程ルート → タスク、リソース候補
   （段取り＋固定＋数量×単位当たり時間）、工程のラグ付き FS 依存関係。
-* デモデータ（`scripts/seed_demo.py`）: 3 グループ 6 設備、品目 6、ジョブ 7、
+* デモデータ（`DataBase/setup_database.py`）: 3 グループ 6 設備、品目 6、オーダー 7、
   系統別の段取り替えマトリクス、曜日ルール 1 件、既定の計画プロファイル。
 
 ## フェーズ2 — スケジューリングエンジン ✅
@@ -33,7 +33,6 @@
   * 目的関数: 優先度で重み付けした納期遅れ、未割付タスク、段取り、最終完了時刻
 * `engine/rules/`: プラグインのレジストリ。組込みは `allowed_weekdays`。
 * `engine/evaluate.py`: 純粋なチェッカー → 違反（日本語メッセージ）と KPI。
-  エンジンのテストはすべての解をこれで照合する。
 * `engine/solve.py` + `app/worker.py`: 待機中の `T_SolverRuns` を実行し、割付・KPI・
   違反を書き込む。進捗は `ProgressJSON`。キャンセル対応。
 * API: `POST/GET /plans`、`POST /plans/{id}/solve`（開発用に `wait: true`）、
@@ -69,7 +68,7 @@
 * `GET /dispatch?siteId=&date=`: マスタ計画の配台表（リソース別、開始順）。
 * `GET /solver-runs/{id}/events`: 進捗の Server-Sent Events。
 * `T_PlanViolations` に `ViolationCode` 列を追加（承認・編集で未割付を区別するため）。
-  **既存の開発用 DB は作り直しが必要:** `python -m scripts.create_schema --drop` → `python -m scripts.seed_demo`。
+  既存DBの定義変更は別途実施する。新規DBの初期設定は`python -m DataBase.setup_database`で行う。
 
 ## フェーズ4 — Angular フロントエンド ✅
 
@@ -99,8 +98,8 @@ Angular 21（スタンドアロンコンポーネント、signal、新しい制�
 ## 補足 — SQL Server を標準に（プロジェクト名 TONOPS-SCH）
 
 * 既定の `DATABASE_URL` をローカル SQL Server（Windows 認証）の `TONOPS-SCH` に変更。
-* `scripts/create_database.py`: DB がなければ作成（create_schema / seed_demo から自動で呼ぶ）。
-* 列型: 文字列は NVARCHAR、日時は DATETIME2（`app/models/types.py`）。テストは引き続きインメモリ SQLite。
+* `DataBase/setup_database.py`: DBと未作成テーブルを作成し、未登録のデモデータを追加する。
+* 列型: 文字列は NVARCHAR、日時は DATETIME2（`app/models/types.py`）。SQLite接続にも対応する。
 
 ## 補足 — フロントエンドのフォルダー構成を整理
 

@@ -73,12 +73,12 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
                                      ↓
                        engine/snapshot.py（DB → Problem）
                        engine/model_builder.py（Problem → CP-SAT → 解）
-                       engine/evaluate.py（違反・KPI）   ← 純粋関数（DB 非依存、単体テスト可能）
+                       engine/evaluate.py（違反・KPI）   ← 純粋関数（DB 非依存）
                        engine/edit.py / compare.py（手動編集・比較）
 ```
 
 エンジンの中心部（`problem` / `model_builder` / `evaluate` / `edit` / `compare` / `rules`）は DB に依存しないため、
-データベースなしでテストできます。
+データベースへの接続を伴わずに計算できます。
 
 ---
 
@@ -271,7 +271,7 @@ stateDiagram-v2
 * 型（SQL Server）: 文字列 `NVARCHAR(n)`、長文 `NVARCHAR(MAX)`、日時 `DATETIME2`（naive UTC）、JSON 列は `NVARCHAR(MAX)`。
 * 制約名: `PK_<表>`、`FK_<表>_<列>_<参照表>`、`UQ_<表>_<列>…`、`CK_<表>_<名前>`、`IX_<表>_<列>…`。
 * 区分値は CHECK 制約で制限（下表の「値」）。
-* DDL は `python -m scripts.export_ddl` で `db/schema_sqlserver.sql` に出力できます。
+* 初期設定は `python -m DataBase.setup_database` でDB・テーブル作成とデモデータ登録を行います。SQLファイルへの出力機能はありません。
 
 ### 6.2 ER 図
 
@@ -708,7 +708,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | GET | `/plans?siteId=&status=DRAFT,MASTER` | 計画一覧（期間開始の新しい順） |
 | POST | `/plans` | 計画作成。`{siteId, horizonStart, horizonEnd, planName?, profileId?, basePlanId?, useMasterAsBase?, memo?}`。オフセットなしの日時は拠点の現地時刻 |
 | GET | `/plans/{planId}` | 計画 |
-| POST | `/plans/{planId}/solve` | 計算依頼。`{scope: "FULL"|"REPAIR", timeLimitSec?, wait?}` → 202 と実行情報。`wait: true` はリクエスト内で計算（開発・テスト用） |
+| POST | `/plans/{planId}/solve` | 計算依頼。`{scope: "FULL"|"REPAIR", timeLimitSec?, wait?}` → 202 と実行情報。`wait: true` はリクエスト内で同期計算 |
 | GET | `/plans/{planId}/solver-runs` | 計算履歴（新しい順） |
 | GET | `/solver-runs/{runId}` | 計算の状態 |
 | GET | `/solver-runs/{runId}/events` | 進捗の Server-Sent Events（状態が変わるたびに送信、終了で切断） |
@@ -846,4 +846,4 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 * 実績入力と工程くん連携、実績を反映したローリング再計画
 * 組織・拠点・計算プロファイルなど、今回の対象外マスタの画面対応
 * 認証（Firebase）と権限
-* Docker Compose による配備、E2E テスト
+* Docker Compose による配備

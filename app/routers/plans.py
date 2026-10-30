@@ -43,7 +43,7 @@ class PlanCreateBody(ApiModel):
 class SolveBody(ApiModel):
     scope: str = "FULL"  # FULL または REPAIR
     time_limit_sec: int | None = None
-    wait: bool = False  # リクエスト内で実行（開発・テスト用）。通常はワーカーが実行する
+    wait: bool = False  # 同期計算を指定した場合はリクエスト内で実行する。通常はワーカーが実行する
 
 
 class AssignmentView(ApiModel):

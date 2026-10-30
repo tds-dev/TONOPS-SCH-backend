@@ -12,7 +12,4 @@ select = ["E", "F", "W", "B", "I"]
 ignore = ["B008", "E501"]  # Depends() defaults are idiomatic; long lines hold Japanese messages
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "scripts", "tests"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+known-first-party = ["app", "DataBase"]

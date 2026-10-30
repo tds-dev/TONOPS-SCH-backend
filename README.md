@@ -54,7 +54,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-主なパッケージ: `fastapi`, `uvicorn`, `sqlalchemy`（2.x）, `pydantic`（2.x）, `pyodbc`, `ortools`, `tzdata`, `pytest`。
+主なパッケージ: `fastapi`, `uvicorn`, `sqlalchemy`（2.x）, `pydantic`（2.x）, `pyodbc`, `ortools`, `tzdata`。
 
 > フォルダーを移動・名前変更した場合、`.venv` は作り直してください（中に絶対パスが残るため）。
 
@@ -87,34 +87,21 @@ DATABASE_URL=mssql+pyodbc://@localhost/TONOPS-SCH?driver=ODBC+Driver+18+for+SQL+
 
 `.env` は Git に含めません（`.gitignore` 済み）。パスワードを書く場合も共有しないでください。
 
-### 2.4 データベースとテーブルの作成
+### 2.4 DB・テーブル・デモデータの初期設定
 
 ```bat
-python -m scripts.create_schema
+python -m DataBase.setup_database
 ```
 
-* データベース `TONOPS-SCH` がなければ作成し（`scripts/create_database.py`）、全テーブルを作成します。
+* アプリの接続設定に従い、DBがなければ作成して、未作成のテーブルを追加します。
 * 既存のテーブルは変更しません（未作成のテーブルだけ作ります）。
-
-### 2.5 デモデータの登録（任意）
-
-```bat
-python -m scripts.seed_demo
-```
+* デモ組織が登録済みの場合は、デモデータの追加をスキップします。
 
 工場A（配合 → 充填 → 包装、設備 6 台）、標準カレンダー（月〜土 06:00–12:00 / 13:00–22:00）、
 品目 6 件、オーダー 7 件（翌日 06:00 以降が納期）、段取り替えマトリクス、制約ルール 1 件、計画プロファイル「納期優先」を登録します。
 
-### 2.6 作り直し（開発用）
-
-テーブル構成を変えたときやデモデータを入れ直すとき:
-
-```bat
-python -m scripts.create_schema --drop
-python -m scripts.seed_demo
-```
-
-> `--drop` は **TONOPS-SCH の全テーブルのデータを削除** します。本番では使わないでください。
+既存の列名・テーブル名の変更は、この初期設定では行いません。別途DBの定義変更が必要です。
+SQLファイルや実行結果のファイル出力は行いません。既存の手動実行用SQLは`DataBase/query`フォルダにあります。
 
 ---
 
@@ -173,27 +160,7 @@ python -m app.worker
 
 ---
 
-## 5. テスト
-
-```bat
-pytest
-```
-
-* テストは **インメモリの SQLite** を使うため、SQL Server や `TONOPS-SCH` のデータには影響しません。
-* エンジン（CP-SAT）のテストは数秒〜数十秒かかります。特定のファイルだけなら `pytest tests\test_worktime.py`。
-* コードスタイル: `pip install ruff` → `ruff check .`（設定は `pyproject.toml`）。
-
-| ファイル | 内容 |
-|---|---|
-| `test_worktime.py` | 稼働時間の展開（シフト、日またぎ、例外、タイムゾーン） |
-| `test_evaluate.py` | 割付の検証（重なり、稼働時間外、依存関係、段取り）と KPI |
-| `test_engine.py` | CP-SAT モデル（割付、依存、段取り、ロック、ルール） |
-| `test_edit_compare.py` | 手動編集の適用・差分、計画比較 |
-| `test_api_phase1〜3.py` | API（CRUD、計画・計算、承認・編集・比較・配台表） |
-
----
-
-## 6. ディレクトリ構成
+## 5. ディレクトリ構成
 
 ```
 TONOPS-SCH-backend/
@@ -222,55 +189,49 @@ TONOPS-SCH-backend/
 │       ├── edit.py / compare.py 手動編集・計画比較（純粋関数）
 │       ├── solve.py            計算の実行と結果の保存
 │       └── rules/              制約ルールのプラグイン
-├── scripts/
-│   ├── create_database.py      DB の作成（なければ）
-│   ├── create_schema.py        テーブル作成（--drop で作り直し）
-│   ├── seed_demo.py            デモデータ登録
-│   └── export_ddl.py           SQL Server 用 DDL を db/schema_sqlserver.sql に出力
-├── tests/                      pytest
+├── DataBase/
+│   ├── setup_database.py       DB・テーブルの作成とデモデータ登録
+│   └── query/                  SSMSで手動実行するSQL
+│       ├── create_database_sqlserver.sql
+│       ├── schema_sqlserver.sql
+│       └── seed_demo_sqlserver.sql
 ├── docs/                       設計資料
 ├── .env.example                設定のひな形
 ├── requirements.txt
-└── pyproject.toml              ruff・pytest の設定
+└── pyproject.toml              プロジェクト情報・ruff の設定
 ```
 
 ---
 
-## 7. よく使うコマンド
+## 6. よく使うコマンド
 
 | 目的 | コマンド |
 |---|---|
 | API 起動 | `uvicorn app.main:app --reload` |
 | ワーカー起動 | `python -m app.worker` |
-| DB・テーブル作成 | `python -m scripts.create_schema` |
-| 全テーブル作り直し | `python -m scripts.create_schema --drop` |
-| デモデータ登録 | `python -m scripts.seed_demo` |
-| DB だけ作成 | `python -m scripts.create_database` |
-| DB・テーブル作成SQLの出力（実行はしない） | `python -m scripts.export_ddl` → `db/create_database_sqlserver.sql`、`db/schema_sqlserver.sql` |
-| デモデータ挿入SQLの出力（実DBへ接続しない） | `python -m scripts.export_seed_sql` → `db/seed_demo_sqlserver.sql` |
-| テスト | `pytest` |
+| DB・テーブルの作成とデモデータ登録 | `python -m DataBase.setup_database` |
 
 ---
 
-## 8. トラブルシューティング
+## 7. トラブルシューティング
 
 Order系へ変更したSQLファイルの内容と実行順は、[DB作成・初期データSQL](docs/DB_SQL.md)を参照してください。
 
 | 症状 | 原因と対処 |
 |---|---|
-| `IM002 データ ソース名および指定された既定のドライバーが見つかりません` | `.env` の `driver=` の ODBC ドライバーが未インストール。`create_schema` がインストール済みのドライバーを表示するので、そのどれかに変更（空白は `+`） |
+| `IM002 データ ソース名および指定された既定のドライバーが見つかりません` | `.env` の `driver=` の ODBC ドライバーが未インストール。`setup_database` がインストール済みのドライバーを表示するので、そのどれかに変更（空白は `+`） |
 | `Login failed` / `Cannot open database` | Windows 認証のユーザーに SQL Server のログイン・権限がない。SSMS でログインを追加するか、SQL Server 認証の URL に変更 |
-| `CREATE DATABASE permission denied` | DB 作成権限がない。DBA に空の `TONOPS-SCH` を作ってもらい、`create_schema` を再実行 |
+| `CREATE DATABASE permission denied` | DB 作成権限がない。DBA に空の `TONOPS-SCH` を作ってもらい、`setup_database` を再実行 |
 | サーバーが見つからない（タイムアウト） | Express などの名前付きインスタンスは `localhost\SQLEXPRESS` と指定。SQL Server サービスが起動しているか確認 |
 | 画面で「計算実行」しても「待機中」のまま | ワーカー（`python -m app.worker`）が起動していない |
 | 計算が「失敗」になる | ボードの計算パネルにエラーが出ます。多いのは計画期間が短すぎる・リソース候補がないタスク。ワーカーのログも確認 |
 | 画面に「サーバーに接続できません」 | API（ポート 8000）が起動していない |
-| `seed_demo` が「Demo data already present」 | 既に登録済み。入れ直す場合は `create_schema --drop` の後に実行 |
-| 計画を作っても割付対象のタスクがない | デモのオーダーは「翌日 06:00 以降」が対象。計画の開始日を翌日にする（`seed_demo` を実行した日の翌日） |
+| 初期設定を再実行してもデモデータが追加されない | デモ組織が登録済みなら重複登録を避けるため追加をスキップする |
+| 計画を作っても割付対象のタスクがない | デモのオーダーは「翌日 06:00 以降」が対象。計画の開始日を翌日にする（初期データを登録した日の翌日） |
 
 ---
 
-## 9. 開発の規約
+## 8. 開発の規約
 
 * テーブル名は `M_`（マスタ）/ `T_`（トランザクション）、列名は PascalCase、主キーは `<Entity>ID`、
   監査列 `CreatedAt/By`、`UpdatedAt/By`、論理削除 `DeleteFlag`（工程くんと同じ）。
@@ -279,4 +240,4 @@ Order系へ変更したSQLファイルの内容と実行順は、[DB作成・初
 * API の JSON は camelCase（`resourceName`、`siteId`）。
 * 認証は未実装。`CreatedBy` / `UpdatedBy` には `X-User-Email` ヘッダーの値（なければ `system`）を記録します。
 * コメント・docstring・メッセージは日本語。
-* マイグレーションツール（Alembic）は未導入。列を追加した場合は当面 `create_schema --drop` で作り直します。
+* マイグレーションツール（Alembic）は未導入。既存DBの列追加・改称は別途定義変更が必要です。

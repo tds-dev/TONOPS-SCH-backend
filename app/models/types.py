@@ -1,6 +1,6 @@
 """モデルで使う列型。SQL Server では日本語を扱えるよう NVARCHAR、日時は DATETIME2 にする。
 
-SQLite（テスト）ではそれぞれ通常の VARCHAR / TEXT / DATETIME として動作する。
+SQLite接続では通常の VARCHAR / TEXT / DATETIME として動作する。
 """
 from sqlalchemy import DateTime as _DateTime
 from sqlalchemy import Unicode, UnicodeText

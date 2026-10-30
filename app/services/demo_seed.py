@@ -1,7 +1,7 @@
 """UI モックに合わせたデモデータ: 1 工場、配合 → 充填 → 包装。
 
 日付は「翌日 06:00（拠点時刻）」を基準にするため、デモは常に直近の将来を計画する。
-`scripts/seed_demo.py` とテストで使う。
+`DataBase/setup_database.py` から初期データ登録に使う。
 """
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo

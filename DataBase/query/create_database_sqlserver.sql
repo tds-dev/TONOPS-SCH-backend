@@ -1,4 +1,4 @@
--- DBを作成するSQL。自動実行は行わない。
+-- DataBase/queryに配置した、SSMSで手動実行するDB作成SQL。
 USE [master];
 GO
 IF DB_ID(N'TONOPS-SCH') IS NULL
