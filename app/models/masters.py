@@ -20,8 +20,8 @@ from app.models.types import DateTime, String
 
 # リソース種別の許可値。名称のみをTYPEへ統一し、保存値は維持する。
 RESOURCE_TYPE = ["MACHINE", "PERSON", "TEAM", "ROOM", "OTHER"]
-# 属性の対象区分は、プログラムと変更後のDBで同じ名称を使用する。
-ENTITY_TYPES = ["ITEM", "RESOURCE", "ORDER", "TASK"]
+# 製品の属性区分はPRODUCTとし、プログラム・DB制約・初期データで統一する。
+ENTITY_TYPES = ["PRODUCT", "RESOURCE", "ORDER", "TASK"]
 DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
 TIME_UNITS = ["MINUTE", "DAY"]
 
@@ -230,16 +230,20 @@ class PlanProfile(AuditMixin, Base):
 
 
 # ---------------------------------------------------------------- テンプレート
-class Item(AuditMixin, SoftDeleteMixin, Base):
-    """品目マスタ"""
+class Product(AuditMixin, SoftDeleteMixin, Base):
+    """製品マスタ"""
 
-    __tablename__ = "M_Items"
-    __table_args__ = (UniqueConstraint("LocationID", "ItemCode"),)
-    ItemID = Column(Integer, primary_key=True, autoincrement=True)
+    # 製品の保存先。テーブル・列・モデルをProduct系の名称に揃える。
+    __tablename__ = "M_Product"
+    __table_args__ = (UniqueConstraint("LocationID", "ProductCode"),)
+    # 製品を識別する番号。既存データのID値と関連付けを維持する。
+    ProductID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    ItemCode = Column(String(30), nullable=False)
-    ItemName = Column(String(100), nullable=False)
+    # 製品のコードと、画面に表示する製品名。
+    ProductCode = Column(String(30), nullable=False)
+    ProductName = Column(String(100), nullable=False)
+    # 数量の単位と、ルール判定・段取り替えに使う属性。
     Unit = Column(String(10), nullable=True)
     AttributesJSON = Column(JSON, nullable=True)
 
@@ -248,9 +252,10 @@ class Routing(AuditMixin, SoftDeleteMixin, Base):
     """工程ルートマスタ"""
 
     __tablename__ = "M_Routings"
-    __table_args__ = (UniqueConstraint("ItemID", "Revision"),)
+    __table_args__ = (UniqueConstraint("ProductID", "Revision"),)
     RoutingID = Column(Integer, primary_key=True, autoincrement=True)
-    ItemID = Column(Integer, ForeignKey("M_Items.ItemID"), nullable=False)
+    # この工程ルートを使う製品。参照先を新しい製品テーブルへ揃える。
+    ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=False)
     RoutingName = Column(String(100), nullable=False)
     Revision = Column(Integer, nullable=False, default=1)
     IsDefault = Column(Boolean, nullable=False, default=True)

@@ -114,7 +114,7 @@ def _add_resources(ctx: BuildContext) -> None:
         ivs = [ov.interval for tv in ctx.task_vars.values() for ov in tv.options if ov.resource_id == r.id]
         if not ivs:
             continue
-        # ロック済みの作業は、計画者が非稼働時間に置いた場合でもそのまま受け入れる
+        # ロック済みのタスクは、計画者が非稼働時間に置いた場合でもそのまま受け入れる
         locked = [(tv.task.lock.start, tv.task.lock.end) for tv in ctx.task_vars.values()
                   if tv.task.lock is not None and tv.task.lock.resource_id == r.id]
         blocked = subtract(gaps(r.windows, p.horizon), locked) if locked else gaps(r.windows, p.horizon)
@@ -189,7 +189,7 @@ def _add_dependencies(ctx: BuildContext) -> None:
 
 def _add_objective(ctx: BuildContext) -> None:
     m, p, H = ctx.model, ctx.problem, ctx.problem.horizon
-    # 元計画からコピーしたロック作業は、この計画期間の終了後に終わる場合がある
+    # 元計画からコピーしたロックタスクは、この計画期間の終了後に終わる場合がある
     HM = max([H] + [t.lock.end for t in p.tasks.values() if t.lock is not None])
     late_w, unsched_w = ctx.weight("lateness"), ctx.weight("unscheduled")
     by_order: dict[int, list[TaskVars]] = {}
@@ -205,7 +205,7 @@ def _add_objective(ctx: BuildContext) -> None:
         for tv in tvs:
             m.Add(order_end >= tv.end).OnlyEnforceIf(tv.scheduled)
             # 未割付のタスクは計画期間の終了時に完了したものとみなす。
-            # これにより、作業を外す方が遅れて行うより安くなることはない。
+            # これにより、タスクを外す方が遅れて行うより安くなることはない。
             m.Add(order_end >= H).OnlyEnforceIf(tv.scheduled.Not())
         late = m.NewIntVar(0, HM + abs(order.due), f"late{order_id}")
         m.Add(late >= order_end - order.due)

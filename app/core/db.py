@@ -51,9 +51,10 @@ IN_CHUNK = 1000
 
 def chunks(values, size: int = IN_CHUNK) -> Iterator[list]:
     """IN 句用に値を分割する（SQL Server のパラメータ上限対策）。"""
-    items = list(values)
-    for i in range(0, len(items), size):
-        yield items[i : i + size]
+    # 分割位置を指定できるよう、入力を一覧へ変換する。
+    records = list(values)
+    for i in range(0, len(records), size):
+        yield records[i : i + size]
 
 
 def get_db() -> Iterator[Session]:

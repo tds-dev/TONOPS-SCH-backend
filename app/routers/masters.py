@@ -25,10 +25,10 @@ routers = [
     crud_router(m.ChangeoverMatrix, "/changeover-matrices", "Configuration"),
     crud_router(m.ChangeoverEntry, "/changeover-entries", "Configuration"),
     crud_router(m.PlanProfile, "/plan-profiles", "Configuration"),
-    crud_router(m.Item, "/items", "Items & routings"),
-    crud_router(m.Routing, "/routings", "Items & routings"),
-    crud_router(m.RoutingStep, "/routing-steps", "Items & routings", order_by="StepNo"),
-    crud_router(m.RoutingStepResource, "/routing-step-resources", "Items & routings"),
+    crud_router(m.Product, "/products", "Products & routings"),
+    crud_router(m.Routing, "/routings", "Products & routings"),
+    crud_router(m.RoutingStep, "/routing-steps", "Products & routings", order_by="StepNo"),
+    crud_router(m.RoutingStepResource, "/routing-step-resources", "Products & routings"),
 ]
 
 

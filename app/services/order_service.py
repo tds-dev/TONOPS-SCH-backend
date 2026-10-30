@@ -1,8 +1,8 @@
 """オーダーをスケジュール可能なタスクに変換する。
 
-`generate_tasks` はオーダーの工程ルート（またはその品目の既定ルート）を展開し、
-T_Tasks、T_TaskResourceOptions、連続する工程間の FS 依存関係を作成する。
-タスク属性 = 品目属性を工程属性、さらにオーダー属性で上書きしたもの。
+`generate_tasks` はオーダーの工程ルート（またはその製品の既定ルート）を展開し、
+T_Tasks、T_TaskResourceOptions、連続するタスク間の FS 依存関係を作成する。
+タスク属性 = 製品属性を工程属性、さらにオーダー属性で上書きしたもの。
 これにより {"family": "A"} のようなルールのセレクターがタスクに効く。
 """
 import math
@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, false, select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Item, Routing
+from app.models.masters import Product, Routing
 from app.models.transactions import Order, PlanAssignment, Task, TaskDependency, TaskResourceOption
 
 
@@ -21,13 +21,14 @@ def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: f
     return int(setup + fixed + math.ceil(run))
 
 
+# オーダー指定の工程ルートを優先し、未指定なら製品の既定ルートか最新版を取得する。
 def resolve_routing(db: Session, order: Order) -> Routing:
     if order.RoutingID:
         routing = db.get(Routing, order.RoutingID)
-    elif order.ItemID:
+    elif order.ProductID:
         routing = db.scalars(
             select(Routing)
-            .where(Routing.ItemID == order.ItemID, Routing.DeleteFlag == false())
+            .where(Routing.ProductID == order.ProductID, Routing.DeleteFlag == false())
             .order_by(Routing.IsDefault.desc(), Routing.Revision.desc())
         ).first()
     else:
@@ -35,11 +36,12 @@ def resolve_routing(db: Session, order: Order) -> Routing:
     if routing is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Order {order.OrderNo} has no routing (set RoutingID or an item with a routing).",
+            f"Order {order.OrderNo} has no routing (set RoutingID or a product with a routing).",
         )
     return routing
 
 
+# 工程ルートの定義から、オーダーごとのタスク・実行候補・前後関係を生成する。
 def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) -> list[Task]:
     existing = db.scalars(select(Task).where(Task.OrderID == order.OrderID)).all()
     if existing:
@@ -67,9 +69,10 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
             db.delete(t)
         db.flush()
 
+    # 元にする工程ルートと製品を取得し、属性と数量を生成するタスクへ引き継ぐ。
     routing = resolve_routing(db, order)
-    item = db.get(Item, routing.ItemID)
-    base_attrs = dict(item.AttributesJSON or {}) if item else {}
+    product = db.get(Product, routing.ProductID)
+    base_attrs = dict(product.AttributesJSON or {}) if product else {}
     qty = float(order.Quantity or 0)
 
     tasks: list[Task] = []

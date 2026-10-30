@@ -9,7 +9,7 @@ from app.engine.problem import Problem
 class SAssignment:
     task_id: int
     resource_id: int
-    start: int  # 計画期間開始からの分（作業開始時刻）
+    start: int  # 計画期間開始からの分（タスク開始時刻）
     end: int
     setup: int = 0  # `start` の直前に置く順序依存の段取り時間
     locked: bool = False

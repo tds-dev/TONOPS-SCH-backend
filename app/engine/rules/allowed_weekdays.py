@@ -8,9 +8,11 @@ from app.engine.problem import Problem, PRule, matches
 from app.engine.result import SAssignment, Violation, fmt
 from app.engine.rules import RulePlugin, register
 
+# 許可曜日を画面に表示するための、月曜から日曜までの文字列。
 DAY_NAMES = "月火水木金土日"
 
 
+# 許可されていない曜日の時間帯を、計画開始からの分数で返す。
 def blocked_ranges(problem: Problem, weekdays: list[int]) -> list[tuple[int, int]]:
     allowed = set(weekdays)
     return [(s, e) for day, s, e in problem.local_days() if day.isoweekday() not in allowed]
@@ -18,6 +20,7 @@ def blocked_ranges(problem: Problem, weekdays: list[int]) -> list[tuple[int, int
 
 @register
 class AllowedWeekdays(RulePlugin):
+    # ルールの識別名・画面の表示名・説明と、曜日入力の仕様。
     type_key = "allowed_weekdays"
     label = "生産可能曜日"
     description = "対象タスクを指定した曜日のみに実行します。"
@@ -33,6 +36,7 @@ class AllowedWeekdays(RulePlugin):
         },
     }
 
+    # 対象タスクと禁止曜日の時間帯が重ならない制約を計算へ追加する。
     def apply(self, ctx, rule: PRule) -> None:
         blocked = blocked_ranges(ctx.problem, rule.params.get("weekdays", []))
         if not blocked:
@@ -43,6 +47,7 @@ class AllowedWeekdays(RulePlugin):
             if task.lock is None and matches(rule.selector, task.attrs):
                 model.AddNoOverlap([ctx.task_vars[task.id].interval, *fixed])
 
+    # 禁止曜日に割り付けられたタスクを調べ、画面へ返す違反を作成する。
     def check(self, problem: Problem, rule: PRule, assignments: list[SAssignment]) -> list[Violation]:
         blocked = blocked_ranges(problem, rule.params.get("weekdays", []))
         out = []

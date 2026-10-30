@@ -66,7 +66,7 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
 
     # モデルの項目名に一致する検索条件と削除状態で一覧を絞り込む。
     @router.get("", response_model=list[Read])
-    def list_items(request: Request, db: Session = Depends(get_db)):
+    def list_records(request: Request, db: Session = Depends(get_db)):
         stmt = select(model)
         params = request.query_params
         for key, value in params.items():
@@ -81,12 +81,12 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
 
     # 指定したIDのレコードを取得する。
     @router.get("/{obj_id}", response_model=Read)
-    def get_item(obj_id: int, db: Session = Depends(get_db)):
+    def get_record(obj_id: int, db: Session = Depends(get_db)):
         return get_or_404(db, obj_id)
 
     # 受け取った項目と登録者を使い、新しいレコードを保存する。
     @router.post("", response_model=Read, status_code=status.HTTP_201_CREATED)
-    def create_item(body: Create, db: Session = Depends(get_db), user: str = Depends(current_user)):
+    def create_record(body: Create, db: Session = Depends(get_db), user: str = Depends(current_user)):
         obj = model(**body.model_dump(exclude_unset=True), CreatedBy=user)
         db.add(obj)
         commit(db)
@@ -95,7 +95,7 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
 
     # 送信された項目だけを更新し、更新者とともに保存する。
     @router.patch("/{obj_id}", response_model=Read)
-    def update_item(
+    def update_record(
         obj_id: int, body: Update, db: Session = Depends(get_db), user: str = Depends(current_user)
     ):
         obj = get_or_404(db, obj_id)
@@ -108,7 +108,7 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
 
     # 対応モデルに合わせて論理削除またはレコード削除を行う。
     @router.delete("/{obj_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_item(obj_id: int, db: Session = Depends(get_db), user: str = Depends(current_user)):
+    def delete_record(obj_id: int, db: Session = Depends(get_db), user: str = Depends(current_user)):
         obj = get_or_404(db, obj_id)
         if has_delete_flag:
             obj.DeleteFlag = True

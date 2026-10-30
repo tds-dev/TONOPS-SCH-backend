@@ -57,7 +57,8 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     # 受注かプロジェクトかを表す種別。保存値と動作は維持する。
     OrderType = Column(String(20), nullable=False, default="ORDER")
     ParentOrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=True)
-    ItemID = Column(Integer, ForeignKey("M_Items.ItemID"), nullable=True)
+    # オーダーの対象製品。ProductIDで製品マスタを参照する。
+    ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=True)
     RoutingID = Column(Integer, ForeignKey("M_Routings.RoutingID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
     CustomerName = Column(String(100), nullable=True)
@@ -81,7 +82,7 @@ class Task(AuditMixin, Base):
         CheckConstraint(in_check("Status", TASK_STATUSES), name="Status"),
     )
     TaskID = Column(Integer, primary_key=True, autoincrement=True)
-    # 作業の所属先は、変更後のオーダーテーブルを参照する。
+    # タスクの所属先は、変更後のオーダーテーブルを参照する。
     OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
     ParentTaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     RoutingStepID = Column(Integer, ForeignKey("M_RoutingSteps.RoutingStepID"), nullable=True)
@@ -184,7 +185,7 @@ class PlanAssignment(AuditMixin, Base):
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), nullable=False)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=False)
-    StartAt = Column(DateTime, nullable=False)  # UTC。作業開始時刻（段取りは SetupMinutes として直前に置く）
+    StartAt = Column(DateTime, nullable=False)  # UTC。タスク開始時刻（段取りは SetupMinutes として直前に置く）
     EndAt = Column(DateTime, nullable=False)  # UTC
     SetupMinutes = Column(Integer, nullable=False, default=0)
     Units = Column(Numeric(5, 2), nullable=False, default=1)
@@ -223,7 +224,7 @@ class SolverRun(AuditMixin, Base):
     # 得られた計画の評価値と、計算中に求めた評価値の境界。
     ObjectiveValue = Column(Float, nullable=True)
     BestBound = Column(Float, nullable=True)
-    # 計算対象の作業数、進捗の詳細、失敗時の理由。
+    # 計算対象のタスク数、進捗の詳細、失敗時の理由。
     TaskCount = Column(Integer, nullable=True)
     ProgressJSON = Column(JSON, nullable=True)
     ErrorMessage = Column(Text, nullable=True)

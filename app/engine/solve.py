@@ -49,7 +49,7 @@ def write_evaluation(db: Session, plan: Plan, problem: Problem, assignments: lis
     """KPI と違反を計算し直して T_PlanKpis / T_PlanViolations を置き換える。
 
     課題一覧にはロック済みの割付も含めてすべての問題を載せる（計画者が非稼働時間に
-    置いたロック作業なども見えるようにする）。
+    置いたロックタスクなども見えるようにする）。
     """
     checked = [replace(a, locked=False) for a in assignments]
     db.execute(delete(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))

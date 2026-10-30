@@ -49,7 +49,7 @@ class SolveBody(ApiModel):
     wait: bool = False  # 同期計算を指定した場合はリクエスト内で実行する。通常はワーカーが実行する
 
 
-# 割付の表示に必要なオーダー・作業・設備・日時。
+# 割付の表示に必要なオーダー・タスク・設備・日時。
 class AssignmentView(ApiModel):
     assignment_id: int
     task_id: int
@@ -158,7 +158,7 @@ def cancel_run(run_id: int, db: Session = Depends(get_db)):
     return run
 
 
-# 対象計画の割付と、表示に必要な作業・設備情報を返す。
+# 対象計画の割付と、表示に必要なタスク・設備情報を返す。
 @router.get("/plans/{plan_id}/assignments", response_model=list[AssignmentView])
 def list_assignments(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)

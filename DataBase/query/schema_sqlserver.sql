@@ -34,7 +34,7 @@ CREATE TABLE [M_AttributeDefinitions] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_AttributeDefinitions] PRIMARY KEY ([AttributeDefID]), 
 	CONSTRAINT [UQ_M_AttributeDefinitions_OrganizationID_EntityType_AttributeKey] UNIQUE ([OrganizationID], [EntityType], [AttributeKey]), 
-	CONSTRAINT [CK_M_AttributeDefinitions_EntityType] CHECK (EntityType IN ('ITEM','RESOURCE','ORDER','TASK')), 
+	CONSTRAINT [CK_M_AttributeDefinitions_EntityType] CHECK (EntityType IN ('PRODUCT','RESOURCE','ORDER','TASK')), 
 	CONSTRAINT [CK_M_AttributeDefinitions_DataType] CHECK (DataType IN ('TEXT','NUMBER','BOOL','DATE','ENUM')), 
 	CONSTRAINT [FK_M_AttributeDefinitions_OrganizationID_M_Organizations] FOREIGN KEY([OrganizationID]) REFERENCES [M_Organizations] ([OrganizationID])
 );
@@ -76,11 +76,11 @@ CREATE TABLE [M_Calendars] (
 );
 GO
 
-CREATE TABLE [M_Items] (
-	[ItemID] INTEGER NOT NULL IDENTITY, 
+CREATE TABLE [M_Product] (
+	[ProductID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[ItemCode] NVARCHAR(30) NOT NULL, 
-	[ItemName] NVARCHAR(100) NOT NULL, 
+	[ProductCode] NVARCHAR(30) NOT NULL, 
+	[ProductName] NVARCHAR(100) NOT NULL, 
 	[Unit] NVARCHAR(10) NULL, 
 	[AttributesJSON] NVARCHAR(max) NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
@@ -88,9 +88,9 @@ CREATE TABLE [M_Items] (
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
-	CONSTRAINT [PK_M_Items] PRIMARY KEY ([ItemID]), 
-	CONSTRAINT [UQ_M_Items_LocationID_ItemCode] UNIQUE ([LocationID], [ItemCode]), 
-	CONSTRAINT [FK_M_Items_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
+	CONSTRAINT [PK_M_Product] PRIMARY KEY ([ProductID]), 
+	CONSTRAINT [UQ_M_Product_LocationID_ProductCode] UNIQUE ([LocationID], [ProductCode]), 
+	CONSTRAINT [FK_M_Product_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
 
@@ -233,7 +233,7 @@ GO
 
 CREATE TABLE [M_Routings] (
 	[RoutingID] INTEGER NOT NULL IDENTITY, 
-	[ItemID] INTEGER NOT NULL, 
+	[ProductID] INTEGER NOT NULL, 
 	[RoutingName] NVARCHAR(100) NOT NULL, 
 	[Revision] INTEGER NOT NULL, 
 	[IsDefault] BIT NOT NULL, 
@@ -243,8 +243,8 @@ CREATE TABLE [M_Routings] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Routings] PRIMARY KEY ([RoutingID]), 
-	CONSTRAINT [UQ_M_Routings_ItemID_Revision] UNIQUE ([ItemID], [Revision]), 
-	CONSTRAINT [FK_M_Routings_ItemID_M_Items] FOREIGN KEY([ItemID]) REFERENCES [M_Items] ([ItemID])
+	CONSTRAINT [UQ_M_Routings_ProductID_Revision] UNIQUE ([ProductID], [Revision]), 
+	CONSTRAINT [FK_M_Routings_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
 );
 GO
 
@@ -319,7 +319,7 @@ CREATE TABLE [T_Orders] (
 	[OrderName] NVARCHAR(200) NOT NULL, 
 	[OrderType] NVARCHAR(20) NOT NULL, 
 	[ParentOrderID] INTEGER NULL, 
-	[ItemID] INTEGER NULL, 
+	[ProductID] INTEGER NULL, 
 	[RoutingID] INTEGER NULL, 
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[CustomerName] NVARCHAR(100) NULL, 
@@ -342,7 +342,7 @@ CREATE TABLE [T_Orders] (
 	CONSTRAINT [CK_T_Orders_PlanOwner] CHECK (PlanOwner IN ('SCHEDULER','EXTERNAL')), 
 	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_T_Orders_ParentOrderID_T_Orders] FOREIGN KEY([ParentOrderID]) REFERENCES [T_Orders] ([OrderID]), 
-	CONSTRAINT [FK_T_Orders_ItemID_M_Items] FOREIGN KEY([ItemID]) REFERENCES [M_Items] ([ItemID]), 
+	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]), 
 	CONSTRAINT [FK_T_Orders_RoutingID_M_Routings] FOREIGN KEY([RoutingID]) REFERENCES [M_Routings] ([RoutingID])
 );
 GO

@@ -18,6 +18,7 @@ from app.engine.result import SAssignment, Violation
 
 @dataclass
 class Change:
+    # タスクごとの移動・時間変更・固定・割付解除の指定。
     task_id: int
     resource_id: int | None = None  # None = 変更しない
     start: int | None = None  # 分。None = 変更しない
@@ -26,6 +27,7 @@ class Change:
     remove: bool = False  # True = 割付を外す（未割付に戻す）
 
 
+# 指定したタスクを対象リソースで実行するときの所要時間を返す。
 def option_duration(problem: Problem, task_id: int, resource_id: int) -> int | None:
     task = problem.tasks.get(task_id)
     if task is None:
@@ -33,6 +35,7 @@ def option_duration(problem: Problem, task_id: int, resource_id: int) -> int | N
     return next((o.duration for o in task.options if o.resource_id == resource_id), None)
 
 
+# 対象リソースに適用する段取り替え条件を取得する。
 def _changeover_for(problem: Problem, resource_id: int) -> PChangeover | None:
     return next((c for c in problem.changeovers if resource_id in c.resource_ids), None)
 
@@ -40,10 +43,10 @@ def _changeover_for(problem: Problem, resource_id: int) -> PChangeover | None:
 def recompute_setups(problem: Problem, assignments: list[SAssignment], resource_ids: set[int]) -> None:
     """指定リソース上の割付を開始順に並べ、直前タスクとの段取り時間を設定し直す。"""
     for rid in resource_ids:
-        items = sorted((a for a in assignments if a.resource_id == rid), key=lambda a: a.start)
+        records = sorted((a for a in assignments if a.resource_id == rid), key=lambda a: a.start)
         co = _changeover_for(problem, rid)
         prev = None
-        for a in items:
+        for a in records:
             need = 0
             if co is not None and prev is not None:
                 pt, ct = problem.tasks.get(prev.task_id), problem.tasks.get(a.task_id)
@@ -138,8 +141,8 @@ def _key(v: Violation) -> tuple:
 def new_violations(problem: Problem, before: list[SAssignment], after: list[SAssignment]) -> list[Violation]:
     """変更後に新たに発生した違反（変更前にはなかったもの）。"""
 
-    def checked(items: list[SAssignment]) -> list[Violation]:
-        return check_schedule(problem, [replace(a, locked=False) for a in items])
+    def checked(records: list[SAssignment]) -> list[Violation]:
+        return check_schedule(problem, [replace(a, locked=False) for a in records])
 
     old = Counter(_key(v) for v in checked(before))
     out = []

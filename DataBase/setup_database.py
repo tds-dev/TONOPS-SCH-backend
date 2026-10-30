@@ -16,6 +16,8 @@ DataBase配下のDB・テーブル作成とデモデータ登録を行う初期�
 query配下のSQLはSSMS用として保持し、この処理ではモデルから直接DBを操作する。
 拠点はLocationモデルを使い、M_LocationsとLocationID等の定義で作成・登録する。
 計算実行の保存先は、SolverRunモデルのT_SolverRunResultとして作成する。
+デモはパン6製品と「こねる → 焼く → 包装する」のルートを登録する。
+デモ組織が登録済みの場合は、以前の内容も含めて既存データを保持する。
 """
 import argparse
 
@@ -85,6 +87,9 @@ def setup_database() -> None:
         demo_id = db.scalar(select(Organization.OrganizationID).where(Organization.OrganizationCode == "DEMO"))
         if demo_id is None:
             seed_demo(db)
+        else:
+            # 登録済みの内容を保持したことを明示し、新しいデモへ更新されたとの誤解を避ける。
+            print("デモデータは登録済みのため、追加・変更を行いませんでした。")
 
 
 def main() -> None:
@@ -93,7 +98,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m DataBase.setup_database", description=__doc__)
     parser.parse_args()
     setup_database()
-    print("DB・テーブル・デモデータの準備が完了しました。")
+    print("DB・テーブル・デモデータを作成しました。")
 
 
 if __name__ == "__main__":

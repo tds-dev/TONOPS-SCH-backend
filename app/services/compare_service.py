@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.db import chunks
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
-from app.models.masters import Item, Resource, ResourceGroup, Location
+from app.models.masters import Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, Task
 from app.schemas.base import coerce
 from app.services.plan_lifecycle import master_assignments
@@ -103,10 +103,10 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
     rows = master_assignments(db, location_id, start, end)
     task_ids = [a.TaskID for a in rows]
     detail = {
-        t.TaskID: (t, j, item)
+        t.TaskID: (t, j, product)
         for ids in chunks(task_ids)
-        for t, j, item in db.execute(
-            select(Task, Order, Item).join(Order, Order.OrderID == Task.OrderID).outerjoin(Item, Item.ItemID == Order.ItemID)
+        for t, j, product in db.execute(
+            select(Task, Order, Product).join(Order, Order.OrderID == Task.OrderID).outerjoin(Product, Product.ProductID == Order.ProductID)
             .where(Task.TaskID.in_(ids))
         )
     }
@@ -118,13 +118,14 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
     resources.sort(key=lambda r: (groups[r.ResourceGroupID].SortOrder if r.ResourceGroupID in groups else 9999, r.SortOrder))
     out = []
     for r in resources:
-        items = []
+        # このリソースの配台表に表示する割付一覧。画面側のassignmentsと対応する。
+        assignments = []
         for a in (x for x in rows if x.ResourceID == r.ResourceID):
-            t, j, item = detail[a.TaskID]
-            items.append({
+            t, j, product = detail[a.TaskID]
+            assignments.append({
                 "assignmentId": a.AssignmentID, "taskId": t.TaskID, "orderNo": j.OrderNo, "taskName": t.TaskName,
-                "itemCode": item.ItemCode if item else None, "itemName": item.ItemName if item else None,
-                "quantity": coerce(j.Quantity), "unit": item.Unit if item else None,
+                "productCode": product.ProductCode if product else None, "productName": product.ProductName if product else None,
+                "quantity": coerce(j.Quantity), "unit": product.Unit if product else None,
                 "start": utc_to_local(a.StartAt, tz).strftime("%H:%M"),
                 "end": utc_to_local(a.EndAt, tz).strftime("%H:%M"),
                 "startAt": a.StartAt.isoformat() + "Z", "endAt": a.EndAt.isoformat() + "Z",
@@ -134,6 +135,6 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
         out.append({
             "resourceId": r.ResourceID, "resourceCode": r.ResourceCode, "resourceName": r.ResourceName,
             "groupName": groups[r.ResourceGroupID].GroupName if r.ResourceGroupID in groups else None,
-            "items": items,
+            "assignments": assignments,
         })
     return {"locationId": location_id, "date": day.isoformat(), "timeZone": tz, "resources": out}

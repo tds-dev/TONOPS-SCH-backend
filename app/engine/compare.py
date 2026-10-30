@@ -20,6 +20,7 @@ KPI_META: dict[str, tuple[str, str, bool]] = {
 
 @dataclass
 class KpiDelta:
+    # 評価項目の名称・単位と、比較前後の値・差分・改善の判定。
     key: str
     label: str
     unit: str
@@ -29,6 +30,7 @@ class KpiDelta:
     better: bool | None  # True = B が良い、False = B が悪い、None = 同じ・比較不可
 
 
+# 二つの計画の評価値を、表示名と改善・悪化の判定を含む比較結果へまとめる。
 def kpi_deltas(a: dict[str, float], b: dict[str, float]) -> list[KpiDelta]:
     out = []
     present = set(a) | set(b)
@@ -43,6 +45,7 @@ def kpi_deltas(a: dict[str, float], b: dict[str, float]) -> list[KpiDelta]:
 
 @dataclass
 class Slot:
+    # タスクを割り付けたリソースと、その開始・終了日時。
     resource_id: int
     start: datetime
     end: datetime
@@ -50,6 +53,7 @@ class Slot:
 
 @dataclass
 class SlotChange:
+    # 一つのタスクの変更区分、変更前後の割付と開始時刻の差。
     task_id: int
     kind: str  # MOVED（時刻のみ）/ RESOURCE（設備変更）/ ADDED / REMOVED
     a: Slot | None

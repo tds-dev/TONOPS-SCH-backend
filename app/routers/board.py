@@ -32,7 +32,7 @@ class AssignmentChange(ApiModel):
     row_ver: int | None = None  # 楽観的排他制御（ボードの rowVer をそのまま返す）
 
 
-# 割付変更の一覧と、移動した作業の固定設定。
+# 割付変更の一覧と、移動したタスクの固定設定。
 class EditBody(ApiModel):
     changes: list[AssignmentChange]
     lock_moved: bool = True  # 手動で動かしたタスクをロックする（再計算で動かさない）

@@ -6,7 +6,7 @@ from app.models.masters import (  # noqa: F401
     CalendarPattern,
     ChangeoverEntry,
     ChangeoverMatrix,
-    Item,
+    Product,
     Organization,
     PlanProfile,
     Resource,

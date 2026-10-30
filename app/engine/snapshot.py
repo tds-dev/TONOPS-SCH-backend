@@ -7,7 +7,7 @@
     着手可能なもの。その非集約・未完了タスク
   * リソース候補（グループ指定は所属リソースごとに展開）
   * 対象タスク間の依存関係
-  * ロック: この計画と元計画のロック済み割付、および確定期間内に始まる元計画の作業
+  * ロック: この計画と元計画のロック済み割付、および確定期間内に始まる元計画のタスク
   * ヒント: それ以外のこの計画（または元計画）の割付。初期解として使う
   * 拠点の有効な段取り替えマトリクスとルール
 """
@@ -44,7 +44,7 @@ def _windows(intervals: list[Interval], problem_start, horizon: int) -> list[tup
     return out
 
 
-# 計画の拠点に属する作業・設備・カレンダー・ルールを計算条件へまとめる。
+# 計画の拠点に属するタスク・設備・カレンダー・ルールを計算条件へまとめる。
 def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
     location = db.get(Location, plan.LocationID)
@@ -122,7 +122,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         release = order_release.get(t.OrderID, 0)
         if t.EarliestStartAt:
             release = max(release, to_min(t.EarliestStartAt))
-        release = max(release, frozen_end)  # 確定期間内には新しい作業を開始しない
+        release = max(release, frozen_end)  # 確定期間内には新しいタスクを開始しない
         task = PTask(
             id=t.TaskID, order_id=t.OrderID, name=f"{orders[t.OrderID].no} {t.TaskName}",
             attrs=dict(t.AttributesJSON or {}), options=options, release=release,

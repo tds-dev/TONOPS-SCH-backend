@@ -33,7 +33,7 @@ class PLock:
 @dataclass
 class PTask:
     id: int
-    order_id: int  # この工程作業が所属するオーダーのID。
+    order_id: int  # このタスクが所属するオーダーのID。
     name: str
     attrs: dict[str, Any]
     options: list[POption]

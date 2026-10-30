@@ -13,10 +13,12 @@ from app.engine.rules import get_plugin
 __all__ = ["SAssignment", "Violation", "check_schedule", "compute_kpis", "order_finishes"]
 
 
+# タスクの開始から終了までが、一つの稼働時間帯に収まるか判定する。
 def _inside(windows: list[tuple[int, int]], s: int, e: int) -> bool:
     return any(ws <= s and e <= we for ws, we in windows)
 
 
+# 割付と計算条件を照合し、未割付・時間帯・順序・納期などの違反を返す。
 def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Violation]:
     out: list[Violation] = []
     by_task = {a.task_id: a for a in assignments}
@@ -33,7 +35,7 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
             continue
         res = problem.resources.get(a.resource_id)
         if a.locked:
-            continue  # ロック済みの作業はそのまま受け入れる
+            continue  # ロック済みのタスクはそのまま受け入れる
         if not any(o.resource_id == a.resource_id for o in t.options):
             out.append(Violation("HARD", "NOT_ELIGIBLE", f"{t.name} は {res.name if res else a.resource_id} で実行できません", task_id=t.id))
         if res and not _inside(res.windows, a.start, a.end):
@@ -45,19 +47,19 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
     per_res: dict[int, list[SAssignment]] = defaultdict(list)
     for a in assignments:
         per_res[a.resource_id].append(a)
-    for rid, items in per_res.items():
+    for rid, records in per_res.items():
         res = problem.resources.get(rid)
         if res is None or res.capacity != 1:
             continue
-        items.sort(key=lambda x: x.start)
-        for prev, cur in pairwise(items):
+        records.sort(key=lambda x: x.start)
+        for prev, cur in pairwise(records):
             if cur.start - cur.setup < prev.end:
-                out.append(Violation("HARD", "OVERLAP", f"{res.name} で {fmt(problem, cur.start)} に作業が重なっています", task_id=cur.task_id))
+                out.append(Violation("HARD", "OVERLAP", f"{res.name} で {fmt(problem, cur.start)} にタスクが重なっています", task_id=cur.task_id))
         # 連続するタスク間の段取り替えチェック
         for co in problem.changeovers:
             if rid not in co.resource_ids:
                 continue
-            for prev, cur in pairwise(items):
+            for prev, cur in pairwise(records):
                 pv = tasks[prev.task_id].attrs.get(co.attribute) if prev.task_id in tasks else None
                 cv = tasks[cur.task_id].attrs.get(co.attribute) if cur.task_id in tasks else None
                 if pv is None or cv is None:
@@ -108,6 +110,7 @@ def order_finishes(problem: Problem, by_task: dict[int, SAssignment]) -> list[tu
     return [(j, f, problem.orders[j].due if j in problem.orders else None) for j, f in finish.items()]
 
 
+# 割付済みタスク数・未割付タスク数・遅れ・段取り時間・負荷率を集計する。
 def compute_kpis(problem: Problem, assignments: list[SAssignment]) -> dict[str, float]:
     by_task = {a.task_id: a for a in assignments}
     finishes = order_finishes(problem, by_task)

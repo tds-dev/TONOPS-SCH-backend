@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.snapshot import build_problem
-from app.models.masters import ChangeoverMatrix, Item, Resource, ResourceGroup, Location
+from app.models.masters import ChangeoverMatrix, Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
 from app.schemas.base import coerce
 from app.services.worktime import gaps
@@ -82,15 +82,15 @@ def build_board(
 
     # ---- イベント（割付）と段取りブロック
     rows = db.execute(
-        select(PlanAssignment, Task, Order, Item)
+        select(PlanAssignment, Task, Order, Product)
         .join(Task, Task.TaskID == PlanAssignment.TaskID)
         .join(Order, Order.OrderID == Task.OrderID)
-        .outerjoin(Item, Item.ItemID == Order.ItemID)
+        .outerjoin(Product, Product.ProductID == Order.ProductID)
         .where(PlanAssignment.PlanID == plan.PlanID, PlanAssignment.StartAt < end, PlanAssignment.EndAt > start)
         .order_by(PlanAssignment.ResourceID, PlanAssignment.StartAt)
     ).all()
     events, setups = [], []
-    for a, t, j, item in rows:
+    for a, t, j, product in rows:
         if a.ResourceID not in resource_ids:
             continue
         attrs = t.AttributesJSON or {}
@@ -99,8 +99,8 @@ def build_board(
             "start": _local(a.StartAt, tz), "end": _local(a.EndAt, tz),
             "text": f"{j.OrderNo} {t.TaskName}",
             "taskId": t.TaskID, "orderId": j.OrderID, "orderNo": j.OrderNo, "taskName": t.TaskName,
-            "itemCode": item.ItemCode if item else None, "itemName": item.ItemName if item else None,
-            "quantity": coerce(j.Quantity), "unit": item.Unit if item else None,
+            "productCode": product.ProductCode if product else None, "productName": product.ProductName if product else None,
+            "quantity": coerce(j.Quantity), "unit": product.Unit if product else None,
             "dueAt": _local(j.DueAt, tz) if j.DueAt else None,
             "isLocked": a.IsLocked, "source": a.Source, "setupMinutes": a.SetupMinutes,
             "colorValue": attrs.get(color_by) if color_by else j.OrderNo,

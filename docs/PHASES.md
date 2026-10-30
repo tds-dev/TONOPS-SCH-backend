@@ -17,21 +17,21 @@
   部分更新、論理削除。スキーマはモデルから生成（`app/schemas/base.py`）。
 * カレンダー: 週次パターン＋例外＋親カレンダー → UTC の稼働区間
   （`app/services/worktime.py`、`GET /calendars/{id}/working-time`）。
-* `POST /jobs/{id}/generate-tasks`: 工程ルート → タスク、リソース候補
-  （段取り＋固定＋数量×単位当たり時間）、工程のラグ付き FS 依存関係。
-* デモデータ（`DataBase/setup_database.py`）: 3 グループ 6 設備、品目 6、オーダー 7、
-  系統別の段取り替えマトリクス、曜日ルール 1 件、既定の計画プロファイル。
+* `POST /jobs/{id}/generate-tasks`: 作業ルート → 作業、リソース候補
+  （段取り＋固定＋数量×単位当たり時間）、作業のラグ付き FS 依存関係。
+* デモデータ（`DataBase/setup_database.py`）: パン6製品、こねる→焼く→包装するの3工程、ミキサー・オーブン・包装機の3グループ6設備、オーダー7件、
+  パン分類別の段取り替えマトリクス、くるみパンの平日製造ルール1件、既定の計画プロファイル。
 
 ## フェーズ2 — スケジューリングエンジン ✅
 
 * `engine/problem.py`: ソルバーへの入力を素のデータで表現（計画期間開始からの分）。
 * `engine/snapshot.py`: DB → Problem（カレンダー、グループ候補、ロック、ヒント、ルール）。
 * `engine/model_builder.py`: CP-SAT モデル
-  * 代替リソース、カレンダーはブロック区間（タスクは 1 つの稼働枠内に収める）
+  * 代替リソース、カレンダーはブロック区間（作業は 1 つの稼働枠内に収める）
   * FS/SS/FF/SF 依存関係（最小・最大ラグ）
   * `AddCircuit` による順序依存の段取り替え。禁止の組合せにはアークを張らない
-  * ロック済みタスクは固定。前回計画をヒントに使用（REPAIR は安定性ペナルティ付き）
-  * 目的関数: 優先度で重み付けした納期遅れ、未割付タスク、段取り、最終完了時刻
+  * ロック済み作業は固定。前回計画をヒントに使用（REPAIR は安定性ペナルティ付き）
+  * 目的関数: 優先度で重み付けした納期遅れ、未割付作業、段取り、最終完了時刻
 * `engine/rules/`: プラグインのレジストリ。組込みは `allowed_weekdays`。
 * `engine/evaluate.py`: 純粋なチェッカー → 違反（日本語メッセージ）と KPI。
 * `engine/solve.py` + `app/worker.py`: 待機中の `T_SolverRunResult` を実行し、割付・KPI・
@@ -41,10 +41,10 @@
   `GET /plans/{id}/assignments|kpis|violations`、`GET /rule-types`。
 
 設計メモ:
-* `T_PlanAssignments.StartAt–EndAt` はタスク本体。`SetupMinutes` は `StartAt` の
+* `T_PlanAssignments.StartAt–EndAt` は作業本体。`SetupMinutes` は `StartAt` の
   **直前**に置く段取り替え（ボードではグレーのブロックで表示）。
 * 候補ごとの段取り（例: 充填準備 15 分）は `DurationMin` に含む。
-* タスクはまだ休憩をまたいで分割しない。どの稼働枠より長いタスクは未割付として報告する。
+* 作業はまだ休憩をまたいで分割しない。どの稼働枠より長い作業は未割付として報告する。
 * `RowVer` は整数のバージョンカウンタ（SQLite に移植可能）。`rowversion` ではない。
 * アクションのパスは `:approve` ではなく `/approve` 形式。
 
@@ -62,10 +62,10 @@
 * `GET /plans/{id}/board`: DayPilot 用に整形したデータ（拠点の現地時刻）。
   リソース行（グループ見出し付き）、イベント（段取りは別イベント）、非稼働時間、課題の有無。
 * `POST /plans/{id}/assignments/validate`: 保存せずに変更を検証。
-* `PATCH /plans/{id}/assignments`: 移動・リサイズ・ロック・解除・未割付タスクの配置。
+* `PATCH /plans/{id}/assignments`: 移動・リサイズ・ロック・解除・未割付作業の配置。
   `rowVer` による楽観的排他制御（不一致は 409）。新たな必須違反は `force: true` なしでは 422。
-  手動で動かしたタスクは既定でロックされ、Source は MANUAL。KPI と違反を再計算。
-* `GET /plans/compare?a=&b=`: KPI 差分（良化・悪化）と、差異のあるタスク一覧。
+  手動で動かした作業は既定でロックされ、Source は MANUAL。KPI と違反を再計算。
+* `GET /plans/compare?a=&b=`: KPI 差分（良化・悪化）と、差異のある作業一覧。
 * `GET /dispatch?locationId=&date=`: マスタ計画の配台表（リソース別、開始順）。
 * `GET /solver-runs/{id}/events`: 進捗の Server-Sent Events。
 * `T_PlanViolations` に `ViolationCode` 列を追加（承認・編集で未割付を区別するため）。
@@ -80,7 +80,7 @@ Angular 21（スタンドアロンコンポーネント、signal、新しい制�
   拠点の選択（`location.service.ts`、右上のセレクト）、通知、表示用の変換（状態ラベル・日時）、
   API エラーを通知に出すインターセプター。
 * ダッシュボード: マスタ計画の KPI、下書きの計画、納期が近いジョブ（3 日以内）、リソース負荷。
-* ジョブ: 状態フィルタ・検索、詳細パネル（タスク、割付候補、依存関係）、タスク生成。
+* ジョブ: 状態フィルタ・検索、詳細パネル（作業、割付候補、依存関係）、作業生成。
 * 計画一覧: 新規作成（拠点の現地時刻で入力）、コピー、破棄、2 件選んで比較。
 * 計画ボード（`components/main/plan-board/`）:
   * `plan-gantt.component.ts` が DayPilot Lite Scheduler の唯一のラッパー。
@@ -89,8 +89,8 @@ Angular 21（スタンドアロンコンポーネント、signal、新しい制�
   * ドラッグで移動・リサイズ → `validate` → 適用不可なら元に戻す／必須違反は確認して強制保存 → `PATCH`。
   * 計算実行・部分再計算（SSE で進捗表示、キャンセル可）、承認、マスタとの比較、
     マスタ計画は「コピーして編集」。
-  * 右パネル: KPI、選択中タスク（固定・解除、割付を外す）、課題一覧、未割付タスクの配置。
-* 計画比較: A/B の KPI カード（改善 = 青、悪化 = オレンジ）、変更タスク一覧、B の承認・A の破棄。
+  * 右パネル: KPI、選択中作業（固定・解除、割付を外す）、課題一覧、未割付作業の配置。
+* 計画比較: A/B の KPI カード（改善 = 青、悪化 = オレンジ）、変更作業一覧、B の承認・A の破棄。
 * 配台表: 日付・グループ選択、リソースのタブ、大きな「開始」「完了」ボタン（`PATCH /tasks/{id}`）、
   印刷（全リソースを 1 ページずつ）。
 * 実績入力・マスタ編集画面は「準備中」（今後のフェーズ）。
@@ -106,7 +106,7 @@ Angular 21（スタンドアロンコンポーネント、signal、新しい制�
 
 * `components/main/<画面>/`（画面専用の `forms/`・`dialogs/` を含む）、`components/common/{forms,dialogs,select}/`、
   `services/`、`interfaces/` に再編。構成は README を参照。
-* 計画作成フォーム・未割付タスクの配置フォームを別コンポーネントに分離。
+* 計画作成フォーム・未割付作業の配置フォームを別コンポーネントに分離。
 * ブラウザの `confirm()` を共通の確認ダイアログ（`ConfirmDialogService.ask()`）に置き換え。
 * 拠点・リソースグループの選択を共通部品に。`models.ts` を領域別の `*.interface.ts` に分割。
 
