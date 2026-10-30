@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.snapshot import build_problem
 from app.models.masters import ChangeoverMatrix, Item, Resource, ResourceGroup, Site
-from app.models.transactions import Job, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
+from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
 from app.schemas.base import coerce
 from app.services.worktime import gaps
 
@@ -58,7 +58,7 @@ def build_board(
     resource_ids = {r.ResourceID for r in res_rows}
     resources = [
         {
-            "id": r.ResourceID, "code": r.ResourceCode, "name": r.ResourceName, "kind": r.ResourceKind,
+            "id": r.ResourceID, "code": r.ResourceCode, "name": r.ResourceName, "type": r.ResourceType,
             "capacity": coerce(r.Capacity), "groupId": r.ResourceGroupID,
             "groupName": groups[r.ResourceGroupID].GroupName if r.ResourceGroupID in groups else None,
         }
@@ -79,10 +79,10 @@ def build_board(
 
     # ---- イベント（割付）と段取りブロック
     rows = db.execute(
-        select(PlanAssignment, Task, Job, Item)
+        select(PlanAssignment, Task, Order, Item)
         .join(Task, Task.TaskID == PlanAssignment.TaskID)
-        .join(Job, Job.JobID == Task.JobID)
-        .outerjoin(Item, Item.ItemID == Job.ItemID)
+        .join(Order, Order.OrderID == Task.OrderID)
+        .outerjoin(Item, Item.ItemID == Order.ItemID)
         .where(PlanAssignment.PlanID == plan.PlanID, PlanAssignment.StartAt < end, PlanAssignment.EndAt > start)
         .order_by(PlanAssignment.ResourceID, PlanAssignment.StartAt)
     ).all()
@@ -94,13 +94,13 @@ def build_board(
         events.append({
             "id": a.AssignmentID, "resource": a.ResourceID,
             "start": _local(a.StartAt, tz), "end": _local(a.EndAt, tz),
-            "text": f"{j.JobNo} {t.TaskName}",
-            "taskId": t.TaskID, "jobId": j.JobID, "jobNo": j.JobNo, "taskName": t.TaskName,
+            "text": f"{j.OrderNo} {t.TaskName}",
+            "taskId": t.TaskID, "orderId": j.OrderID, "orderNo": j.OrderNo, "taskName": t.TaskName,
             "itemCode": item.ItemCode if item else None, "itemName": item.ItemName if item else None,
             "quantity": coerce(j.Quantity), "unit": item.Unit if item else None,
             "dueAt": _local(j.DueAt, tz) if j.DueAt else None,
             "isLocked": a.IsLocked, "source": a.Source, "setupMinutes": a.SetupMinutes,
-            "colorValue": attrs.get(color_by) if color_by else j.JobNo,
+            "colorValue": attrs.get(color_by) if color_by else j.OrderNo,
             "issue": worst.get(t.TaskID), "rowVer": a.RowVer,
         })
         if a.SetupMinutes:
@@ -126,9 +126,9 @@ def build_board(
     assigned = set(db.scalars(select(PlanAssignment.TaskID).where(PlanAssignment.PlanID == plan.PlanID)))
     unscheduled = [
         {
-            "taskId": t.id, "jobId": t.job_id, "jobNo": problem.jobs[t.job_id].no, "name": t.name,
+            "taskId": t.id, "orderId": t.order_id, "orderNo": problem.orders[t.order_id].no, "name": t.name,
             "durations": {str(o.resource_id): o.duration for o in t.options},
-            "dueAt": _local(problem.to_dt(problem.jobs[t.job_id].due), tz) if problem.jobs[t.job_id].due is not None else None,
+            "dueAt": _local(problem.to_dt(problem.orders[t.order_id].due), tz) if problem.orders[t.order_id].due is not None else None,
             "colorValue": t.attrs.get(color_by) if color_by else None,
         }
         for t in problem.tasks.values() if t.id not in assigned

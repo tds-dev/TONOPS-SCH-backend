@@ -1,0 +1,8 @@
+-- DBを作成するSQL。自動実行は行わない。
+USE [master];
+GO
+IF DB_ID(N'TONOPS-SCH') IS NULL
+BEGIN
+    CREATE DATABASE [TONOPS-SCH];
+END;
+GO

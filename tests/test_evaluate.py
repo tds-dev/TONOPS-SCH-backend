@@ -9,7 +9,7 @@ def codes(violations, severity=None):
 
 
 def good_schedule():
-    # M-01: A(ジョブ1) 0–90, A(ジョブ3) 90–180 ; M-02: B(ジョブ2) 0–90, C(ジョブ4) 120–210
+    # M-01: A(オーダー1) 0–90, A(オーダー3) 90–180 ; M-02: B(オーダー2) 0–90, C(オーダー4) 120–210
     # P-01: 各配合の 30 分後に 1 件ずつ包装
     return [
         SAssignment(11, 1, 0, 90), SAssignment(13, 1, 90, 180),
@@ -27,10 +27,10 @@ def test_valid_schedule_has_no_hard_violations():
 def test_detects_overlap_calendar_dependency_and_unscheduled():
     p = two_machine_problem()
     sched = good_schedule()
-    sched[1] = SAssignment(13, 1, 60, 150)  # M-01 でジョブ1 と重なる
+    sched[1] = SAssignment(13, 1, 60, 150)  # M-01 でオーダー1 と重なる
     sched[7] = SAssignment(24, 3, 330, 390)  # 12:00–13:00 の休憩をまたぐ
     sched[4] = SAssignment(21, 3, 100, 160)  # 配合の 10 分後しかない（30 分必要）
-    del sched[5]  # ジョブ2 の包装が未割付
+    del sched[5]  # オーダー2 の包装が未割付
     got = codes(check_schedule(p, sched), "HARD")
     assert "OVERLAP" in got and "OUTSIDE_CALENDAR" in got and "DEPENDENCY" in got and "UNSCHEDULED" in got
 
@@ -55,14 +55,14 @@ def test_weekday_rule_check():
     assert "WEEKDAY" in codes(got, "HARD")
 
 
-def test_kpis_and_late_jobs():
+def test_kpis_and_late_orders():
     p = two_machine_problem()
-    p.jobs[1].due = 150  # ジョブ1 は 180 に完了 -> 30 分遅れ
+    p.orders[1].due = 150  # オーダー1 は 180 に完了 -> 30 分遅れ
     sched = good_schedule()
     kpi = compute_kpis(p, sched)
-    assert kpi["late_jobs"] == 1 and kpi["total_lateness_min"] == 30
+    assert kpi["late_orders"] == 1 and kpi["total_lateness_min"] == 30
     assert kpi["setup_min"] == 30 and kpi["scheduled_tasks"] == 8 and kpi["makespan_min"] == 480
-    late = [v for v in check_schedule(p, sched) if v.code == "LATE_JOB"]
+    late = [v for v in check_schedule(p, sched) if v.code == "LATE_ORDER"]
     assert late and late[0].message.startswith("JB-1 が30分遅れ")
 
 

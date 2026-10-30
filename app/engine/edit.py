@@ -131,7 +131,7 @@ def apply_changes(
 
 def _key(v: Violation) -> tuple:
     # タスクに紐づく違反はコード単位で比較（メッセージ内の時刻の変化を無視）。
-    # ジョブの納期遅れなどタスクに紐づかないものはメッセージごと比較し、遅れの増加を検出する。
+    # オーダーの納期遅れなどタスクに紐づかないものはメッセージごと比較し、遅れの増加を検出する。
     return (v.severity, v.code, v.task_id, v.rule_id, "" if v.task_id is not None else v.message)
 
 

@@ -3,7 +3,7 @@
 対象:
   * 計画の拠点のリソース（未削除）と、そのカレンダー（なければ拠点の既定
     カレンダー）から求めた稼働枠
-  * 拠点のジョブのうち DONE / CANCELLED 以外、スケジューラ管理、計画期間終了前に
+  * 拠点のオーダーのうち DONE / CANCELLED 以外、スケジューラ管理、計画期間終了前に
     着手可能なもの。その非集約・未完了タスク
   * リソース候補（グループ指定は所属リソースごとに展開）
   * 対象タスク間の依存関係
@@ -18,7 +18,7 @@ from app.core.timeutil import utc_to_local
 from app.engine.problem import (
     PChangeover,
     PDependency,
-    PJob,
+    POrder,
     PLock,
     POption,
     PResource,
@@ -27,7 +27,7 @@ from app.engine.problem import (
     PTask,
 )
 from app.models.masters import ChangeoverMatrix, PlanProfile, Resource, Rule, Site
-from app.models.transactions import Job, Plan, PlanAssignment, Task, TaskDependency
+from app.models.transactions import Order, Plan, PlanAssignment, Task, TaskDependency
 from app.services.calendar_service import working_time
 from app.services.worktime import Interval
 
@@ -78,23 +78,23 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         if r.ResourceGroupID:
             members.setdefault(r.ResourceGroupID, []).append(r.ResourceID)
 
-    # ---- ジョブとタスク
-    job_filter = (
-        Job.SiteID == site.SiteID,
-        Job.DeleteFlag == false(),
-        Job.Status.notin_(["DONE", "CANCELLED"]),
-        Job.PlanOwner == "SCHEDULER",
-        or_(Job.ReleaseAt.is_(None), Job.ReleaseAt < end),
+    # ---- オーダーとタスク
+    order_filter = (
+        Order.SiteID == site.SiteID,
+        Order.DeleteFlag == false(),
+        Order.Status.notin_(["DONE", "CANCELLED"]),
+        Order.PlanOwner == "SCHEDULER",
+        or_(Order.ReleaseAt.is_(None), Order.ReleaseAt < end),
     )
-    jobs_rows = db.scalars(select(Job).where(*job_filter)).all()
-    jobs = {
-        j.JobID: PJob(id=j.JobID, no=j.JobNo, due=to_min(j.DueAt) if j.DueAt else None, priority=j.Priority)
-        for j in jobs_rows
+    orders_rows = db.scalars(select(Order).where(*order_filter)).all()
+    orders = {
+        j.OrderID: POrder(id=j.OrderID, no=j.OrderNo, due=to_min(j.DueAt) if j.DueAt else None, priority=j.Priority)
+        for j in orders_rows
     }
-    job_release = {j.JobID: max(0, to_min(j.ReleaseAt)) if j.ReleaseAt else 0 for j in jobs_rows}
+    order_release = {j.OrderID: max(0, to_min(j.ReleaseAt)) if j.ReleaseAt else 0 for j in orders_rows}
     # IN 句は値のリストではなくサブクエリにする（SQL Server のパラメータ上限 2,100 を超えないように）
     task_filter = (
-        Task.JobID.in_(select(Job.JobID).where(*job_filter)),
+        Task.OrderID.in_(select(Order.OrderID).where(*order_filter)),
         Task.IsSummary == false(),
         Task.Status.notin_(["DONE", "CANCELLED"]),
     )
@@ -116,12 +116,12 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         for o in t.options:
             targets = [o.ResourceID] if o.ResourceID else members.get(o.ResourceGroupID, [])
             options.extend(POption(rid, int(o.DurationMin), int(o.Priority or 1)) for rid in targets if rid in resources)
-        release = job_release.get(t.JobID, 0)
+        release = order_release.get(t.OrderID, 0)
         if t.EarliestStartAt:
             release = max(release, to_min(t.EarliestStartAt))
         release = max(release, frozen_end)  # 確定期間内には新しい作業を開始しない
         task = PTask(
-            id=t.TaskID, job_id=t.JobID, name=f"{jobs[t.JobID].no} {t.TaskName}",
+            id=t.TaskID, order_id=t.OrderID, name=f"{orders[t.OrderID].no} {t.TaskName}",
             attrs=dict(t.AttributesJSON or {}), options=options, release=release,
             deadline=to_min(t.DeadlineAt) if t.DeadlineAt else None,
         )
@@ -163,7 +163,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     ]
 
     return Problem(
-        horizon_start=start, horizon=horizon, tz=tz, resources=resources, tasks=tasks, jobs=jobs,
+        horizon_start=start, horizon=horizon, tz=tz, resources=resources, tasks=tasks, orders=orders,
         dependencies=deps, changeovers=changeovers, rules=rules, weights=weights,
         time_limit_sec=profile.TimeLimitSec if profile else 60,
     )

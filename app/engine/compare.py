@@ -8,10 +8,10 @@ from datetime import datetime
 
 # (表示名, 単位, 大きい方が良いか)
 KPI_META: dict[str, tuple[str, str, bool]] = {
-    "late_jobs": ("納期遅れ", "件", False),
+    "late_orders": ("納期遅れ", "件", False),
     "total_lateness_min": ("遅れ時間の合計", "分", False),
     "setup_min": ("段取り時間", "分", False),
-    "makespan_min": ("最終ジョブの完了", "分", False),
+    "makespan_min": ("最終オーダーの完了", "分", False),
     "utilisation_pct": ("平均負荷率", "%", True),
     "scheduled_tasks": ("割付済みタスク", "件", True),
     "unscheduled_tasks": ("未割付タスク", "件", False),

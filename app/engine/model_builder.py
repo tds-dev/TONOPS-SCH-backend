@@ -9,7 +9,7 @@
   * 段取り替え: リソースごとに AddCircuit を使用。アーク i→j は
     end_i + setup(i,j) <= start_j を課す。禁止の組合せにはアークを張らない
   * ロック済みタスクは位置を固定
-  * 目的関数: 納期遅れ（ジョブ優先度で重み付け）、未割付タスク、段取り時間合計、
+  * 目的関数: 納期遅れ（オーダー優先度で重み付け）、未割付タスク、段取り時間合計、
     最終完了時刻、前回計画からの変動（安定性）
   * ルールプラグインが独自の制約を追加する（app.engine.rules）
 """
@@ -192,24 +192,24 @@ def _add_objective(ctx: BuildContext) -> None:
     # 元計画からコピーしたロック作業は、この計画期間の終了後に終わる場合がある
     HM = max([H] + [t.lock.end for t in p.tasks.values() if t.lock is not None])
     late_w, unsched_w = ctx.weight("lateness"), ctx.weight("unscheduled")
-    by_job: dict[int, list[TaskVars]] = {}
+    by_order: dict[int, list[TaskVars]] = {}
     for tv in ctx.task_vars.values():
-        by_job.setdefault(tv.task.job_id, []).append(tv)
+        by_order.setdefault(tv.task.order_id, []).append(tv)
         ctx.add_penalty(1 - tv.scheduled, unsched_w)
 
-    for job_id, tvs in by_job.items():
-        job = p.jobs.get(job_id)
-        if job is None or job.due is None:
+    for order_id, tvs in by_order.items():
+        order = p.orders.get(order_id)
+        if order is None or order.due is None:
             continue
-        job_end = m.NewIntVar(0, HM, f"jend{job_id}")
+        order_end = m.NewIntVar(0, HM, f"jend{order_id}")
         for tv in tvs:
-            m.Add(job_end >= tv.end).OnlyEnforceIf(tv.scheduled)
+            m.Add(order_end >= tv.end).OnlyEnforceIf(tv.scheduled)
             # 未割付のタスクは計画期間の終了時に完了したものとみなす。
             # これにより、作業を外す方が遅れて行うより安くなることはない。
-            m.Add(job_end >= H).OnlyEnforceIf(tv.scheduled.Not())
-        late = m.NewIntVar(0, HM + abs(job.due), f"late{job_id}")
-        m.Add(late >= job_end - job.due)
-        ctx.add_penalty(late, late_w * priority_factor(job.priority) // 10)
+            m.Add(order_end >= H).OnlyEnforceIf(tv.scheduled.Not())
+        late = m.NewIntVar(0, HM + abs(order.due), f"late{order_id}")
+        m.Add(late >= order_end - order.due)
+        ctx.add_penalty(late, late_w * priority_factor(order.priority) // 10)
 
     for tv in ctx.task_vars.values():
         if tv.task.deadline is not None:

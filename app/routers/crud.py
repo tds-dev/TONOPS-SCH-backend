@@ -14,7 +14,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import false, select
+from sqlalchemy import false, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,8 @@ def _parse(value: str, py: Any) -> Any:
 def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None) -> APIRouter:
     Read, Create, Update = schemas_for(model)
     pk = _pk_column(model)
-    columns = {to_camel(c.key): c for c in model.__table__.columns}
+    # APIのorderId等を、対応するDBの列へ結び付けて検索する。
+    columns = {to_camel(attribute.key): attribute.columns[0] for attribute in inspect(model).column_attrs}
     has_delete_flag = "DeleteFlag" in model.__table__.columns
     router = APIRouter(prefix=prefix, tags=[tag])
 

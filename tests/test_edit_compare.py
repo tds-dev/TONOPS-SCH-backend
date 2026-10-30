@@ -22,7 +22,7 @@ def test_move_keeps_duration_and_locks_by_default():
 def test_move_to_other_resource_uses_its_duration_and_recomputes_setups():
     p = two_machine_problem()
     p.tasks[13].options[1].duration = 120  # M-02 では 120 分
-    # ジョブ3（A）を M-01 から M-02 の C の後ろへ
+    # オーダー3（A）を M-01 から M-02 の C の後ろへ
     after, affected, _, errors = apply_changes(p, good_schedule(), [Change(13, resource_id=2, start=330)])
     assert errors == [] and affected == {1, 2}
     a = by_task(after)[13]
@@ -73,13 +73,13 @@ def test_recompute_setups_first_task_has_none():
 
 def test_kpi_deltas_direction():
     rows = {d.key: d for d in kpi_deltas(
-        {"late_jobs": 2, "setup_min": 220, "utilisation_pct": 78},
-        {"late_jobs": 0, "setup_min": 250, "utilisation_pct": 80},
+        {"late_orders": 2, "setup_min": 220, "utilisation_pct": 78},
+        {"late_orders": 0, "setup_min": 250, "utilisation_pct": 80},
     )}
-    assert rows["late_jobs"].delta == -2 and rows["late_jobs"].better is True
+    assert rows["late_orders"].delta == -2 and rows["late_orders"].better is True
     assert rows["setup_min"].better is False
     assert rows["utilisation_pct"].better is True
-    assert list(rows) == ["late_jobs", "setup_min", "utilisation_pct"]
+    assert list(rows) == ["late_orders", "setup_min", "utilisation_pct"]
 
 
 def test_assignment_diff_kinds():

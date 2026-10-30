@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  （全テーブルを登録）
 from app.core.config import get_settings
-from app.routers import board, jobs, masters, plans
+from app.routers import board, orders, masters, plans
 
 API_PREFIX = "/api/v1"
 
@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # board を先に登録し、/plans/compare が /plans/{plan_id} に吸われないようにする
-for r in [*masters.routers, *jobs.routers, board.router, plans.router]:
+for r in [*masters.routers, *orders.routers, board.router, plans.router]:
     app.include_router(r, prefix=API_PREFIX)
 
 

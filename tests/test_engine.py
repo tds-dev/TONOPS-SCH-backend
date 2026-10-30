@@ -66,14 +66,14 @@ def test_task_too_long_for_any_window_is_left_unscheduled():
     assert {v.code for v in check_schedule(p, r.assignments)} >= {"UNSCHEDULED"}
 
 
-def test_lateness_is_minimised_for_high_priority_job():
+def test_lateness_is_minimised_for_high_priority_order():
     p = two_machine_problem()
-    for j in p.jobs.values():
-        j.due = 200  # 全ジョブを 09:20 までに終えたい
-    p.jobs[4].priority = 1
+    for j in p.orders.values():
+        j.due = 200  # 全オーダーを 09:20 までに終えたい
+    p.orders[4].priority = 1
     r = solve_problem(p, time_limit_sec=10)
     finish = {}
     for a in r.assignments:
-        job = p.tasks[a.task_id].job_id
-        finish[job] = max(finish.get(job, 0), a.end)
+        order = p.tasks[a.task_id].order_id
+        finish[order] = max(finish.get(order, 0), a.end)
     assert finish[4] == min(finish.values())

@@ -1,8 +1,8 @@
-"""ジョブをスケジュール可能なタスクに変換する。
+"""オーダーをスケジュール可能なタスクに変換する。
 
-`generate_tasks` はジョブの工程ルート（またはその品目の既定ルート）を展開し、
+`generate_tasks` はオーダーの工程ルート（またはその品目の既定ルート）を展開し、
 T_Tasks、T_TaskResourceOptions、連続する工程間の FS 依存関係を作成する。
-タスク属性 = 品目属性を工程属性、さらにジョブ属性で上書きしたもの。
+タスク属性 = 品目属性を工程属性、さらにオーダー属性で上書きしたもの。
 これにより {"family": "A"} のようなルールのセレクターがタスクに効く。
 """
 import math
@@ -12,7 +12,7 @@ from sqlalchemy import delete, false, select
 from sqlalchemy.orm import Session
 
 from app.models.masters import Item, Routing
-from app.models.transactions import Job, PlanAssignment, Task, TaskDependency, TaskResourceOption
+from app.models.transactions import Order, PlanAssignment, Task, TaskDependency, TaskResourceOption
 
 
 def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: float) -> int:
@@ -21,13 +21,13 @@ def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: f
     return int(setup + fixed + math.ceil(run))
 
 
-def resolve_routing(db: Session, job: Job) -> Routing:
-    if job.RoutingID:
-        routing = db.get(Routing, job.RoutingID)
-    elif job.ItemID:
+def resolve_routing(db: Session, order: Order) -> Routing:
+    if order.RoutingID:
+        routing = db.get(Routing, order.RoutingID)
+    elif order.ItemID:
         routing = db.scalars(
             select(Routing)
-            .where(Routing.ItemID == job.ItemID, Routing.DeleteFlag == false())
+            .where(Routing.ItemID == order.ItemID, Routing.DeleteFlag == false())
             .order_by(Routing.IsDefault.desc(), Routing.Revision.desc())
         ).first()
     else:
@@ -35,18 +35,18 @@ def resolve_routing(db: Session, job: Job) -> Routing:
     if routing is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Job {job.JobNo} has no routing (set RoutingID or an item with a routing).",
+            f"Order {order.OrderNo} has no routing (set RoutingID or an item with a routing).",
         )
     return routing
 
 
-def generate_tasks(db: Session, job: Job, user: str, replace: bool = False) -> list[Task]:
-    existing = db.scalars(select(Task).where(Task.JobID == job.JobID)).all()
+def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) -> list[Task]:
+    existing = db.scalars(select(Task).where(Task.OrderID == order.OrderID)).all()
     if existing:
         if not replace:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"Job {job.JobNo} already has {len(existing)} tasks; pass replace=true to rebuild.",
+                f"Order {order.OrderNo} already has {len(existing)} tasks; pass replace=true to rebuild.",
             )
         task_ids = [t.TaskID for t in existing]
         used = db.scalars(
@@ -55,7 +55,7 @@ def generate_tasks(db: Session, job: Job, user: str, replace: bool = False) -> l
         if used is not None:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"Job {job.JobNo} tasks are used in a plan; they cannot be rebuilt.",
+                f"Order {order.OrderNo} tasks are used in a plan; they cannot be rebuilt.",
             )
         db.execute(
             delete(TaskDependency).where(
@@ -67,16 +67,16 @@ def generate_tasks(db: Session, job: Job, user: str, replace: bool = False) -> l
             db.delete(t)
         db.flush()
 
-    routing = resolve_routing(db, job)
+    routing = resolve_routing(db, order)
     item = db.get(Item, routing.ItemID)
     base_attrs = dict(item.AttributesJSON or {}) if item else {}
-    qty = float(job.Quantity or 0)
+    qty = float(order.Quantity or 0)
 
     tasks: list[Task] = []
     for seq, step in enumerate(routing.steps, start=1):
-        attrs = {**base_attrs, **(step.AttributesJSON or {}), **(job.AttributesJSON or {})}
+        attrs = {**base_attrs, **(step.AttributesJSON or {}), **(order.AttributesJSON or {})}
         task = Task(
-            JobID=job.JobID,
+            OrderID=order.OrderID,
             RoutingStepID=step.RoutingStepID,
             TaskNo=str(step.StepNo),
             TaskName=step.StepName,
@@ -115,8 +115,8 @@ def generate_tasks(db: Session, job: Job, user: str, replace: bool = False) -> l
                 CreatedBy=user,
             )
         )
-    if job.RoutingID is None:
-        job.RoutingID = routing.RoutingID
+    if order.RoutingID is None:
+        order.RoutingID = routing.RoutingID
     db.commit()
     for t in tasks:
         db.refresh(t)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.timeutil import to_utc_naive
 from app.models import masters as m
 from app.models import transactions as t
-from app.services.job_service import generate_tasks
+from app.services.order_service import generate_tasks
 
 TZ = "Asia/Tokyo"
 USER = "seed"
@@ -57,7 +57,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ]):
         db.add(m.Resource(
             SiteID=site.SiteID, ResourceGroupID=groups[grp].ResourceGroupID, ResourceCode=code,
-            ResourceName=name, ResourceKind="MACHINE", Capacity=1, CalendarID=cal.CalendarID,
+            ResourceName=name, ResourceType="MACHINE", Capacity=1, CalendarID=cal.CalendarID,
             SortOrder=i, CreatedBy=USER,
         ))
 
@@ -109,21 +109,21 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     db.flush()
 
     start = demo_start(now)
-    jobs = []
+    orders = []
     for no, code, qty, due_h, prio in [
         ("JB-1041", "A-200", 1200, 30, 10), ("JB-1043", "B-110", 800, 33, 50),
         ("JB-1044", "C-020", 2000, 36, 50), ("JB-1045", "B-150", 600, 14, 10),
         ("JB-1046", "B-140", 900, 52, 50), ("JB-1047", "A-310", 1500, 10, 10),
         ("JB-1048", "B-110", 400, 51, 90),
     ]:
-        job = t.Job(
-            SiteID=site.SiteID, JobNo=no, JobName=f"{no} 品目 {code}", JobKind="ORDER",
+        order = t.Order(
+            SiteID=site.SiteID, OrderNo=no, OrderName=f"{no} 品目 {code}", OrderType="ORDER",
             ItemID=items[code].ItemID, Quantity=qty, ReleaseAt=start,
             DueAt=start + timedelta(hours=due_h), Priority=prio, Status="OPEN", CreatedBy=USER,
         )
-        db.add(job)
-        jobs.append(job)
+        db.add(order)
+        orders.append(order)
     db.commit()
-    for job in jobs:
-        generate_tasks(db, job, USER)
-    return {"organizationId": org.OrganizationID, "siteId": site.SiteID, "jobs": len(jobs)}
+    for order in orders:
+        generate_tasks(db, order, USER)
+    return {"organizationId": org.OrganizationID, "siteId": site.SiteID, "orders": len(orders)}

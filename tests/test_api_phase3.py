@@ -47,7 +47,7 @@ def test_board_shape(client, seeded):
     # 昼休み 12:00–13:00 が非稼働として返る
     assert any(n["start"].endswith("T12:00:00") and n["end"].endswith("T13:00:00") for n in board["nonWorking"])
     assert board["unscheduled"] == []
-    assert "late_jobs" in board["kpis"]
+    assert "late_orders" in board["kpis"]
 
 
 def test_validate_and_save_moves(client, seeded):
@@ -94,8 +94,8 @@ def test_approve_supersede_compare_dispatch(client, seeded):
     r = client.post(f"{API}/plans/{a['planId']}/approve")
     assert r.status_code == 200 and r.json()["status"] == "MASTER"
     assert client.post(f"{API}/plans/{a['planId']}/approve").status_code == 409  # 既にマスタ
-    jobs = client.get(f"{API}/jobs", params={"siteId": site}).json()
-    assert {j["status"] for j in jobs} == {"PLANNED"}
+    orders = client.get(f"{API}/orders", params={"siteId": site}).json()
+    assert {j["status"] for j in orders} == {"PLANNED"}
 
     b = solved_plan(client, site, offset_days=1, name="B")  # 翌日開始、元計画 = A
     assert b["basePlanId"] == a["planId"]
@@ -109,7 +109,7 @@ def test_approve_supersede_compare_dispatch(client, seeded):
 
     cmp = client.get(f"{API}/plans/compare", params={"a": a["planId"], "b": c["planId"]}).json()
     assert cmp["a"]["planName"] == "A" and cmp["b"]["planName"] == "C"
-    assert {k["key"] for k in cmp["kpis"]} >= {"late_jobs", "setup_min"}
+    assert {k["key"] for k in cmp["kpis"]} >= {"late_orders", "setup_min"}
     assert cmp["changedCount"] == len(cmp["changes"])
 
     # 初日（10/27）は A の割付（置換日時より前）が配台表に出る

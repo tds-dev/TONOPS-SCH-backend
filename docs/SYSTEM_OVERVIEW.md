@@ -1,3 +1,4 @@
+<!-- SCH全体の構成、業務仕様、データ構造、APIと画面の対応をまとめる資料。 -->
 # TONOPS-SCH システム概要
 
 TONOPS-SCH は、業種に依存しない **生産・プロジェクト スケジューラ** です。
@@ -86,7 +87,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | 用語 | テーブル | 説明 |
 |---|---|---|
 | 組織 | M_Organizations | 会社。属性定義の単位 |
-| 拠点 | M_Sites | 工場・事業所。タイムゾーンと既定カレンダーを持つ。画面右上で切り替え |
+| 拠点 | M_Sites | 工場・事業所。タイムゾーンと既定カレンダーを持つ。左サイドバーのアプリ名の下で切り替え |
 | カレンダー | M_Calendars ほか | 稼働時間（週次のシフト＋例外）。リソースごとに設定、未設定なら拠点の既定 |
 | リソースグループ | M_ResourceGroups | 同種のリソースのまとまり（例: 配合、充填、包装） |
 | リソース | M_Resources | 作業を行うもの。設備・人・チーム・部屋など（`ResourceKind`） |
@@ -122,7 +123,7 @@ flowchart TD
   I -.->|"状況変化（追加受注・設備停止）"| D
 ```
 
-1. **マスタ登録**（現在は API / Swagger から。マスタ編集画面は今後）
+1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、品目・工程ルート、制約ルール・段取り替えを登録（API / Swagger からも登録可能）。組織・拠点・計算プロファイルの登録は引き続き API / Swagger を使用。
 2. **ジョブ登録** → **タスク生成**: ジョブの品目の工程ルートを展開し、工程ごとにタスク、リソース候補、前後の依存関係を作ります。
    所要時間 = 工程リソース候補の `SetupMinutes` + `FixedMinutes` + 数量 × `MinutesPerUnit`（分、切り上げ）。
 3. **計画作成**: 計画期間（拠点の現地時刻）とプロファイルを指定。現在のマスタ計画が「元計画（BasePlanID）」になります。
@@ -639,14 +640,18 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | 画面（URL） | 主な API | 参照（R） | 更新（W） |
 |---|---|---|---|
-| 共通ヘッダー（拠点選択） | `GET /sites` | M_Sites | — |
+| サイドバーの拠点選択（アプリ名の下） | `GET /sites` | M_Sites | — |
 | ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /jobs` | T_Plans, T_PlanKpis, T_Jobs, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
 | 計画一覧（`/plans`） | `GET /plans`、`GET /plan-profiles`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_PlanProfiles, M_Sites | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
 | 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Jobs, M_Items, M_Resources, M_ResourceGroups, M_Calendars・Patterns・Exceptions, M_ChangeoverMatrices・Entries, M_Rules, M_PlanProfiles, T_PlanKpis, T_PlanViolations, T_SolverRuns | T_SolverRuns（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Jobs.Status（承認時 OPEN→PLANNED） |
 | 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Jobs, M_Resources | T_Plans（承認・破棄） |
 | ジョブ（`/jobs`） | `GET /jobs`、`GET /items`、`GET /resources`、`GET /resource-groups`、`GET /jobs/{id}/tasks`、`GET /jobs/{id}/dependencies`、`POST /jobs/{id}/generate-tasks` | T_Jobs, M_Items, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, M_Resources, M_ResourceGroups, M_Routings・Steps・StepResources（タスク生成） | T_Tasks, T_TaskResourceOptions, T_TaskDependencies（タスク生成）, T_Jobs.RoutingID |
 | 配台表（`/dispatch`） | `GET /dispatch?siteId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Jobs, M_Items, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
-| 実績入力・リソース・カレンダー・品目・工程ルート・制約ルール | — | （準備中。現在は API / Swagger で登録） | |
+| リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に工程候補・タスク候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
+| カレンダー（`/calendars`） | `/calendars`、`/calendar-patterns`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarPatterns, M_CalendarExceptions, M_Sites, M_Resources | M_Calendars, M_CalendarPatterns, M_CalendarExceptions |
+| 品目・工程ルート（`/items`） | `/items`、`/routings`、`/routing-steps`、`/routing-step-resources` の CRUD | M_Items, M_Routings, M_RoutingSteps, M_RoutingStepResources, M_Resources, M_ResourceGroups。削除前にジョブ・タスクなどを確認 | M_Items, M_Routings, M_RoutingSteps, M_RoutingStepResources |
+| 制約ルール（`/rules`） | `/rules`、`/changeover-matrices`、`/changeover-entries` の CRUD、`GET /rule-types` | M_Rules, M_ChangeoverMatrices, M_ChangeoverEntries, M_ResourceGroups, サーバーのルール種類定義 | M_Rules, M_ChangeoverMatrices, M_ChangeoverEntries |
+| 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
 
 **画面で使っていないテーブル**: M_Organizations、M_AttributeDefinitions（デモデータのみ）、T_Actuals（今後）。
 
@@ -829,7 +834,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 **現在の制約**
 
 * 認証なし（`X-User-Email` ヘッダーで操作者を記録するのみ）。
-* マスタ編集画面・実績入力画面は未実装（API / Swagger で登録）。
+* 実績入力画面は未実装。4つのマスタ画面（リソース、カレンダー、品目・工程ルート、制約ルール・段取り替え）はフロントエンドに実装。
 * タスクは稼働枠をまたいで分割しない（休憩・夜間をまたぐ長い作業は割り付けられない場合がある）。
 * 1 リソースの候補タスクが 80 件を超えると、そのリソースの段取り替えは計算で考慮しない（検証では検出）。
 * DayPilot Lite の制限: リソースのツリー表示、外部からのドラッグ（未割付タスクの直接ドロップ）は不可 → 配置フォームで対応。
@@ -839,6 +844,6 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 * CSV 取込（ジョブ・マスタ）
 * 実績入力と工程くん連携、実績を反映したローリング再計画
-* マスタ編集画面（リソース、カレンダー、品目・工程ルート、制約ルール）
+* 組織・拠点・計算プロファイルなど、今回の対象外マスタの画面対応
 * 認証（Firebase）と権限
 * Docker Compose による配備、E2E テスト

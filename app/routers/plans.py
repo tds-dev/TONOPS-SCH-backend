@@ -16,7 +16,7 @@ from app.core.timeutil import to_utc_naive
 from app.engine.rules import all_plugins
 from app.engine.solve import execute_run
 from app.models.masters import Resource, Site
-from app.models.transactions import Job, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
+from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, UtcDatetime, coerce, schemas_for
 from app.services.plan_lifecycle import approve_plan, copy_plan, discard_plan
@@ -49,8 +49,8 @@ class SolveBody(ApiModel):
 class AssignmentView(ApiModel):
     assignment_id: int
     task_id: int
-    job_id: int
-    job_no: str
+    order_id: int
+    order_no: str
     task_name: str
     resource_id: int
     resource_code: str
@@ -150,16 +150,16 @@ def cancel_run(run_id: int, db: Session = Depends(get_db)):
 def list_assignments(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)
     rows = db.execute(
-        select(PlanAssignment, Task, Job, Resource)
+        select(PlanAssignment, Task, Order, Resource)
         .join(Task, Task.TaskID == PlanAssignment.TaskID)
-        .join(Job, Job.JobID == Task.JobID)
+        .join(Order, Order.OrderID == Task.OrderID)
         .join(Resource, Resource.ResourceID == PlanAssignment.ResourceID)
         .where(PlanAssignment.PlanID == plan_id)
         .order_by(Resource.SortOrder, PlanAssignment.StartAt)
     ).all()
     return [
         AssignmentView(
-            assignment_id=a.AssignmentID, task_id=t.TaskID, job_id=j.JobID, job_no=j.JobNo,
+            assignment_id=a.AssignmentID, task_id=t.TaskID, order_id=j.OrderID, order_no=j.OrderNo,
             task_name=t.TaskName, resource_id=r.ResourceID, resource_code=r.ResourceCode,
             start_at=a.StartAt, end_at=a.EndAt, setup_minutes=a.SetupMinutes,
             is_locked=a.IsLocked, source=a.Source, attributes=t.AttributesJSON or {},

@@ -10,7 +10,7 @@ from app.engine.problem import Problem
 from app.engine.result import SAssignment, Violation, fmt, fmt_duration
 from app.engine.rules import get_plugin
 
-__all__ = ["SAssignment", "Violation", "check_schedule", "compute_kpis", "job_finishes"]
+__all__ = ["SAssignment", "Violation", "check_schedule", "compute_kpis", "order_finishes"]
 
 
 def _inside(windows: list[tuple[int, int]], s: int, e: int) -> bool:
@@ -86,11 +86,11 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
         if plugin is not None:
             out.extend(plugin.check(problem, rule, assignments))
 
-    # ジョブ・タスクの納期遅れ（推奨扱い: 許容するがコストになる）
-    for job_id, end, due in job_finishes(problem, by_task):
+    # オーダー・タスクの納期遅れ（推奨扱い: 許容するがコストになる）
+    for order_id, end, due in order_finishes(problem, by_task):
         if due is not None and end > due:
-            job = problem.jobs[job_id]
-            out.append(Violation("SOFT", "LATE_JOB", f"{job.no} が{fmt_duration(end - due)}遅れ（納期 {fmt(problem, due)}）", penalty=end - due))
+            order = problem.orders[order_id]
+            out.append(Violation("SOFT", "LATE_ORDER", f"{order.no} が{fmt_duration(end - due)}遅れ（納期 {fmt(problem, due)}）", penalty=end - due))
     for t in tasks.values():
         a = by_task.get(t.id)
         if a and t.deadline is not None and a.end > t.deadline:
@@ -98,26 +98,26 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
     return out
 
 
-def job_finishes(problem: Problem, by_task: dict[int, SAssignment]) -> list[tuple[int, int, int | None]]:
-    """(job_id, 完了分, 納期分) を、割付済みタスクが 1 件以上あるジョブについて返す。"""
+def order_finishes(problem: Problem, by_task: dict[int, SAssignment]) -> list[tuple[int, int, int | None]]:
+    """(order_id, 完了分, 納期分) を、割付済みタスクが 1 件以上あるオーダーについて返す。"""
     finish: dict[int, int] = {}
     for a in by_task.values():
         t = problem.tasks.get(a.task_id)
         if t:
-            finish[t.job_id] = max(finish.get(t.job_id, a.end), a.end)
-    return [(j, f, problem.jobs[j].due if j in problem.jobs else None) for j, f in finish.items()]
+            finish[t.order_id] = max(finish.get(t.order_id, a.end), a.end)
+    return [(j, f, problem.orders[j].due if j in problem.orders else None) for j, f in finish.items()]
 
 
 def compute_kpis(problem: Problem, assignments: list[SAssignment]) -> dict[str, float]:
     by_task = {a.task_id: a for a in assignments}
-    finishes = job_finishes(problem, by_task)
+    finishes = order_finishes(problem, by_task)
     lateness = [max(0, f - d) for _, f, d in finishes if d is not None]
     working = sum(we - ws for r in problem.resources.values() for ws, we in r.windows)
     busy = sum(a.end - a.start for a in assignments)
     return {
         "scheduled_tasks": float(len(by_task)),
         "unscheduled_tasks": float(sum(1 for t in problem.tasks if t not in by_task)),
-        "late_jobs": float(sum(1 for x in lateness if x > 0)),
+        "late_orders": float(sum(1 for x in lateness if x > 0)),
         "total_lateness_min": float(sum(lateness)),
         "makespan_min": float(max((a.end for a in assignments), default=0)),
         "setup_min": float(sum(a.setup for a in assignments)),

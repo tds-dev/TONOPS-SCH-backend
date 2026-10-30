@@ -3,14 +3,14 @@
 API の JSON は camelCase（`resourceName`）、モデルは PascalCase（`ResourceName`）。
 `ApiModel` が自動で変換し、入力はどちらの形式も受け付ける。
 `schemas_for(model)` は SQLAlchemy モデルから Read / Create / Update スキーマを
-直接生成するため、マスタの CRUD は常にテーブル定義と一致する。
+直接生成する。APIの項目名はアプリ側の属性名を使い、DB上の旧列名と分離する。
 """
 import datetime as dt
 from decimal import Decimal
 from typing import Annotated, Any, Optional
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, PlainSerializer, create_model
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, Numeric, String, Text, Time
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, Numeric, String, Text, Time, inspect
 from sqlalchemy.types import TypeEngine
 
 from app.models.base import AUDIT_COLUMNS
@@ -91,8 +91,10 @@ def schemas_for(model: type) -> tuple[type[ApiModel], type[ApiModel], type[ApiMo
     create_fields: dict[str, Any] = {}
     update_fields: dict[str, Any] = {}
     single_pk = len(model.__table__.primary_key.columns) == 1
-    for col in model.__table__.columns:
-        name = col.key
+    # モデル属性名から、orderId等のAPI項目を生成する。
+    for attribute in inspect(model).column_attrs:
+        col = attribute.columns[0]
+        name = attribute.key
         py = python_type(col.type)
         read_fields[name] = (Optional[py], None)
         # 代理キー（自動採番）はサーバー側で生成。複合キーは書込み可のまま。

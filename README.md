@@ -1,4 +1,8 @@
+<!-- アプリの構成、利用手順、APIとDBの対応を説明する資料。 -->
 # TONOPS-SCH-backend
+
+> 2026-10-30: プログラムとAPIはOrder/Ordersへ改称。DBもT_Orders・OrderID等へ変更される前提で動作する。実DBの変更は未実施のため、DB側の名称変更後に利用する。既存のSYSTEM_OVERVIEW.md等に記載されたJob名は変更前の構成を含む。現行APIは/api/v1/orders。
+
 
 TONOPS-SCH（業種に依存しない生産・プロジェクトスケジューラ）のバックエンドです。
 REST API（FastAPI）、スケジューリングエンジン（Google OR-Tools CP-SAT）、ソルバーワーカーを含みます。
@@ -99,7 +103,7 @@ python -m scripts.seed_demo
 ```
 
 工場A（配合 → 充填 → 包装、設備 6 台）、標準カレンダー（月〜土 06:00–12:00 / 13:00–22:00）、
-品目 6 件、ジョブ 7 件（翌日 06:00 以降が納期）、段取り替えマトリクス、制約ルール 1 件、計画プロファイル「納期優先」を登録します。
+品目 6 件、オーダー 7 件（翌日 06:00 以降が納期）、段取り替えマトリクス、制約ルール 1 件、計画プロファイル「納期優先」を登録します。
 
 ### 2.6 作り直し（開発用）
 
@@ -206,7 +210,7 @@ TONOPS-SCH-backend/
 │   ├── routers/                REST エンドポイント
 │   │   ├── crud.py             マスタ用の汎用 CRUD
 │   │   ├── masters.py          マスタの CRUD 登録
-│   │   ├── jobs.py             ジョブ・タスク（タスク生成など）
+│   │   ├── orders.py             オーダー・タスク（タスク生成など）
 │   │   ├── plans.py            計画・計算・承認・SSE
 │   │   └── board.py            計画ボード・手動編集・比較・配台表
 │   ├── services/               業務ロジック（計画作成、承認、編集、ボード整形、カレンダー、タスク生成、デモデータ）
@@ -242,12 +246,15 @@ TONOPS-SCH-backend/
 | 全テーブル作り直し | `python -m scripts.create_schema --drop` |
 | デモデータ登録 | `python -m scripts.seed_demo` |
 | DB だけ作成 | `python -m scripts.create_database` |
-| DDL 出力（DBA レビュー・SSMS 用） | `python -m scripts.export_ddl` → `db/schema_sqlserver.sql` |
+| DB・テーブル作成SQLの出力（実行はしない） | `python -m scripts.export_ddl` → `db/create_database_sqlserver.sql`、`db/schema_sqlserver.sql` |
+| デモデータ挿入SQLの出力（実DBへ接続しない） | `python -m scripts.export_seed_sql` → `db/seed_demo_sqlserver.sql` |
 | テスト | `pytest` |
 
 ---
 
 ## 8. トラブルシューティング
+
+Order系へ変更したSQLファイルの内容と実行順は、[DB作成・初期データSQL](docs/DB_SQL.md)を参照してください。
 
 | 症状 | 原因と対処 |
 |---|---|
@@ -259,7 +266,7 @@ TONOPS-SCH-backend/
 | 計算が「失敗」になる | ボードの計算パネルにエラーが出ます。多いのは計画期間が短すぎる・リソース候補がないタスク。ワーカーのログも確認 |
 | 画面に「サーバーに接続できません」 | API（ポート 8000）が起動していない |
 | `seed_demo` が「Demo data already present」 | 既に登録済み。入れ直す場合は `create_schema --drop` の後に実行 |
-| 計画を作っても割付対象のタスクがない | デモのジョブは「翌日 06:00 以降」が対象。計画の開始日を翌日にする（`seed_demo` を実行した日の翌日） |
+| 計画を作っても割付対象のタスクがない | デモのオーダーは「翌日 06:00 以降」が対象。計画の開始日を翌日にする（`seed_demo` を実行した日の翌日） |
 
 ---
 

@@ -33,7 +33,7 @@ class PLock:
 @dataclass
 class PTask:
     id: int
-    job_id: int
+    order_id: int  # この工程作業が所属するオーダーのID。
     name: str
     attrs: dict[str, Any]
     options: list[POption]
@@ -53,7 +53,9 @@ class PDependency:
 
 
 @dataclass
-class PJob:
+class POrder:
+    """納期と優先度を持つ、計算対象のオーダー。"""
+
     id: int
     no: str
     due: int | None  # 分。負の値もありうる（既に遅れている）
@@ -98,7 +100,7 @@ class Problem:
     tz: str
     resources: dict[int, PResource]
     tasks: dict[int, PTask]
-    jobs: dict[int, PJob]
+    orders: dict[int, POrder]  # オーダーIDをキーに、案件全体の計算条件を保持する。
     dependencies: list[PDependency] = field(default_factory=list)
     changeovers: list[PChangeover] = field(default_factory=list)
     rules: list[PRule] = field(default_factory=list)

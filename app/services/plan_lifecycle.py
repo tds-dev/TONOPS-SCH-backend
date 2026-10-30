@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.timeutil import utcnow
 from app.models.masters import Site
-from app.models.transactions import Job, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
+from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.services.plan_service import next_plan_no
 
 # 承認を妨げない必須違反（未割付は「計画に入らなかった」だけで、計画自体は実行可能）
@@ -85,11 +85,11 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
         old.SupersededAt = plan.HorizonStart
 
     plan.Status, plan.ApprovedAt, plan.ApprovedBy, plan.UpdatedBy = "MASTER", utcnow(), user, user
-    job_ids = select(Task.JobID).join(PlanAssignment, PlanAssignment.TaskID == Task.TaskID).where(
+    order_ids = select(Task.OrderID).join(PlanAssignment, PlanAssignment.TaskID == Task.TaskID).where(
         PlanAssignment.PlanID == plan.PlanID
     )
     db.execute(
-        update(Job).where(Job.JobID.in_(job_ids), Job.Status == "OPEN").values(Status="PLANNED", UpdatedBy=user)
+        update(Order).where(Order.OrderID.in_(order_ids), Order.Status == "OPEN").values(Status="PLANNED", UpdatedBy=user)
     )
     db.commit()
     db.refresh(plan)

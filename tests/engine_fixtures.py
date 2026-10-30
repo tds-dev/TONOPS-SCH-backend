@@ -4,7 +4,7 @@ from datetime import datetime
 from app.engine.problem import (
     PChangeover,
     PDependency,
-    PJob,
+    POrder,
     POption,
     PResource,
     Problem,
@@ -18,10 +18,10 @@ DAY = 24 * 60
 
 
 def two_machine_problem(**overrides) -> Problem:
-    """配合機 2 台（2 日間、各日 06:00–12:00, 13:00–22:00）、2 タスクのジョブ 4 件。
+    """配合機 2 台（2 日間、各日 06:00–12:00, 13:00–22:00）、2 タスクのオーダー 4 件。
 
     タスク 1x = 配合（どちらの配合機でも可）、タスク 2x = 包装機での包装（配合の 30 分後）。
-    系統: ジョブ1 A、ジョブ2 B、ジョブ3 A、ジョブ4 C。
+    系統: オーダー1 A、オーダー2 B、オーダー3 A、オーダー4 C。
     """
     windows = []
     for d in range(2):
@@ -32,9 +32,9 @@ def two_machine_problem(**overrides) -> Problem:
         3: PResource(3, "P-01", "包装機 P-01", 1, windows, group_id=20),
     }
     fams = {1: "A", 2: "B", 3: "A", 4: "C"}
-    jobs, tasks, deps = {}, {}, []
+    orders, tasks, deps = {}, {}, []
     for j in range(1, 5):
-        jobs[j] = PJob(j, f"JB-{j}", due=600 + 120 * j, priority=50)
+        orders[j] = POrder(j, f"JB-{j}", due=600 + 120 * j, priority=50)
         mix, pack = 10 + j, 20 + j
         tasks[mix] = PTask(mix, j, f"JB-{j} 配合", {"family": fams[j]},
                            [POption(1, 90), POption(2, 90)])
@@ -47,7 +47,7 @@ def two_machine_problem(**overrides) -> Problem:
     )]
     p = Problem(
         horizon_start=START, horizon=2 * DAY, tz="Asia/Tokyo", resources=resources, tasks=tasks,
-        jobs=jobs, dependencies=deps, changeovers=changeovers, rules=[],
+        orders=orders, dependencies=deps, changeovers=changeovers, rules=[],
         weights={"lateness": 1000, "unscheduled": 100000, "setup": 10, "makespan": 1}, time_limit_sec=10,
     )
     for k, v in overrides.items():

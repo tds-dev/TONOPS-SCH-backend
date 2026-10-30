@@ -18,8 +18,10 @@ from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
 from app.models.types import DateTime, String
 
-RESOURCE_KINDS = ["MACHINE", "PERSON", "TEAM", "ROOM", "OTHER"]
-ENTITY_TYPES = ["ITEM", "RESOURCE", "JOB", "TASK"]
+# リソース種別の許可値。名称のみをTYPEへ統一し、保存値は維持する。
+RESOURCE_TYPE = ["MACHINE", "PERSON", "TEAM", "ROOM", "OTHER"]
+# 属性の対象区分は、プログラムと変更後のDBで同じ名称を使用する。
+ENTITY_TYPES = ["ITEM", "RESOURCE", "ORDER", "TASK"]
 DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
 TIME_UNITS = ["MINUTE", "DAY"]
 
@@ -116,14 +118,15 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     __tablename__ = "M_Resources"
     __table_args__ = (
         UniqueConstraint("SiteID", "ResourceCode"),
-        CheckConstraint(in_check("ResourceKind", RESOURCE_KINDS), name="ResourceKind"),
+        CheckConstraint(in_check("ResourceType", RESOURCE_TYPE), name="ResourceType"),
     )
     ResourceID = Column(Integer, primary_key=True, autoincrement=True)
     SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     ResourceCode = Column(String(30), nullable=False)
     ResourceName = Column(String(100), nullable=False)
-    ResourceKind = Column(String(20), nullable=False, default="MACHINE")
+    # リソースの種別を、APIとDBで共通のType名として扱う。
+    ResourceType = Column(String(20), nullable=False, default="MACHINE")
     Capacity = Column(Numeric(9, 2), nullable=False, default=1)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
     CalendarID = Column(Integer, ForeignKey("M_Calendars.CalendarID"), nullable=True)
@@ -144,6 +147,7 @@ class AttributeDefinition(AuditMixin, Base):
     )
     AttributeDefID = Column(Integer, primary_key=True, autoincrement=True)
     OrganizationID = Column(Integer, ForeignKey("M_Organizations.OrganizationID"), nullable=False)
+    # オーダーの属性はORDER区分として保存・検索する。
     EntityType = Column(String(20), nullable=False)
     AttributeKey = Column(String(50), nullable=False)
     Label = Column(String(100), nullable=False)

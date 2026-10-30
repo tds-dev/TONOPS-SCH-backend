@@ -9,7 +9,7 @@ from app.core.db import chunks
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
 from app.models.masters import Item, Resource, ResourceGroup, Site
-from app.models.transactions import Job, Plan, PlanAssignment, PlanKpi, Task
+from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, Task
 from app.schemas.base import coerce
 from app.services.plan_lifecycle import master_assignments
 
@@ -47,9 +47,9 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     changes = assignment_diff(sa, sb)
     task_ids = {c.task_id for c in changes}
     info = {
-        t.TaskID: (j.JobNo, t.TaskName)
+        t.TaskID: (j.OrderNo, t.TaskName)
         for ids in chunks(task_ids)
-        for t, j in db.execute(select(Task, Job).join(Job, Job.JobID == Task.JobID).where(Task.TaskID.in_(ids)))
+        for t, j in db.execute(select(Task, Order).join(Order, Order.OrderID == Task.OrderID).where(Task.TaskID.in_(ids)))
     }
     res = {r.ResourceID: r for r in db.scalars(select(Resource).where(Resource.SiteID == plan_a.SiteID))}
 
@@ -75,7 +75,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
         "totalTasks": len(set(sa) | set(sb)),
         "changes": [
             {
-                "taskId": c.task_id, "jobNo": info.get(c.task_id, ("", ""))[0], "taskName": info.get(c.task_id, ("", ""))[1],
+                "taskId": c.task_id, "orderNo": info.get(c.task_id, ("", ""))[0], "taskName": info.get(c.task_id, ("", ""))[1],
                 "kind": c.kind, "shiftMinutes": c.shift_minutes, "description": _shift_text(c.kind, c.shift_minutes),
                 "a": slot_view(c.a), "b": slot_view(c.b),
             }
@@ -98,7 +98,7 @@ def dispatch_list(db: Session, site_id: int, day: date, resource_group_id: int |
         t.TaskID: (t, j, item)
         for ids in chunks(task_ids)
         for t, j, item in db.execute(
-            select(Task, Job, Item).join(Job, Job.JobID == Task.JobID).outerjoin(Item, Item.ItemID == Job.ItemID)
+            select(Task, Order, Item).join(Order, Order.OrderID == Task.OrderID).outerjoin(Item, Item.ItemID == Order.ItemID)
             .where(Task.TaskID.in_(ids))
         )
     }
@@ -114,7 +114,7 @@ def dispatch_list(db: Session, site_id: int, day: date, resource_group_id: int |
         for a in (x for x in rows if x.ResourceID == r.ResourceID):
             t, j, item = detail[a.TaskID]
             items.append({
-                "assignmentId": a.AssignmentID, "taskId": t.TaskID, "jobNo": j.JobNo, "taskName": t.TaskName,
+                "assignmentId": a.AssignmentID, "taskId": t.TaskID, "orderNo": j.OrderNo, "taskName": t.TaskName,
                 "itemCode": item.ItemCode if item else None, "itemName": item.ItemName if item else None,
                 "quantity": coerce(j.Quantity), "unit": item.Unit if item else None,
                 "start": utc_to_local(a.StartAt, tz).strftime("%H:%M"),

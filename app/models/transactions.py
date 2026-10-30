@@ -22,8 +22,9 @@ from app.models.types import DateTime, String, Text
 # SQLite は INTEGER PRIMARY KEY のみ自動採番するため、BIGINT は SQL Server でのみ使う。
 BigId = BigInteger().with_variant(Integer, "sqlite")
 
-JOB_KINDS = ["ORDER", "PROJECT"]
-JOB_STATUSES = ["OPEN", "PLANNED", "IN_PROGRESS", "DONE", "CANCELLED"]
+# オーダーの種別と状態は、改称前と同じ保存値を使用する。
+ORDER_TYPE = ["ORDER", "PROJECT"]
+ORDER_STATUSES = ["OPEN", "PLANNED", "IN_PROGRESS", "DONE", "CANCELLED"]
 PLAN_OWNERS = ["SCHEDULER", "EXTERNAL"]
 TASK_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "DONE", "CANCELLED"]
 DEP_TYPES = ["FS", "SS", "FF", "SF"]
@@ -37,22 +38,24 @@ ACTUAL_SOURCES = ["MANUAL", "PMS", "IMPORT"]
 
 
 # ---------------------------------------------------------------- 需要
-class Job(AuditMixin, SoftDeleteMixin, Base):
-    """ジョブ（オーダー・プロジェクト）"""
+class Order(AuditMixin, SoftDeleteMixin, Base):
+    """オーダー（受注・プロジェクト）。変更後のDB名称を直接使用する。"""
 
-    __tablename__ = "T_Jobs"
+    # 実DBもT_OrdersとOrder系の列名へ変更されることを前提とする。
+    __tablename__ = "T_Orders"
     __table_args__ = (
-        UniqueConstraint("SiteID", "JobNo"),
-        CheckConstraint(in_check("JobKind", JOB_KINDS), name="JobKind"),
-        CheckConstraint(in_check("Status", JOB_STATUSES), name="Status"),
+        UniqueConstraint("SiteID", "OrderNo"),
+        CheckConstraint(in_check("OrderType", ORDER_TYPE), name="OrderType"),
+        CheckConstraint(in_check("Status", ORDER_STATUSES), name="Status"),
         CheckConstraint(in_check("PlanOwner", PLAN_OWNERS), name="PlanOwner"),
     )
-    JobID = Column(Integer, primary_key=True, autoincrement=True)
+    OrderID = Column(Integer, primary_key=True, autoincrement=True)
     SiteID = Column(Integer, ForeignKey("M_Sites.SiteID"), nullable=False)
-    JobNo = Column(String(30), nullable=False)
-    JobName = Column(String(200), nullable=False)
-    JobKind = Column(String(20), nullable=False, default="ORDER")
-    ParentJobID = Column(Integer, ForeignKey("T_Jobs.JobID"), nullable=True)
+    OrderNo = Column(String(30), nullable=False)
+    OrderName = Column(String(200), nullable=False)
+    # 受注かプロジェクトかを表す種別。保存値と動作は維持する。
+    OrderType = Column(String(20), nullable=False, default="ORDER")
+    ParentOrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=True)
     ItemID = Column(Integer, ForeignKey("M_Items.ItemID"), nullable=True)
     RoutingID = Column(Integer, ForeignKey("M_Routings.RoutingID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
@@ -65,7 +68,7 @@ class Job(AuditMixin, SoftDeleteMixin, Base):
     AttributesJSON = Column(JSON, nullable=True)
     Remarks = Column(String(500), nullable=True)
 
-    tasks = relationship("Task", back_populates="job", order_by="Task.Sequence")
+    tasks = relationship("Task", back_populates="order", order_by="Task.Sequence")
 
 
 class Task(AuditMixin, Base):
@@ -73,11 +76,12 @@ class Task(AuditMixin, Base):
 
     __tablename__ = "T_Tasks"
     __table_args__ = (
-        UniqueConstraint("JobID", "TaskNo"),
+        UniqueConstraint("OrderID", "TaskNo"),
         CheckConstraint(in_check("Status", TASK_STATUSES), name="Status"),
     )
     TaskID = Column(Integer, primary_key=True, autoincrement=True)
-    JobID = Column(Integer, ForeignKey("T_Jobs.JobID"), nullable=False)
+    # 作業の所属先は、変更後のオーダーテーブルを参照する。
+    OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
     ParentTaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     RoutingStepID = Column(Integer, ForeignKey("M_RoutingSteps.RoutingStepID"), nullable=True)
     TaskNo = Column(String(30), nullable=False)
@@ -92,7 +96,7 @@ class Task(AuditMixin, Base):
     ProgressPct = Column(Numeric(5, 2), nullable=False, default=0)
     AttributesJSON = Column(JSON, nullable=True)
 
-    job = relationship("Job", back_populates="tasks")
+    order = relationship("Order", back_populates="tasks")
     options = relationship(
         "TaskResourceOption", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -220,6 +224,7 @@ class PlanKpi(Base):
 
     __tablename__ = "T_PlanKpis"
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), primary_key=True)
+    # 集計名はlate_orders等のプログラム上の名称をそのまま保存する。
     KpiKey = Column(String(50), primary_key=True)
     KpiValue = Column(Numeric(18, 4), nullable=False)
 
@@ -234,7 +239,8 @@ class PlanViolation(AuditMixin, Base):
     RuleID = Column(Integer, ForeignKey("M_Rules.RuleID"), nullable=True)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     Severity = Column(String(10), nullable=False)
-    ViolationCode = Column(String(30), nullable=False, default="OTHER")  # UNSCHEDULED, OVERLAP, LATE_JOB など
+    # 違反コードはLATE_ORDER等のプログラム上の名称をそのまま保存する。
+    ViolationCode = Column(String(30), nullable=False, default="OTHER")
     Penalty = Column(Numeric(18, 2), nullable=True)
     Message = Column(String(500), nullable=False)
 
