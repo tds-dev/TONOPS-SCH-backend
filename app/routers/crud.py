@@ -11,6 +11,7 @@
 
 列名（camelCase）と一致するクエリパラメータは、等価条件の絞り込みに使う。
 """
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -41,7 +42,10 @@ def _parse(value: str, py: Any) -> Any:
 
 
 # モデルの項目名から、一覧・取得・追加・更新・削除のAPIを生成する。
-def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None) -> APIRouter:
+def crud_router(
+    model: type, prefix: str, tag: str, order_by: str | None = None,
+    validate_write: Callable[[Session, Any, dict[str, Any]], None] | None = None,
+) -> APIRouter:
     Read, Create, Update = schemas_for(model)
     pk = _pk_column(model)
     # APIのorderId等を、対応するDBの列へ結び付けて検索する。
@@ -87,7 +91,11 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
     # 受け取った項目と登録者を使い、新しいレコードを保存する。
     @router.post("", response_model=Read, status_code=status.HTTP_201_CREATED)
     def create_record(body: Create, db: Session = Depends(get_db), user: str = Depends(current_user)):
-        obj = model(**body.model_dump(exclude_unset=True), CreatedBy=user)
+        # 個別の確認処理があるモデルだけ、保存前に入力を検証する。
+        values = body.model_dump(exclude_unset=True)
+        if validate_write is not None:
+            validate_write(db, None, values)
+        obj = model(**values, CreatedBy=user)
         db.add(obj)
         commit(db)
         db.refresh(obj)
@@ -99,7 +107,11 @@ def crud_router(model: type, prefix: str, tag: str, order_by: str | None = None)
         obj_id: int, body: Update, db: Session = Depends(get_db), user: str = Depends(current_user)
     ):
         obj = get_or_404(db, obj_id)
-        for key, value in body.model_dump(exclude_unset=True).items():
+        # 元データを書き換える前に、変更後の値の組合せを確認する。
+        values = body.model_dump(exclude_unset=True)
+        if validate_write is not None:
+            validate_write(db, obj, values)
+        for key, value in values.items():
             setattr(obj, key, value)
         obj.UpdatedBy = user
         commit(db)
