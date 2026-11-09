@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.timeutil import utc_to_local, utcnow
 from app.models.masters import PlanProfile, Location
 from app.models.transactions import Plan, SolverRun
+from app.services.plan_validation import flush_named_plan, validate_plan_name
 
 
 # 拠点の現地日付と既存件数から、次の計画番号を組み立てる。
@@ -49,6 +50,8 @@ def create_plan(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Location {location_id} not found")
     if horizon_end <= horizon_start:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "horizonEnd must be after horizonStart")
+    # 計画番号へ代替せず、同じ拠点で重複しない計画名を必須にする。
+    name = validate_plan_name(db, location_id, plan_name)
     if profile_id is None:
         profile = db.scalars(
             select(PlanProfile).where(PlanProfile.LocationID == location_id).order_by(PlanProfile.IsDefault.desc())
@@ -61,11 +64,12 @@ def create_plan(
         base_plan_id = master.PlanID if master else None
     plan_no = next_plan_no(db, location, horizon_start)
     plan = Plan(
-        LocationID=location_id, PlanNo=plan_no, PlanName=plan_name or plan_no, Status="DRAFT",
+        LocationID=location_id, PlanNo=plan_no, PlanName=name, Status="DRAFT",
         HorizonStart=horizon_start, HorizonEnd=horizon_end, ProfileID=profile_id,
         BasePlanID=base_plan_id, Memo=memo, CreatedBy=user,
     )
     db.add(plan)
+    flush_named_plan(db, plan)
     db.commit()
     db.refresh(plan)
     return plan

@@ -1,4 +1,4 @@
-"""オーダー保存時の入力・所属拠点・工程ルートと、既存タスクへの影響を確認する処理。"""
+"""オーダー保存時の入力・所属拠点・製品と、既存タスクへの影響を確認する処理。"""
 from decimal import Decimal
 from typing import Any
 
@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Location, Product, Routing
+from app.models.masters import Location, Product
 from app.models.transactions import (
     ORDER_STATUSES, ORDER_TYPE, PLAN_OWNERS, Actual, Order, PlanAssignment, Task,
 )
@@ -77,22 +77,13 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     location = db.get(Location, location_id) if location_id is not None else None
     if location is None or location.DeleteFlag:
         raise HTTPException(422, "有効な拠点を指定してください。")
-    # 製品と工程ルートは、オーダーと同じ拠点・同じ製品のものだけ許可する。
+    # 製品はオーダーと同じ拠点のものだけ許可する。
     # 既存参照を変えない編集では、削除済みマスタの参照値を保持できるようにする。
-    references_changed = original is None or any(changed(key) for key in ("ProductID", "RoutingID"))
+    references_changed = original is None or changed("ProductID")
     product_id = value("ProductID")
     product = db.get(Product, product_id) if product_id is not None else None
     if references_changed and product_id is not None and (product is None or product.DeleteFlag or product.LocationID != location_id):
         raise HTTPException(422, "同じ拠点の有効な製品を指定してください。")
-    # 製品未指定でルートを指定する既存APIの使い方も維持する。
-    routing_id = value("RoutingID")
-    if references_changed and routing_id is not None:
-        # 工程ルートと、そのルートが属する製品。
-        routing = db.get(Routing, routing_id)
-        route_product = db.get(Product, routing.ProductID) if routing is not None else None
-        if (routing is None or routing.DeleteFlag or route_product is None or route_product.DeleteFlag
-                or route_product.LocationID != location_id or (product_id is not None and routing.ProductID != product_id)):
-            raise HTTPException(422, "指定した製品・拠点に対応する有効な工程ルートを選んでください。")
 
     # 削除済みも同じ番号を保持するため、再利用せず別番号を案内する。
     duplicate = db.scalar(select(Order.OrderID).where(Order.LocationID == location_id, Order.OrderNo == value("OrderNo")))
@@ -100,10 +91,10 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
         raise HTTPException(409, "同じ拠点でオーダー番号が登録済みです。削除済みも含め、別の番号を指定してください。")
 
     # 計画・実績があるタスクの内容とオーダーが食い違わないよう、生成元の変更を防ぐ。
-    if original is not None and any(changed(key) for key in ("ProductID", "RoutingID", "Quantity", "AttributesJSON")):
+    if original is not None and any(changed(key) for key in ("ProductID", "Quantity", "AttributesJSON")):
         # このオーダーに属するタスクの識別番号。
         task_ids = select(Task.TaskID).where(Task.OrderID == original.OrderID)
         if (db.scalar(select(PlanAssignment.AssignmentID).where(PlanAssignment.TaskID.in_(task_ids)).limit(1)) is not None
                 or db.scalar(select(Actual.ActualID).where(Actual.TaskID.in_(task_ids)).limit(1)) is not None
                 or db.scalar(select(Task.TaskID).where(Task.OrderID == original.OrderID, Task.Status != "NOT_STARTED").limit(1)) is not None):
-            raise HTTPException(409, "計画に割付済み、または作業開始・実績登録済みのため、製品・工程ルート・数量・属性は変更できません。")
+            raise HTTPException(409, "計画に割付済み、または作業開始・実績登録済みのため、製品・数量・属性は変更できません。")

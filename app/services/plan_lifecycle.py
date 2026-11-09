@@ -20,6 +20,7 @@ from app.core.timeutil import utcnow
 from app.models.masters import Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.services.plan_service import next_plan_no
+from app.services.plan_validation import copy_plan_name, flush_named_plan, validate_plan_name
 
 # 承認を妨げない必須違反（未割付は「計画に入らなかった」だけで、計画自体は実行可能）
 NON_BLOCKING_HARD = {"UNSCHEDULED"}
@@ -110,18 +111,22 @@ def discard_plan(db: Session, plan: Plan, user: str) -> Plan:
     return plan
 
 
+# 割付・評価値・違反を保持したまま、拠点内で重複しない名前の下書きへ複製する。
 def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Plan:
     """割付・KPI・違反ごと複製した新しい下書きを作る（what-if 用）。"""
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
     location = db.get(Location, plan.LocationID)
+    # 名前の指定がなければコピー名を自動生成し、指定がある場合は重複を拒否する。
+    plan_name = copy_plan_name(db, plan.LocationID, plan.PlanName) if name is None else validate_plan_name(db, plan.LocationID, name)
+    # 割付や評価値の複製先となる新しい下書き。
     new = Plan(
         LocationID=plan.LocationID, PlanNo=next_plan_no(db, location, plan.HorizonStart),
-        PlanName=name or f"{plan.PlanName}（コピー）", Status="DRAFT",
+        PlanName=plan_name, Status="DRAFT",
         HorizonStart=plan.HorizonStart, HorizonEnd=plan.HorizonEnd, ProfileID=plan.ProfileID,
         BasePlanID=plan.BasePlanID, Memo=plan.Memo, CreatedBy=user,
     )
     db.add(new)
-    db.flush()
+    flush_named_plan(db, new)
     for a in db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == plan.PlanID)):
         db.add(PlanAssignment(
             PlanID=new.PlanID, TaskID=a.TaskID, ResourceID=a.ResourceID, StartAt=a.StartAt, EndAt=a.EndAt,

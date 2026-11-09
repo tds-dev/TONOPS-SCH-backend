@@ -1,18 +1,18 @@
 """オーダーをスケジュール可能なタスクに変換する。
 
-`generate_tasks` はオーダーの工程ルート（またはその製品の既定ルート）を展開し、
+`generate_tasks` はオーダーの製品に直接登録された工程を展開し、
 T_Tasks、T_TaskResourceOptions、連続するタスク間の FS 依存関係を作成する。
-タスク属性 = 製品属性を工程属性、さらにオーダー属性で上書きしたもの。
+タスク属性はオーダー属性を引き継ぐ。製品・工程には属性を持たせない。
 これにより {"family": "A"} のようなルールのセレクターがタスクに効く。
 """
 import math
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, false, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Product, Routing
-from app.models.transactions import Order, PlanAssignment, Task, TaskDependency, TaskResourceOption
+from app.models.masters import Product, ProductProcess
+from app.models.transactions import Actual, Order, PlanAssignment, Task, TaskDependency, TaskResourceOption
 
 
 def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: float) -> int:
@@ -21,28 +21,26 @@ def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: f
     return int(setup + fixed + math.ceil(run))
 
 
-# オーダー指定の工程ルートを優先し、未指定なら製品の既定ルートか最新版を取得する。
-def resolve_routing(db: Session, order: Order) -> Routing:
-    if order.RoutingID:
-        routing = db.get(Routing, order.RoutingID)
-    elif order.ProductID:
-        routing = db.scalars(
-            select(Routing)
-            .where(Routing.ProductID == order.ProductID, Routing.DeleteFlag == false())
-            .order_by(Routing.IsDefault.desc(), Routing.Revision.desc())
-        ).first()
-    else:
-        routing = None
-    if routing is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Order {order.OrderNo} has no routing (set RoutingID or a product with a routing).",
-        )
-    return routing
+# オーダーと同じ拠点の有効な製品から、工程を実行順で取得する。
+def resolve_product_processes(db: Session, order: Order) -> list[ProductProcess]:
+    # タスク生成の対象製品。未指定や削除済みでは新しいタスクを作らない。
+    product = db.get(Product, order.ProductID) if order.ProductID is not None else None
+    if product is None or product.DeleteFlag or product.LocationID != order.LocationID:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "タスク生成には同じ拠点の有効な製品を指定してください。")
+    # 工程番号で並べた製品固有の工程。製品に工程がない場合は登録を案内する。
+    processes = db.scalars(select(ProductProcess).where(
+        ProductProcess.ProductID == product.ProductID,
+    ).order_by(ProductProcess.SequenceNumber)).all()
+    if not processes:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "この製品には工程が登録されていません。製品・工程画面で工程を登録してください。")
+    return processes
 
 
-# 工程ルートの定義から、オーダーごとのタスク・実行候補・前後関係を生成する。
+# 製品工程の定義から、オーダーごとのタスク・実行候補・前後関係を生成する。
 def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) -> list[Task]:
+    # 入力不備で既存タスクを削除しないよう、先に生成元の工程を確認する。
+    processes = resolve_product_processes(db, order)
+    # 生成済みタスク。再生成時は計画・実績・作業開始の有無を先に確認する。
     existing = db.scalars(select(Task).where(Task.OrderID == order.OrderID)).all()
     if existing:
         if not replace:
@@ -50,6 +48,7 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
                 status.HTTP_409_CONFLICT,
                 f"Order {order.OrderNo} already has {len(existing)} tasks; pass replace=true to rebuild.",
             )
+        # 再生成対象のタスク番号と、既存計画からの参照。
         task_ids = [t.TaskID for t in existing]
         used = db.scalars(
             select(PlanAssignment.TaskID).where(PlanAssignment.TaskID.in_(task_ids)).limit(1)
@@ -59,6 +58,9 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
                 status.HTTP_409_CONFLICT,
                 f"Order {order.OrderNo} tasks are used in a plan; they cannot be rebuilt.",
             )
+        if (any(task.Status != "NOT_STARTED" for task in existing)
+                or db.scalar(select(Actual.ActualID).where(Actual.TaskID.in_(task_ids)).limit(1)) is not None):
+            raise HTTPException(status.HTTP_409_CONFLICT, "作業開始・実績登録済みのタスクは再生成できません。")
         db.execute(
             delete(TaskDependency).where(
                 TaskDependency.PredecessorTaskID.in_(task_ids)
@@ -69,26 +71,24 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
             db.delete(t)
         db.flush()
 
-    # 元にする工程ルートと製品を取得し、属性と数量を生成するタスクへ引き継ぐ。
-    routing = resolve_routing(db, order)
-    product = db.get(Product, routing.ProductID)
-    base_attrs = dict(product.AttributesJSON or {}) if product else {}
+    # オーダーの数量を所要時間計算へ使う。
     qty = float(order.Quantity or 0)
 
+    # 工程番号順に作るタスク。属性はオーダーから複製する。
     tasks: list[Task] = []
-    for seq, step in enumerate(routing.steps, start=1):
-        attrs = {**base_attrs, **(step.AttributesJSON or {}), **(order.AttributesJSON or {})}
+    for seq, process in enumerate(processes, start=1):
+        # この工程に対応するオーダー固有のタスク。
         task = Task(
             OrderID=order.OrderID,
-            RoutingStepID=step.RoutingStepID,
-            TaskNo=str(step.StepNo),
-            TaskName=step.StepName,
+            ProductProcessID=process.ProductProcessID,
+            TaskNo=str(process.SequenceNumber),
+            TaskName=process.ProcessName,
             Sequence=seq,
             Status="NOT_STARTED",
-            AttributesJSON=attrs,
+            AttributesJSON=dict(order.AttributesJSON or {}),
             CreatedBy=user,
         )
-        for sr in step.resources:
+        for sr in process.resources:
             task.options.append(
                 TaskResourceOption(
                     ResourceID=sr.ResourceID,
@@ -105,21 +105,19 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
         tasks.append(task)
     db.flush()
 
-    steps = list(routing.steps)
+    # 前工程の終了から次工程の開始までの待ち時間を引き継ぐ。
     for i in range(1, len(tasks)):
-        prev_step = steps[i - 1]
+        prev_process = processes[i - 1]
         db.add(
             TaskDependency(
                 PredecessorTaskID=tasks[i - 1].TaskID,
                 SuccessorTaskID=tasks[i].TaskID,
                 DependencyType="FS",
-                LagMin=prev_step.MinLagAfterMin or 0,
-                MaxLagMin=prev_step.MaxLagAfterMin,
+                LagMin=prev_process.MinLagAfterMin or 0,
+                MaxLagMin=prev_process.MaxLagAfterMin,
                 CreatedBy=user,
             )
         )
-    if order.RoutingID is None:
-        order.RoutingID = routing.RoutingID
     db.commit()
     for t in tasks:
         db.refresh(t)

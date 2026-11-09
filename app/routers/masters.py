@@ -11,6 +11,11 @@ from app.models import masters as m
 from app.routers.crud import crud_router
 from app.schemas.base import ApiModel, UtcDatetime
 from app.services.calendar_service import working_time
+from app.services.product_validation import (
+    validate_product_process_resource_write,
+    validate_product_process_write,
+    validate_product_write,
+)
 
 routers = [
     crud_router(m.Organization, "/organizations", "Organizations"),
@@ -25,10 +30,9 @@ routers = [
     crud_router(m.ChangeoverMatrix, "/changeover-matrices", "Configuration"),
     crud_router(m.ChangeoverEntry, "/changeover-entries", "Configuration"),
     crud_router(m.PlanProfile, "/plan-profiles", "Configuration"),
-    crud_router(m.Product, "/products", "Products & routings"),
-    crud_router(m.Routing, "/routings", "Products & routings"),
-    crud_router(m.RoutingStep, "/routing-steps", "Products & routings", order_by="StepNo"),
-    crud_router(m.RoutingStepResource, "/routing-step-resources", "Products & routings"),
+    crud_router(m.Product, "/products", "Products & processes", validate_write=validate_product_write),
+    crud_router(m.ProductProcess, "/product-processes", "Products & processes", order_by="SequenceNumber", validate_write=validate_product_process_write),
+    crud_router(m.ProductProcessResource, "/product-process-resources", "Products & processes", validate_write=validate_product_process_resource_write),
 ]
 
 

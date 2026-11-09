@@ -20,7 +20,7 @@ from app.models.types import DateTime, String
 
 # リソース種別の許可値。名称のみをTYPEへ統一し、保存値は維持する。
 RESOURCE_TYPE = ["MACHINE", "PERSON", "TEAM", "ROOM", "OTHER"]
-# 製品の属性区分はPRODUCTとし、プログラム・DB制約・初期データで統一する。
+# 属性定義の区分。製品の属性欄は廃止済みで、PRODUCTは既存の定義値として保持する。
 ENTITY_TYPES = ["PRODUCT", "RESOURCE", "ORDER", "TASK"]
 DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
 TIME_UNITS = ["MINUTE", "DAY"]
@@ -235,60 +235,46 @@ class Product(AuditMixin, SoftDeleteMixin, Base):
 
     # 製品の保存先。テーブル・列・モデルをProduct系の名称に揃える。
     __tablename__ = "M_Product"
-    __table_args__ = (UniqueConstraint("LocationID", "ProductCode"),)
+    __table_args__ = (UniqueConstraint("LocationID", "ProductName"),)
     # 製品を識別する番号。既存データのID値と関連付けを維持する。
     ProductID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    # 製品のコードと、画面に表示する製品名。
-    ProductCode = Column(String(30), nullable=False)
+    # 拠点内で製品を区別する名称。
     ProductName = Column(String(100), nullable=False)
-    # 数量の単位と、ルール判定・段取り替えに使う属性。
-    Unit = Column(String(10), nullable=True)
-    AttributesJSON = Column(JSON, nullable=True)
-
-
-class Routing(AuditMixin, SoftDeleteMixin, Base):
-    """工程ルートマスタ"""
-
-    __tablename__ = "M_Routings"
-    __table_args__ = (UniqueConstraint("ProductID", "Revision"),)
-    RoutingID = Column(Integer, primary_key=True, autoincrement=True)
-    # この工程ルートを使う製品。参照先を新しい製品テーブルへ揃える。
-    ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=False)
-    RoutingName = Column(String(100), nullable=False)
-    Revision = Column(Integer, nullable=False, default=1)
-    IsDefault = Column(Boolean, nullable=False, default=True)
-
-    steps = relationship(
-        "RoutingStep", cascade="all, delete-orphan", order_by="RoutingStep.StepNo", lazy="selectin"
+    # 製品に直接属する工程。番号順にタスクへ展開する。
+    processes = relationship(
+        "ProductProcess", cascade="all, delete-orphan", order_by="ProductProcess.SequenceNumber", lazy="selectin"
     )
 
 
-class RoutingStep(AuditMixin, Base):
-    """工程ルート明細マスタ"""
+class ProductProcess(AuditMixin, Base):
+    """製品に直接属する工程マスタ。"""
 
-    __tablename__ = "M_RoutingSteps"
-    __table_args__ = (UniqueConstraint("RoutingID", "StepNo"),)
-    RoutingStepID = Column(Integer, primary_key=True, autoincrement=True)
-    RoutingID = Column(
-        Integer, ForeignKey("M_Routings.RoutingID", ondelete="CASCADE"), nullable=False
+    __tablename__ = "M_ProductProcesses"
+    __table_args__ = (UniqueConstraint("ProductID", "SequenceNumber"),)
+    # 工程の識別番号と、その工程が属する製品。
+    ProductProcessID = Column(Integer, primary_key=True, autoincrement=True)
+    ProductID = Column(
+        Integer, ForeignKey("M_Product.ProductID", ondelete="CASCADE"), nullable=False
     )
-    StepNo = Column(Integer, nullable=False)
-    StepName = Column(String(100), nullable=False)
+    # 製品内の実行順序と工程の表示名。
+    SequenceNumber = Column(Integer, nullable=False)
+    ProcessName = Column(String(100), nullable=False)
+    # この工程が終わってから次工程を開始するまでの待ち時間。最大の未指定は上限なし。
     MinLagAfterMin = Column(Integer, nullable=False, default=0)
     MaxLagAfterMin = Column(Integer, nullable=True)
-    AttributesJSON = Column(JSON, nullable=True)
 
+    # この工程を実行できる設備または設備グループと所要時間。
     resources = relationship(
-        "RoutingStepResource", cascade="all, delete-orphan", lazy="selectin"
+        "ProductProcessResource", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
-class RoutingStepResource(AuditMixin, Base):
+class ProductProcessResource(AuditMixin, Base):
     """工程リソース候補マスタ — 工程を実行できるリソースまたはグループ。"""
 
-    __tablename__ = "M_RoutingStepResources"
+    __tablename__ = "M_ProductProcessResources"
     __table_args__ = (
         CheckConstraint(
             "(ResourceID IS NULL AND ResourceGroupID IS NOT NULL) OR "
@@ -296,12 +282,15 @@ class RoutingStepResource(AuditMixin, Base):
             name="ResourceOrGroup",
         ),
     )
-    RoutingStepResourceID = Column(Integer, primary_key=True, autoincrement=True)
-    RoutingStepID = Column(
-        Integer, ForeignKey("M_RoutingSteps.RoutingStepID", ondelete="CASCADE"), nullable=False
+    # 実行候補の識別番号と、その候補が属する工程。
+    ProductProcessResourceID = Column(Integer, primary_key=True, autoincrement=True)
+    ProductProcessID = Column(
+        Integer, ForeignKey("M_ProductProcesses.ProductProcessID", ondelete="CASCADE"), nullable=False
     )
+    # 設備またはグループのどちらか一方だけを指定する。
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
+    # 所要時間は準備＋固定＋数量×単位当たり時間。優先度はタスク候補に引き継ぐ。
     SetupMinutes = Column(Integer, nullable=False, default=0)
     FixedMinutes = Column(Integer, nullable=False, default=0)
     MinutesPerUnit = Column(Numeric(12, 4), nullable=False, default=0)

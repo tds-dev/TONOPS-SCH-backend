@@ -59,7 +59,6 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     ParentOrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=True)
     # オーダーの対象製品。ProductIDで製品マスタを参照する。
     ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=True)
-    RoutingID = Column(Integer, ForeignKey("M_Routings.RoutingID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
     CustomerName = Column(String(100), nullable=True)
     ReleaseAt = Column(DateTime, nullable=True)
@@ -85,7 +84,8 @@ class Task(AuditMixin, Base):
     # タスクの所属先は、変更後のオーダーテーブルを参照する。
     OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
     ParentTaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
-    RoutingStepID = Column(Integer, ForeignKey("M_RoutingSteps.RoutingStepID"), nullable=True)
+    # タスク生成元の製品工程。生成済みのタスクと工程の対応を保持する。
+    ProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
     TaskNo = Column(String(30), nullable=False)
     TaskName = Column(String(200), nullable=False)
     Sequence = Column(Integer, nullable=False, default=0)
@@ -148,12 +148,15 @@ class Plan(AuditMixin, Base):
     __tablename__ = "T_Plans"
     __table_args__ = (
         UniqueConstraint("LocationID", "PlanNo"),
+        # 下書き・マスタ・破棄済みを含め、同じ拠点の計画名の重複を防ぐ。
+        UniqueConstraint("LocationID", "PlanName"),
         CheckConstraint(in_check("Status", PLAN_STATUSES), name="Status"),
     )
     PlanID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     PlanNo = Column(String(30), nullable=False)
+    # 画面で計画を識別する名前。同じ拠点内で一意とする。
     PlanName = Column(String(100), nullable=False)
     Status = Column(String(20), nullable=False, default="DRAFT")
     HorizonStart = Column(DateTime, nullable=False)

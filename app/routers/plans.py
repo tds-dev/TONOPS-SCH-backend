@@ -35,7 +35,8 @@ class PlanCreateBody(ApiModel):
     location_id: int
     horizon_start: datetime  # オフセットなしは拠点の現地時刻、ありはそのまま UTC に変換
     horizon_end: datetime
-    plan_name: str | None = None
+    # 画面で識別するための必須名。空欄・文字数・拠点内の重複はサービスで確認する。
+    plan_name: str
     profile_id: int | None = None
     base_plan_id: int | None = None
     use_master_as_base: bool = True

@@ -17,10 +17,10 @@ with patch("app.core.config.get_settings", return_value=Settings(
     _env_file=None, database_url="sqlite:///:memory:", default_user="order-test",
 )):
     from app.core.db import Base, get_db, make_engine
-    from app.models.masters import Location, Organization, Product, Routing, RoutingStep, PlanProfile, Resource
+    from app.models.masters import Location, Organization, Product, ProductProcess, ProductProcessResource, PlanProfile, Resource, ResourceGroup
     from app.models.transactions import Actual, Order, Plan, PlanAssignment, Task
-    from app.routers.crud import crud_router
     from app.routers.orders import routers
+    from app.routers.masters import routers as master_routers
 
 
 # 実際のHTTP接続を開かず、FastAPIの受付処理へリクエストを渡す。
@@ -59,19 +59,18 @@ class OrderCrudTest(unittest.TestCase):
         self.app = FastAPI()
         for router in routers:
             self.app.include_router(router, prefix="/api/v1")
-        self.app.include_router(crud_router(Product, "/products", "Products"), prefix="/api/v1")
+        for router in master_routers:
+            self.app.include_router(router, prefix="/api/v1")
         self.app.dependency_overrides[get_db] = lambda: self.db
         self.db.add(Organization(OrganizationID=1, OrganizationCode="ORG", OrganizationName="組織"))
         self.db.flush()
         self.db.add_all([Location(LocationID=1, OrganizationID=1, LocationCode="A", LocationName="拠点A"),
                          Location(LocationID=2, OrganizationID=1, LocationCode="B", LocationName="拠点B")])
         self.db.flush()
-        self.db.add_all([Product(ProductID=1, LocationID=1, ProductCode="P1", ProductName="製品A"),
-                         Product(ProductID=2, LocationID=2, ProductCode="P2", ProductName="製品B")])
+        self.db.add_all([Product(ProductID=1, LocationID=1, ProductName="製品A"),
+                         Product(ProductID=2, LocationID=2, ProductName="製品B")])
         self.db.flush()
-        self.db.add_all([Routing(RoutingID=1, ProductID=1, RoutingName="工程A"), Routing(RoutingID=2, ProductID=2, RoutingName="工程B")])
-        self.db.flush()
-        self.db.add(RoutingStep(RoutingID=1, StepNo=10, StepName="製造"))
+        self.db.add(ProductProcess(ProductProcessID=1, ProductID=1, SequenceNumber=10, ProcessName="製造"))
         self.db.commit()
 
     # テスト用のDBを閉じ、次のテストへデータを持ち越さない。
@@ -93,7 +92,7 @@ class OrderCrudTest(unittest.TestCase):
     # CRUD全体と、論理削除後に番号・タスク・親の情報が保持されることを確認する。
     def test_crud_preserves_unedited_data_and_tasks(self):
         parent = self.create(orderNo="PARENT")
-        order = self.create(parentOrderId=parent["orderId"], routingId=1, quantity=12.345,
+        order = self.create(parentOrderId=parent["orderId"], quantity=12.345,
                             releaseAt="2026-10-30T09:00:00+09:00", dueAt="2026-10-30T12:00:00+09:00")
         order_id = order["orderId"]
         self.assertEqual(order["releaseAt"], "2026-10-30T00:00:00Z")
@@ -105,7 +104,7 @@ class OrderCrudTest(unittest.TestCase):
         self.assertEqual(len(tasks), 1)
         status, updated = self.call("PATCH", f"/orders/{order_id}", {"orderName": "変更後", "remarks": "備考"})
         self.assertEqual(status, 200, updated)
-        for key in ("parentOrderId", "routingId", "quantity", "releaseAt", "dueAt", "createdAt"):
+        for key in ("parentOrderId", "productId", "quantity", "releaseAt", "dueAt", "createdAt"):
             self.assertEqual(updated[key], order[key])
         self.assertEqual(updated["orderName"], "変更後")
         self.assertEqual(updated["updatedBy"], "order-test")
@@ -120,7 +119,7 @@ class OrderCrudTest(unittest.TestCase):
     def test_rejects_invalid_create(self):
         for values in ({"orderNo": "  "}, {"orderName": "x" * 201}, {"quantity": -1}, {"quantity": 0.0001},
                        {"quantity": 1e15}, {"priority": 0}, {"priority": None}, {"status": "UNKNOWN"},
-                       {"orderType": None}, {"planOwner": "UNKNOWN"}, {"productId": 2}, {"routingId": 2},
+                       {"orderType": None}, {"planOwner": "UNKNOWN"}, {"productId": 2},
                        {"locationId": 999}, {"attributesJSON": []},
                        {"releaseAt": "2026-10-30T12:00:00Z", "dueAt": "2026-10-30T11:00:00Z"}):
             with self.subTest(values=values):
@@ -190,24 +189,140 @@ class OrderCrudTest(unittest.TestCase):
         self.assertEqual(self.call("POST", f"/orders/{order_id}/generate-tasks?replace=true")[0], 200)
         self.assertEqual(self.call("GET", f"/orders/{order_id}/dependencies")[0], 200)
 
-    # オーダー向け検証を指定していない既存マスタのCRUDが変わらないことを確認する。
+    # 名称だけの製品マスタでも登録・編集・削除が使えることを確認する。
     def test_other_crud_keeps_existing_behavior(self):
-        status, product = self.call("POST", "/products", {"locationId": 1, "productCode": "NEW", "productName": "新製品"})
+        status, product = self.call("POST", "/products", {"locationId": 1, "productName": "新製品"})
         self.assertEqual(status, 201, product)
         self.assertEqual(self.call("PATCH", f'/products/{product["productId"]}', {"productName": "更新"})[0], 200)
         self.assertEqual(self.call("DELETE", f'/products/{product["productId"]}')[0], 204)
 
-    # 既存の製品・ルートが削除済みでも、参照を変えない名称編集は妨げない。
+    # 既存の製品が削除済みでも、参照を変えない名称編集は妨げない。
     def test_deleted_master_references_are_preserved(self):
-        order = self.create(routingId=1)
+        order = self.create()
         self.db.get(Product, 1).DeleteFlag = True
-        self.db.get(Routing, 1).DeleteFlag = True
         self.db.commit()
         status, updated = self.call("PATCH", f'/orders/{order["orderId"]}', {"orderName": "参照を保持"})
         self.assertEqual(status, 200, updated)
         self.assertEqual(updated["productId"], 1)
-        self.assertEqual(updated["routingId"], 1)
+        self.assertNotIn("routingId", updated)
         self.assertEqual(self.call("POST", "/orders", {"locationId": 1, "orderNo": "NEW", "orderName": "無効参照", "productId": 1})[0], 422)
+
+    # 廃止したルート・製品コード・単位・製品属性をAPIへ返さないことを確認する。
+    def test_product_contract_has_no_route_or_removed_fields(self):
+        # 新しい製品・オーダーの応答に含まれる項目。
+        status, product = self.call("GET", "/products/1")
+        self.assertEqual(status, 200, product)
+        for key in ("productCode", "unit", "attributesJSON"):
+            self.assertNotIn(key, product)
+        self.assertNotIn("routingId", self.create())
+        self.assertEqual(self.call("GET", "/routings")[0], 404)
+        self.assertEqual(self.call("GET", "/routing-steps")[0], 404)
+        self.assertEqual(self.call("GET", "/routing-step-resources")[0], 404)
+
+    # 製品名は拠点内で重複させず、別拠点なら同じ名称を登録できることを確認する。
+    def test_product_names_are_unique_within_location(self):
+        self.assertEqual(self.call("POST", "/products", {"locationId": 1, "productName": " 製品A "})[0], 409)
+        self.assertEqual(self.call("POST", "/products", {"locationId": 2, "productName": "製品A"})[0], 201)
+        self.assertEqual(self.call("POST", "/products", {"locationId": 1, "productName": " "})[0], 422)
+
+    # 工程の順序重複と待ち時間の逆転を拒否し、工程を製品へ直接保存する。
+    def test_process_api_validates_sequence_and_waits(self):
+        # 同じ製品に追加する工程の入力内容。
+        body = {"productId": 1, "sequenceNumber": 20, "processName": "仕上げ", "minLagAfterMin": 5, "maxLagAfterMin": 10}
+        status, process = self.call("POST", "/product-processes", body)
+        self.assertEqual(status, 201, process)
+        self.assertEqual(process["productId"], 1)
+        self.assertIn("productProcessId", process)
+        self.assertNotIn("attributesJSON", process)
+        self.assertEqual(self.call("POST", "/product-processes", body)[0], 409)
+        self.assertEqual(self.call("POST", "/product-processes", {**body, "productId": 2})[0], 201)
+        self.assertEqual(self.call("PATCH", f'/product-processes/{process["productProcessId"]}', {"maxLagAfterMin": 4})[0], 422)
+        self.assertEqual(self.call("PATCH", f'/product-processes/{process["productProcessId"]}', {"sequenceNumber": 0})[0], 422)
+
+    # 設備候補の所属拠点、片方指定、時間の範囲をサーバーでも確認する。
+    def test_process_resource_api_checks_scope_and_duration(self):
+        self.db.add_all([
+            Resource(ResourceID=1, LocationID=1, ResourceCode="LOCAL", ResourceName="同じ拠点"),
+            Resource(ResourceID=2, LocationID=2, ResourceCode="OTHER", ResourceName="別拠点"),
+            ResourceGroup(ResourceGroupID=1, LocationID=1, GroupCode="G", GroupName="設備群"),
+        ])
+        self.db.commit()
+        # 有効な候補。既定値で補う他の時間は0にする。
+        body = {"productProcessId": 1, "resourceId": 1, "fixedMinutes": 5}
+        status, candidate = self.call("POST", "/product-process-resources", body)
+        self.assertEqual(status, 201, candidate)
+        self.assertEqual(candidate["productProcessId"], 1)
+        for invalid in ({"resourceId": 2}, {"resourceId": None}, {"resourceGroupId": 1},
+                        {"fixedMinutes": -1}, {"fixedMinutes": None}, {"fixedMinutes": 0},
+                        {"minutesPerUnit": 0.00001}, {"minutesPerUnit": 100000000}):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(self.call("POST", "/product-process-resources", {**body, **invalid})[0], 422)
+
+    # 登録順と異なる工程番号順で生成し、候補・時間・待ち時間・オーダー属性を保持する。
+    def test_product_process_generation_preserves_execution_data(self):
+        # 既存の工程を後続にし、後から登録する工程を先行にする。
+        self.db.get(ProductProcess, 1).SequenceNumber = 30
+        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceCode="R", ResourceName="設備"))
+        self.db.add(ResourceGroup(ResourceGroupID=1, LocationID=1, GroupCode="G", GroupName="設備群"))
+        self.db.add(ProductProcess(ProductProcessID=2, ProductID=1, SequenceNumber=10, ProcessName="準備", MinLagAfterMin=3, MaxLagAfterMin=9))
+        self.db.flush()
+        self.db.add_all([
+            ProductProcessResource(ProductProcessID=2, ResourceID=1, SetupMinutes=2, FixedMinutes=3, MinutesPerUnit=0.125, Priority=2),
+            ProductProcessResource(ProductProcessID=1, ResourceGroupID=1, FixedMinutes=7),
+        ])
+        self.db.commit()
+        # 属性はオーダーから各タスクへ引き継ぐ。
+        order = self.create(quantity=3, attributesJSON={"family": "A"})
+        status, tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')
+        self.assertEqual(status, 200, tasks)
+        self.assertEqual([task["productProcessId"] for task in tasks], [2, 1])
+        self.assertEqual([task["taskNo"] for task in tasks], ["10", "30"])
+        self.assertEqual([task["taskName"] for task in tasks], ["準備", "製造"])
+        self.assertEqual(tasks[0]["options"][0]["durationMin"], 6)
+        self.assertEqual(tasks[0]["options"][0]["priority"], 2)
+        self.assertEqual(tasks[1]["options"][0]["resourceGroupId"], 1)
+        self.assertEqual(tasks[1]["options"][0]["durationMin"], 7)
+        self.assertTrue(all(task["attributesJSON"] == {"family": "A"} for task in tasks))
+        # 先行工程に指定した待ち時間が、生成された前後関係へ移る。
+        status, dependencies = self.call("GET", f'/orders/{order["orderId"]}/dependencies')
+        self.assertEqual(status, 200, dependencies)
+        self.assertEqual(len(dependencies), 1)
+        self.assertEqual((dependencies[0]["lagMin"], dependencies[0]["maxLagMin"]), (3, 9))
+        # 工程編集後の再生成でも、以前取得した工程一覧を使い回さない。
+        self.assertEqual(self.call("PATCH", "/product-processes/2", {"processName": "準備変更"})[0], 200)
+        self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[1][0]["taskName"], "準備変更")
+
+    # 製品未指定・工程未登録で生成を拒否し、入力不備の再生成で既存タスクを失わない。
+    def test_generation_requires_product_processes_and_preserves_existing_tasks(self):
+        # 製品未指定のオーダー自体は登録できるが、タスクは生成しない。
+        no_product = self.create(orderNo="NO-PRODUCT", productId=None)
+        self.assertEqual(self.call("POST", f'/orders/{no_product["orderId"]}/generate-tasks')[0], 422)
+        no_process = self.create(orderNo="NO-PROCESS", locationId=2, productId=2)
+        self.assertEqual(self.call("POST", f'/orders/{no_process["orderId"]}/generate-tasks')[0], 422)
+        # 登録後に製品が無効になった場合も、生成済みタスクを保持する。
+        order = self.create()
+        status, tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')
+        self.assertEqual(status, 200, tasks)
+        self.db.get(Product, 1).DeleteFlag = True
+        self.db.commit()
+        self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 422)
+        self.assertIsNotNone(self.db.get(Task, tasks[0]["taskId"]))
+
+    # 実績登録済みや開始済みのタスクを、再生成で削除しないことを確認する。
+    def test_regeneration_protects_started_and_actual_tasks(self):
+        # 作業を開始した生成済みタスク。
+        order = self.create()
+        status, tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')
+        self.assertEqual(status, 200, tasks)
+        task = self.db.get(Task, tasks[0]["taskId"])
+        task.Status = "IN_PROGRESS"
+        self.db.commit()
+        self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 409)
+        task.Status = "NOT_STARTED"
+        self.db.add(Actual(TaskID=task.TaskID, Status="DONE"))
+        self.db.commit()
+        self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 409)
+        self.assertIsNotNone(self.db.get(Task, task.TaskID))
 
 
 if __name__ == "__main__":

@@ -11,9 +11,8 @@ from app.models.masters import (  # noqa: F401
     PlanProfile,
     Resource,
     ResourceGroup,
-    Routing,
-    RoutingStep,
-    RoutingStepResource,
+    ProductProcess,
+    ProductProcessResource,
     Rule,
     Location,
 )

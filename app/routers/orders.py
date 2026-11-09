@@ -33,7 +33,7 @@ def post_generate_tasks(
     db: Session = Depends(get_db),
     user: str = Depends(current_user),
 ):
-    """オーダーの工程ルートを展開し、タスク・リソース候補・依存関係を作成する。"""
+    """オーダーの製品工程を展開し、タスク・リソース候補・依存関係を作成する。"""
     order = db.get(Order, order_id)
     if order is None or order.DeleteFlag:
         raise HTTPException(404, f"Order {order_id} not found")

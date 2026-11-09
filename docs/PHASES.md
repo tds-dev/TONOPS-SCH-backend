@@ -1,6 +1,8 @@
 <!-- SCHの実装フェーズごとの機能と確認事項を記録する資料。 -->
 # 実装フェーズ
 
+2026-11-09：本文は各フェーズ当時の記録。現在の製品マスタは `M_Product`→`M_ProductProcesses`→`M_ProductProcessResources` の3階層で、工程ルート・版・既定指定、製品のコード・単位・属性、工程の属性は廃止した。現在のテーブル・APIは [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) の製品・工程節を参照。
+
 > フェーズ 4 までは 1 つのリポジトリ（`backend/` と `frontend/`）で開発し、その後
 > [TONOPS-SCH-backend](https://github.com/tds-dev/TONOPS-SCH-backend) と
 > [TONOPS-SCH-frontend](https://github.com/tds-dev/TONOPS-SCH-frontend) に分割しました（コミット履歴はそれぞれに残っています）。

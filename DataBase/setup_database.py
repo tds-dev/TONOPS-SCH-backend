@@ -11,12 +11,17 @@ python -m DataBase.setup_database
 
 --------------------------------------------------------------------------------------------------------------
 DataBase配下のDB・テーブル作成とデモデータ登録を行う初期設定用プログラム。
+製品・工程・実行候補をM_Product・M_ProductProcesses・M_ProductProcessResourcesへ登録する。
+工程ルートの選択・版管理は行わず、工程はProductIDで製品に直接紐づける。
+製品コード・単位・製品と工程の属性は持たず、分類属性はオーダーに登録する。
 
 バックエンドのルートで python -m DataBase.setup_database を実行する。
 query配下のSQLはSSMS用として保持し、この処理ではモデルから直接DBを操作する。
 拠点はLocationモデルを使い、M_LocationsとLocationID等の定義で作成・登録する。
 計算実行の保存先は、SolverRunモデルのT_SolverRunResultとして作成する。
-デモはパン6製品と「こねる → 焼く → 包装する」のルートを登録する。
+デモはパン6製品、製品工程18件、実行候補18件、店舗向けオーダー7件、タスク21件、下書き計画2件を登録する。
+計画名は「各店舗向けパン製造・通常計画」「各店舗向けパン製造・見直し計画」とする。
+新規テーブルには、同じ拠点内で計画名を重複させない現在のモデル定義を適用する。
 デモ組織が登録済みの場合は、以前の内容も含めて既存データを保持する。
 """
 import argparse
@@ -78,15 +83,17 @@ def connection_help(url: URL, exc: DBAPIError) -> str:
 
 
 def setup_database() -> None:
-    """DB作成、Location形式の未作成テーブル追加、未登録デモデータ追加を順に行う。"""
+    """新しい3階層のDB・テーブル作成と、未登録デモデータの追加を順に行う。"""
     ensure_database()
-    # M_Locations・T_SolverRunResult等の現在のモデル定義を使い、既存のテーブルとデータは保持する。
+    # 現在のモデルで未作成テーブルを追加する。既存DBの列削除・名称変更は行わないため、構成変更後は新規DBを使う。
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         # 既存の登録済み判定を維持し、デモ組織があれば重複登録しない。
         demo_id = db.scalar(select(Organization.OrganizationID).where(Organization.OrganizationCode == "DEMO"))
         if demo_id is None:
-            seed_demo(db)
+            # 初期データの登録件数を受け取り、下書き計画も作成されたことを通知する。
+            result = seed_demo(db)
+            print(f"パン工場の仮データを登録しました（オーダー{result['orders']}件・下書き計画{result['plans']}件）。")
         else:
             # 登録済みの内容を保持したことを明示し、新しいデモへ更新されたとの誤解を避ける。
             print("デモデータは登録済みのため、追加・変更を行いませんでした。")

@@ -124,8 +124,8 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
             t, j, product = detail[a.TaskID]
             assignments.append({
                 "assignmentId": a.AssignmentID, "taskId": t.TaskID, "orderNo": j.OrderNo, "taskName": t.TaskName,
-                "productCode": product.ProductCode if product else None, "productName": product.ProductName if product else None,
-                "quantity": coerce(j.Quantity), "unit": product.Unit if product else None,
+                "productName": product.ProductName if product else None,
+                "quantity": coerce(j.Quantity),
                 "start": utc_to_local(a.StartAt, tz).strftime("%H:%M"),
                 "end": utc_to_local(a.EndAt, tz).strftime("%H:%M"),
                 "startAt": a.StartAt.isoformat() + "Z", "endAt": a.EndAt.isoformat() + "Z",

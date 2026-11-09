@@ -1,5 +1,6 @@
--- DataBase/queryに配置した、SSMSで手動実行するテーブル作成SQL。
--- 新規DB向けの作成SQL。既存DBの名称変更用SQLではない。
+-- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
+
+-- 既存DBを作り直した後、create_database_sqlserver.sql、このSQL、seed_demo_sqlserver.sqlの順で実行する。
 
 USE [TONOPS-SCH];
 GO
@@ -76,24 +77,6 @@ CREATE TABLE [M_Calendars] (
 );
 GO
 
-CREATE TABLE [M_Product] (
-	[ProductID] INTEGER NOT NULL IDENTITY, 
-	[LocationID] INTEGER NOT NULL, 
-	[ProductCode] NVARCHAR(30) NOT NULL, 
-	[ProductName] NVARCHAR(100) NOT NULL, 
-	[Unit] NVARCHAR(10) NULL, 
-	[AttributesJSON] NVARCHAR(max) NULL, 
-	[CreatedAt] DATETIME2 NOT NULL, 
-	[CreatedBy] NVARCHAR(254) NULL, 
-	[UpdatedAt] DATETIME2 NULL, 
-	[UpdatedBy] NVARCHAR(254) NULL, 
-	[DeleteFlag] BIT NOT NULL, 
-	CONSTRAINT [PK_M_Product] PRIMARY KEY ([ProductID]), 
-	CONSTRAINT [UQ_M_Product_LocationID_ProductCode] UNIQUE ([LocationID], [ProductCode]), 
-	CONSTRAINT [FK_M_Product_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
-);
-GO
-
 CREATE TABLE [M_PlanProfiles] (
 	[ProfileID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
@@ -110,6 +93,21 @@ CREATE TABLE [M_PlanProfiles] (
 	CONSTRAINT [PK_M_PlanProfiles] PRIMARY KEY ([ProfileID]), 
 	CONSTRAINT [CK_M_PlanProfiles_TimeUnit] CHECK (TimeUnit IN ('MINUTE','DAY')), 
 	CONSTRAINT [FK_M_PlanProfiles_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
+);
+GO
+
+CREATE TABLE [M_Product] (
+	[ProductID] INTEGER NOT NULL IDENTITY, 
+	[LocationID] INTEGER NOT NULL, 
+	[ProductName] NVARCHAR(100) NOT NULL, 
+	[CreatedAt] DATETIME2 NOT NULL, 
+	[CreatedBy] NVARCHAR(254) NULL, 
+	[UpdatedAt] DATETIME2 NULL, 
+	[UpdatedBy] NVARCHAR(254) NULL, 
+	[DeleteFlag] BIT NOT NULL, 
+	CONSTRAINT [PK_M_Product] PRIMARY KEY ([ProductID]), 
+	CONSTRAINT [UQ_M_Product_LocationID_ProductName] UNIQUE ([LocationID], [ProductName]), 
+	CONSTRAINT [FK_M_Product_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
 
@@ -204,6 +202,23 @@ CREATE TABLE [M_ChangeoverMatrices] (
 );
 GO
 
+CREATE TABLE [M_ProductProcesses] (
+	[ProductProcessID] INTEGER NOT NULL IDENTITY, 
+	[ProductID] INTEGER NOT NULL, 
+	[SequenceNumber] INTEGER NOT NULL, 
+	[ProcessName] NVARCHAR(100) NOT NULL, 
+	[MinLagAfterMin] INTEGER NOT NULL, 
+	[MaxLagAfterMin] INTEGER NULL, 
+	[CreatedAt] DATETIME2 NOT NULL, 
+	[CreatedBy] NVARCHAR(254) NULL, 
+	[UpdatedAt] DATETIME2 NULL, 
+	[UpdatedBy] NVARCHAR(254) NULL, 
+	CONSTRAINT [PK_M_ProductProcesses] PRIMARY KEY ([ProductProcessID]), 
+	CONSTRAINT [UQ_M_ProductProcesses_ProductID_SequenceNumber] UNIQUE ([ProductID], [SequenceNumber]), 
+	CONSTRAINT [FK_M_ProductProcesses_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]) ON DELETE CASCADE
+);
+GO
+
 CREATE TABLE [M_Resources] (
 	[ResourceID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
@@ -231,20 +246,36 @@ CREATE TABLE [M_Resources] (
 );
 GO
 
-CREATE TABLE [M_Routings] (
-	[RoutingID] INTEGER NOT NULL IDENTITY, 
-	[ProductID] INTEGER NOT NULL, 
-	[RoutingName] NVARCHAR(100) NOT NULL, 
-	[Revision] INTEGER NOT NULL, 
-	[IsDefault] BIT NOT NULL, 
+CREATE TABLE [T_Orders] (
+	[OrderID] INTEGER NOT NULL IDENTITY, 
+	[LocationID] INTEGER NOT NULL, 
+	[OrderNo] NVARCHAR(30) NOT NULL, 
+	[OrderName] NVARCHAR(200) NOT NULL, 
+	[OrderType] NVARCHAR(20) NOT NULL, 
+	[ParentOrderID] INTEGER NULL, 
+	[ProductID] INTEGER NULL, 
+	[Quantity] NUMERIC(18, 3) NULL, 
+	[CustomerName] NVARCHAR(100) NULL, 
+	[ReleaseAt] DATETIME2 NULL, 
+	[DueAt] DATETIME2 NULL, 
+	[Priority] INTEGER NOT NULL, 
+	[Status] NVARCHAR(20) NOT NULL, 
+	[PlanOwner] NVARCHAR(20) NOT NULL, 
+	[AttributesJSON] NVARCHAR(max) NULL, 
+	[Remarks] NVARCHAR(500) NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
-	CONSTRAINT [PK_M_Routings] PRIMARY KEY ([RoutingID]), 
-	CONSTRAINT [UQ_M_Routings_ProductID_Revision] UNIQUE ([ProductID], [Revision]), 
-	CONSTRAINT [FK_M_Routings_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
+	CONSTRAINT [PK_T_Orders] PRIMARY KEY ([OrderID]), 
+	CONSTRAINT [UQ_T_Orders_LocationID_OrderNo] UNIQUE ([LocationID], [OrderNo]), 
+	CONSTRAINT [CK_T_Orders_OrderType] CHECK (OrderType IN ('ORDER','PROJECT')), 
+	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
+	CONSTRAINT [CK_T_Orders_PlanOwner] CHECK (PlanOwner IN ('SCHEDULER','EXTERNAL')), 
+	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
+	CONSTRAINT [FK_T_Orders_ParentOrderID_T_Orders] FOREIGN KEY([ParentOrderID]) REFERENCES [T_Orders] ([OrderID]), 
+	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
 );
 GO
 
@@ -269,6 +300,7 @@ CREATE TABLE [T_Plans] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_T_Plans] PRIMARY KEY ([PlanID]), 
 	CONSTRAINT [UQ_T_Plans_LocationID_PlanNo] UNIQUE ([LocationID], [PlanNo]), 
+	CONSTRAINT [UQ_T_Plans_LocationID_PlanName] UNIQUE ([LocationID], [PlanName]), 
 	CONSTRAINT [CK_T_Plans_Status] CHECK (Status IN ('DRAFT','MASTER','SUPERSEDED','DISCARDED','ARCHIVED')), 
 	CONSTRAINT [FK_T_Plans_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_T_Plans_ProfileID_M_PlanProfiles] FOREIGN KEY([ProfileID]) REFERENCES [M_PlanProfiles] ([ProfileID]), 
@@ -294,56 +326,24 @@ CREATE TABLE [M_ChangeoverEntries] (
 );
 GO
 
-CREATE TABLE [M_RoutingSteps] (
-	[RoutingStepID] INTEGER NOT NULL IDENTITY, 
-	[RoutingID] INTEGER NOT NULL, 
-	[StepNo] INTEGER NOT NULL, 
-	[StepName] NVARCHAR(100) NOT NULL, 
-	[MinLagAfterMin] INTEGER NOT NULL, 
-	[MaxLagAfterMin] INTEGER NULL, 
-	[AttributesJSON] NVARCHAR(max) NULL, 
-	[CreatedAt] DATETIME2 NOT NULL, 
-	[CreatedBy] NVARCHAR(254) NULL, 
-	[UpdatedAt] DATETIME2 NULL, 
-	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_RoutingSteps] PRIMARY KEY ([RoutingStepID]), 
-	CONSTRAINT [UQ_M_RoutingSteps_RoutingID_StepNo] UNIQUE ([RoutingID], [StepNo]), 
-	CONSTRAINT [FK_M_RoutingSteps_RoutingID_M_Routings] FOREIGN KEY([RoutingID]) REFERENCES [M_Routings] ([RoutingID]) ON DELETE CASCADE
-);
-GO
-
-CREATE TABLE [T_Orders] (
-	[OrderID] INTEGER NOT NULL IDENTITY, 
-	[LocationID] INTEGER NOT NULL, 
-	[OrderNo] NVARCHAR(30) NOT NULL, 
-	[OrderName] NVARCHAR(200) NOT NULL, 
-	[OrderType] NVARCHAR(20) NOT NULL, 
-	[ParentOrderID] INTEGER NULL, 
-	[ProductID] INTEGER NULL, 
-	[RoutingID] INTEGER NULL, 
-	[Quantity] NUMERIC(18, 3) NULL, 
-	[CustomerName] NVARCHAR(100) NULL, 
-	[ReleaseAt] DATETIME2 NULL, 
-	[DueAt] DATETIME2 NULL, 
+CREATE TABLE [M_ProductProcessResources] (
+	[ProductProcessResourceID] INTEGER NOT NULL IDENTITY, 
+	[ProductProcessID] INTEGER NOT NULL, 
+	[ResourceID] INTEGER NULL, 
+	[ResourceGroupID] INTEGER NULL, 
+	[SetupMinutes] INTEGER NOT NULL, 
+	[FixedMinutes] INTEGER NOT NULL, 
+	[MinutesPerUnit] NUMERIC(12, 4) NOT NULL, 
 	[Priority] INTEGER NOT NULL, 
-	[Status] NVARCHAR(20) NOT NULL, 
-	[PlanOwner] NVARCHAR(20) NOT NULL, 
-	[AttributesJSON] NVARCHAR(max) NULL, 
-	[Remarks] NVARCHAR(500) NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
-	[DeleteFlag] BIT NOT NULL, 
-	CONSTRAINT [PK_T_Orders] PRIMARY KEY ([OrderID]), 
-	CONSTRAINT [UQ_T_Orders_LocationID_OrderNo] UNIQUE ([LocationID], [OrderNo]), 
-	CONSTRAINT [CK_T_Orders_OrderType] CHECK (OrderType IN ('ORDER','PROJECT')), 
-	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
-	CONSTRAINT [CK_T_Orders_PlanOwner] CHECK (PlanOwner IN ('SCHEDULER','EXTERNAL')), 
-	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
-	CONSTRAINT [FK_T_Orders_ParentOrderID_T_Orders] FOREIGN KEY([ParentOrderID]) REFERENCES [T_Orders] ([OrderID]), 
-	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]), 
-	CONSTRAINT [FK_T_Orders_RoutingID_M_Routings] FOREIGN KEY([RoutingID]) REFERENCES [M_Routings] ([RoutingID])
+	CONSTRAINT [PK_M_ProductProcessResources] PRIMARY KEY ([ProductProcessResourceID]), 
+	CONSTRAINT [CK_M_ProductProcessResources_ResourceOrGroup] CHECK ((ResourceID IS NULL AND ResourceGroupID IS NOT NULL) OR (ResourceID IS NOT NULL AND ResourceGroupID IS NULL)), 
+	CONSTRAINT [FK_M_ProductProcessResources_ProductProcessID_M_ProductProcesses] FOREIGN KEY([ProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID]) ON DELETE CASCADE, 
+	CONSTRAINT [FK_M_ProductProcessResources_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID]), 
+	CONSTRAINT [FK_M_ProductProcessResources_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID])
 );
 GO
 
@@ -386,32 +386,11 @@ GO
 CREATE INDEX [IX_T_SolverRunResult_Status_RequestedAt] ON [T_SolverRunResult] ([Status], [RequestedAt]);
 GO
 
-CREATE TABLE [M_RoutingStepResources] (
-	[RoutingStepResourceID] INTEGER NOT NULL IDENTITY, 
-	[RoutingStepID] INTEGER NOT NULL, 
-	[ResourceID] INTEGER NULL, 
-	[ResourceGroupID] INTEGER NULL, 
-	[SetupMinutes] INTEGER NOT NULL, 
-	[FixedMinutes] INTEGER NOT NULL, 
-	[MinutesPerUnit] NUMERIC(12, 4) NOT NULL, 
-	[Priority] INTEGER NOT NULL, 
-	[CreatedAt] DATETIME2 NOT NULL, 
-	[CreatedBy] NVARCHAR(254) NULL, 
-	[UpdatedAt] DATETIME2 NULL, 
-	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_RoutingStepResources] PRIMARY KEY ([RoutingStepResourceID]), 
-	CONSTRAINT [CK_M_RoutingStepResources_ResourceOrGroup] CHECK ((ResourceID IS NULL AND ResourceGroupID IS NOT NULL) OR (ResourceID IS NOT NULL AND ResourceGroupID IS NULL)), 
-	CONSTRAINT [FK_M_RoutingStepResources_RoutingStepID_M_RoutingSteps] FOREIGN KEY([RoutingStepID]) REFERENCES [M_RoutingSteps] ([RoutingStepID]) ON DELETE CASCADE, 
-	CONSTRAINT [FK_M_RoutingStepResources_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID]), 
-	CONSTRAINT [FK_M_RoutingStepResources_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID])
-);
-GO
-
 CREATE TABLE [T_Tasks] (
 	[TaskID] INTEGER NOT NULL IDENTITY, 
 	[OrderID] INTEGER NOT NULL, 
 	[ParentTaskID] INTEGER NULL, 
-	[RoutingStepID] INTEGER NULL, 
+	[ProductProcessID] INTEGER NULL, 
 	[TaskNo] NVARCHAR(30) NOT NULL, 
 	[TaskName] NVARCHAR(200) NOT NULL, 
 	[Sequence] INTEGER NOT NULL, 
@@ -432,7 +411,7 @@ CREATE TABLE [T_Tasks] (
 	CONSTRAINT [CK_T_Tasks_Status] CHECK (Status IN ('NOT_STARTED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [FK_T_Tasks_OrderID_T_Orders] FOREIGN KEY([OrderID]) REFERENCES [T_Orders] ([OrderID]), 
 	CONSTRAINT [FK_T_Tasks_ParentTaskID_T_Tasks] FOREIGN KEY([ParentTaskID]) REFERENCES [T_Tasks] ([TaskID]), 
-	CONSTRAINT [FK_T_Tasks_RoutingStepID_M_RoutingSteps] FOREIGN KEY([RoutingStepID]) REFERENCES [M_RoutingSteps] ([RoutingStepID])
+	CONSTRAINT [FK_T_Tasks_ProductProcessID_M_ProductProcesses] FOREIGN KEY([ProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID])
 );
 GO
 
