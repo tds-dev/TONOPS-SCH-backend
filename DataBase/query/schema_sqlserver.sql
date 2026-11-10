@@ -1,4 +1,5 @@
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
+-- 工程番号はアプリの保存処理で製品ごとに1からの連番へ整え、重複指定時は順番を交換する。
 
 -- 既存DBを作り直した後、create_database_sqlserver.sql、このSQL、seed_demo_sqlserver.sqlの順で実行する。
 

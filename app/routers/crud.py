@@ -45,6 +45,8 @@ def _parse(value: str, py: Any) -> Any:
 def crud_router(
     model: type, prefix: str, tag: str, order_by: str | None = None,
     validate_write: Callable[[Session, Any, dict[str, Any]], None] | None = None,
+    write_handler: Callable[[Session, Any, dict[str, Any], str], Any] | None = None,
+    delete_handler: Callable[[Session, Any, str], None] | None = None,
 ) -> APIRouter:
     Read, Create, Update = schemas_for(model)
     pk = _pk_column(model)
@@ -61,12 +63,19 @@ def crud_router(
         return obj
 
     # 変更を保存し、DB制約違反の場合は保存を取り消して理由を返す。
-    def commit(db: Session):
+    def commit(db: Session, action: Callable[[], Any]):
         try:
+            # 複数行の入れ替えも含め、途中の保存と最終確定を一つのトランザクションで扱う。
+            result = action()
             db.commit()
+            return result
         except IntegrityError as exc:
             db.rollback()
             raise HTTPException(status.HTTP_409_CONFLICT, f"Constraint violation: {exc.orig}") from exc
+        except Exception:
+            # 検証失敗や途中の例外でも、番号の一時退避を含めて保存前の状態へ戻す。
+            db.rollback()
+            raise
 
     # モデルの項目名に一致する検索条件と削除状態で一覧を絞り込む。
     @router.get("", response_model=list[Read])
@@ -93,11 +102,16 @@ def crud_router(
     def create_record(body: Create, db: Session = Depends(get_db), user: str = Depends(current_user)):
         # 個別の確認処理があるモデルだけ、保存前に入力を検証する。
         values = body.model_dump(exclude_unset=True)
-        if validate_write is not None:
-            validate_write(db, None, values)
-        obj = model(**values, CreatedBy=user)
-        db.add(obj)
-        commit(db)
+        # 個別の保存方法が必要なマスタだけ専用処理へ委ねる。
+        def create():
+            if write_handler is not None:
+                return write_handler(db, None, values, user)
+            if validate_write is not None:
+                validate_write(db, None, values)
+            obj = model(**values, CreatedBy=user)
+            db.add(obj)
+            return obj
+        obj = commit(db, create)
         db.refresh(obj)
         return obj
 
@@ -109,12 +123,17 @@ def crud_router(
         obj = get_or_404(db, obj_id)
         # 元データを書き換える前に、変更後の値の組合せを確認する。
         values = body.model_dump(exclude_unset=True)
-        if validate_write is not None:
-            validate_write(db, obj, values)
-        for key, value in values.items():
-            setattr(obj, key, value)
-        obj.UpdatedBy = user
-        commit(db)
+        # 標準の部分更新か、同じ製品の複数工程を更新する処理を選ぶ。
+        def update():
+            if write_handler is not None:
+                return write_handler(db, obj, values, user)
+            if validate_write is not None:
+                validate_write(db, obj, values)
+            for key, value in values.items():
+                setattr(obj, key, value)
+            obj.UpdatedBy = user
+            return obj
+        obj = commit(db, update)
         db.refresh(obj)
         return obj
 
@@ -122,12 +141,16 @@ def crud_router(
     @router.delete("/{obj_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_record(obj_id: int, db: Session = Depends(get_db), user: str = Depends(current_user)):
         obj = get_or_404(db, obj_id)
-        if has_delete_flag:
-            obj.DeleteFlag = True
-            obj.UpdatedBy = user
-        else:
-            db.delete(obj)
-        commit(db)
+        # 工程削除後の番号詰めなど、関連行の更新もまとめて確定する。
+        def remove():
+            if delete_handler is not None:
+                delete_handler(db, obj, user)
+            elif has_delete_flag:
+                obj.DeleteFlag = True
+                obj.UpdatedBy = user
+            else:
+                db.delete(obj)
+        commit(db, remove)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router

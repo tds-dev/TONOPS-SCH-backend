@@ -117,9 +117,9 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         # 工程は製品ごとのひな形、タスクはオーダーごとの実行単位。時間は準備＋固定＋数量×単位時間で求める。
         # こねた後の60分を発酵、焼いた後の30分を冷却として簡略表現する。
         for no, process_name, grp, setup, fixed, mpu, lag in [
-            (10, "こねる", "KNEAD", 10, 20, 0.05, 60),
-            (20, "焼く", "BAKE", 10, 25, 0.10, 30),
-            (30, "包装する", "PACK", 5, 0, 0.15, 0),
+            (1, "こねる", "KNEAD", 10, 20, 0.05, 60),
+            (2, "焼く", "BAKE", 10, 25, 0.10, 30),
+            (3, "包装する", "PACK", 5, 0, 0.15, 0),
         ]:
             # 工程の実行順序、工程名、次工程までの待ち時間。
             process = m.ProductProcess(SequenceNumber=no, ProcessName=process_name, MinLagAfterMin=lag, CreatedBy=USER)

@@ -70,7 +70,7 @@ class OrderCrudTest(unittest.TestCase):
         self.db.add_all([Product(ProductID=1, LocationID=1, ProductName="製品A"),
                          Product(ProductID=2, LocationID=2, ProductName="製品B")])
         self.db.flush()
-        self.db.add(ProductProcess(ProductProcessID=1, ProductID=1, SequenceNumber=10, ProcessName="製造"))
+        self.db.add(ProductProcess(ProductProcessID=1, ProductID=1, SequenceNumber=1, ProcessName="製造"))
         self.db.commit()
 
     # テスト用のDBを閉じ、次のテストへデータを持ち越さない。
@@ -225,17 +225,17 @@ class OrderCrudTest(unittest.TestCase):
         self.assertEqual(self.call("POST", "/products", {"locationId": 2, "productName": "製品A"})[0], 201)
         self.assertEqual(self.call("POST", "/products", {"locationId": 1, "productName": " "})[0], 422)
 
-    # 工程の順序重複と待ち時間の逆転を拒否し、工程を製品へ直接保存する。
+    # 指定位置への追加と、待ち時間・工程番号の入力範囲を確認する。
     def test_process_api_validates_sequence_and_waits(self):
         # 同じ製品に追加する工程の入力内容。
-        body = {"productId": 1, "sequenceNumber": 20, "processName": "仕上げ", "minLagAfterMin": 5, "maxLagAfterMin": 10}
+        body = {"productId": 1, "sequenceNumber": 2, "processName": "仕上げ", "minLagAfterMin": 5, "maxLagAfterMin": 10}
         status, process = self.call("POST", "/product-processes", body)
         self.assertEqual(status, 201, process)
         self.assertEqual(process["productId"], 1)
         self.assertIn("productProcessId", process)
         self.assertNotIn("attributesJSON", process)
-        self.assertEqual(self.call("POST", "/product-processes", body)[0], 409)
-        self.assertEqual(self.call("POST", "/product-processes", {**body, "productId": 2})[0], 201)
+        self.assertEqual(self.call("POST", "/product-processes", body)[0], 201)
+        self.assertEqual(self.call("POST", "/product-processes", {**body, "productId": 2, "sequenceNumber": 1})[0], 201)
         self.assertEqual(self.call("PATCH", f'/product-processes/{process["productProcessId"]}', {"maxLagAfterMin": 4})[0], 422)
         self.assertEqual(self.call("PATCH", f'/product-processes/{process["productProcessId"]}', {"sequenceNumber": 0})[0], 422)
 
@@ -261,10 +261,10 @@ class OrderCrudTest(unittest.TestCase):
     # 登録順と異なる工程番号順で生成し、候補・時間・待ち時間・オーダー属性を保持する。
     def test_product_process_generation_preserves_execution_data(self):
         # 既存の工程を後続にし、後から登録する工程を先行にする。
-        self.db.get(ProductProcess, 1).SequenceNumber = 30
+        self.db.get(ProductProcess, 1).SequenceNumber = 2
         self.db.add(Resource(ResourceID=1, LocationID=1, ResourceCode="R", ResourceName="設備"))
         self.db.add(ResourceGroup(ResourceGroupID=1, LocationID=1, GroupCode="G", GroupName="設備群"))
-        self.db.add(ProductProcess(ProductProcessID=2, ProductID=1, SequenceNumber=10, ProcessName="準備", MinLagAfterMin=3, MaxLagAfterMin=9))
+        self.db.add(ProductProcess(ProductProcessID=2, ProductID=1, SequenceNumber=1, ProcessName="準備", MinLagAfterMin=3, MaxLagAfterMin=9))
         self.db.flush()
         self.db.add_all([
             ProductProcessResource(ProductProcessID=2, ResourceID=1, SetupMinutes=2, FixedMinutes=3, MinutesPerUnit=0.125, Priority=2),
@@ -276,7 +276,7 @@ class OrderCrudTest(unittest.TestCase):
         status, tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')
         self.assertEqual(status, 200, tasks)
         self.assertEqual([task["productProcessId"] for task in tasks], [2, 1])
-        self.assertEqual([task["taskNo"] for task in tasks], ["10", "30"])
+        self.assertEqual([task["taskNo"] for task in tasks], ["1", "2"])
         self.assertEqual([task["taskName"] for task in tasks], ["準備", "製造"])
         self.assertEqual(tasks[0]["options"][0]["durationMin"], 6)
         self.assertEqual(tasks[0]["options"][0]["priority"], 2)
@@ -307,6 +307,60 @@ class OrderCrudTest(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 422)
         self.assertIsNotNone(self.db.get(Task, tasks[0]["taskId"]))
+
+    # 離れた番号の交換でも、既存タスクと設備候補の工程IDは変えない。
+    def test_process_number_swap_preserves_references(self):
+        # 二番目・三番目の工程と、別製品に属する工程。
+        second = self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 2, "processName": "第二"})[1]
+        third = self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 3, "processName": "第三"})[1]
+        other = self.call("POST", "/product-processes", {"productId": 2, "sequenceNumber": 1, "processName": "別製品"})[1]
+        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceCode="R", ResourceName="設備"))
+        self.db.flush()
+        self.db.add(ProductProcessResource(ProductProcessID=1, ResourceID=1, FixedMinutes=5))
+        self.db.commit()
+        # 生成済みタスクは工程マスタの並べ替えで書き換えない。
+        order = self.create()
+        tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')[1]
+        self.assertEqual(self.call("PATCH", "/product-processes/1", {"sequenceNumber": 3})[0], 200)
+        rows = self.call("GET", "/product-processes?productId=1")[1]
+        self.assertEqual([row["productProcessId"] for row in rows], [third["productProcessId"], second["productProcessId"], 1])
+        self.assertEqual([row["sequenceNumber"] for row in rows], [1, 2, 3])
+        self.assertEqual(self.db.get(ProductProcess, other["productProcessId"]).SequenceNumber, 1)
+        self.assertEqual(self.db.scalar(select(ProductProcessResource.ProductProcessID)), 1)
+        self.assertEqual(self.call("GET", f'/orders/{order["orderId"]}/tasks')[1], tasks)
+        # 隣の番号へ戻す操作は、上下ボタンと同じ一つ分の交換になる。
+        self.assertEqual(self.call("PATCH", "/product-processes/1", {"sequenceNumber": 2})[0], 200)
+        self.assertEqual([row["productProcessId"] for row in self.call("GET", "/product-processes?productId=1")[1]],
+                         [third["productProcessId"], 1, second["productProcessId"]])
+        self.assertEqual(self.call("DELETE", "/product-processes/1")[0], 409)
+
+    # 新規挿入と削除で番号が欠けず、範囲外の指定では元の順番を保つ。
+    def test_process_insert_delete_and_invalid_order(self):
+        # 先頭へ挿入すると、もとの工程は二番目へ移る。
+        first = self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 1, "processName": "先頭"})[1]
+        middle = self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 2, "processName": "中間"})[1]
+        rows = self.call("GET", "/product-processes?productId=1")[1]
+        self.assertEqual([row["productProcessId"] for row in rows], [first["productProcessId"], middle["productProcessId"], 1])
+        for number in (0, 4, -1):
+            self.assertEqual(self.call("PATCH", "/product-processes/1", {"sequenceNumber": number})[0], 422)
+            self.assertEqual(self.call("GET", "/product-processes?productId=1")[1], rows)
+        self.assertEqual(self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 5, "processName": "範囲外"})[0], 422)
+        self.assertEqual(self.call("DELETE", f'/product-processes/{middle["productProcessId"]}')[0], 204)
+        self.assertEqual([row["sequenceNumber"] for row in self.call("GET", "/product-processes?productId=1")[1]], [1, 2])
+        # 先頭・末尾を削除した後は、最初の工程番号1を再び登録できる。
+        self.assertEqual(self.call("DELETE", f'/product-processes/{first["productProcessId"]}')[0], 204)
+        self.assertEqual(self.call("DELETE", "/product-processes/1")[0], 204)
+        self.assertEqual(self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 1, "processName": "再登録"})[0], 201)
+
+    # 以前の10・20の工程番号も、番号交換の保存時に1・2へ揃える。
+    def test_legacy_process_numbers_become_contiguous_on_save(self):
+        self.db.get(ProductProcess, 1).SequenceNumber = 10
+        self.db.add(ProductProcess(ProductID=1, SequenceNumber=20, ProcessName="旧番号"))
+        self.db.commit()
+        self.assertEqual(self.call("PATCH", "/product-processes/1", {"sequenceNumber": 2})[0], 200)
+        rows = self.call("GET", "/product-processes?productId=1")[1]
+        self.assertEqual([row["sequenceNumber"] for row in rows], [1, 2])
+        self.assertEqual(rows[1]["productProcessId"], 1)
 
     # 実績登録済みや開始済みのタスクを、再生成で削除しないことを確認する。
     def test_regeneration_protects_started_and_actual_tasks(self):

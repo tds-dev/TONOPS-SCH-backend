@@ -73,12 +73,7 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
         _integer(maximum, "最大待ち時間")
         if maximum < minimum:
             raise HTTPException(422, "最大待ち時間は最小待ち時間以上にしてください。")
-    # 別製品では同じ工程番号を使えるが、同じ製品内では重複させない。
-    duplicate = db.scalar(select(ProductProcess.ProductProcessID).where(
-        ProductProcess.ProductID == product_id, ProductProcess.SequenceNumber == sequence,
-    ))
-    if duplicate is not None and (original is None or duplicate != original.ProductProcessID):
-        raise HTTPException(409, "同じ製品内で工程番号が重複しています。")
+    # 工程番号の重複は専用保存処理で交換する。範囲は製品の工程数に合わせて確認する。
 
 
 # 工程の実行候補を同じ拠点に限定し、設備かグループの片方と所要時間を確認する。
