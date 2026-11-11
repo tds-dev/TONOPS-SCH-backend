@@ -10,16 +10,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core import db as dbmod
 from app.core.db import get_db
-from app.core.timeutil import to_utc_naive
+from app.core.timeutil import to_jst_naive
 from app.engine.rules import all_plugins
 from app.engine.solve import execute_run
 from app.models.masters import Resource, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
-from app.schemas.base import ApiModel, UtcDatetime, coerce, schemas_for
+from app.schemas.base import ApiModel, JstDatetime, coerce, schemas_for
 from app.services.plan_lifecycle import approve_plan, copy_plan, discard_plan
 from app.services.plan_service import create_plan, queue_run
 
@@ -34,7 +33,7 @@ router = APIRouter(tags=["Plans"])
 class PlanCreateBody(ApiModel):
     # 取得・作成の対象となる拠点の識別番号。
     location_id: int
-    horizon_start: datetime  # オフセットなしは拠点の現地時刻、ありはそのまま UTC に変換
+    horizon_start: datetime  # オフセットなしは拠点の現地時刻、ありは日本時間へ変換
     horizon_end: datetime
     # 画面で識別するための必須名。空欄・文字数・拠点内の重複はサービスで確認する。
     plan_name: str
@@ -63,8 +62,8 @@ class AssignmentView(ApiModel):
     resource_id: int
     # 設備コードの代わりに表示する設備名。
     resource_name: str
-    start_at: UtcDatetime
-    end_at: UtcDatetime
+    start_at: JstDatetime
+    end_at: JstDatetime
     setup_minutes: int
     is_locked: bool
     source: str
@@ -104,7 +103,7 @@ def list_plans(
     return db.scalars(stmt).all()
 
 
-# 指定拠点の現地時刻をUTCへ変換して下書き計画を作成する。
+# 指定拠点の現地時刻を日本時間として保存して下書き計画を作成する。
 @router.post("/plans", response_model=PlanRead, status_code=status.HTTP_201_CREATED)
 def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = Depends(current_user)):
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
@@ -112,8 +111,8 @@ def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = D
     if location is None:
         raise HTTPException(404, f"拠点 {body.location_id} が見つかりません")
     data = body.model_dump()
-    data["horizon_start"] = to_utc_naive(body.horizon_start, get_settings().app_timezone)
-    data["horizon_end"] = to_utc_naive(body.horizon_end, get_settings().app_timezone)
+    data["horizon_start"] = to_jst_naive(body.horizon_start)
+    data["horizon_end"] = to_jst_naive(body.horizon_end)
     return create_plan(db, user=user, **data)
 
 

@@ -1,33 +1,32 @@
 """稼働時間の計算（純粋関数、DB 非依存）。
 
-`expand_working_time` は週次パターン（拠点の現地時間）と例外（UTC）から、
-重なりのない UTC 区間のソート済みリストを作る。スケジューリングエンジンでも使う。
+`expand_working_time` は週次勤務（拠点の現地時間）と停止例外（日本時間）から、
+重なりのない 日本時間の区間のソート済みリストを作る。スケジューリングエンジンでも使う。
 """
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, time, timedelta
 
-from app.core.timeutil import to_utc_naive
+from app.core.timeutil import to_jst_naive, weekday_number
 
-Interval = tuple[datetime, datetime]  # naive な UTC、[開始, 終了)
+Interval = tuple[datetime, datetime]  # 時差情報なしの日本時間、[開始, 終了)
 
 
+# DBの勤務1行から取り出した、曜日と現地時刻の組合せ。
 @dataclass(frozen=True)
-class PatternSpec:
-    day_of_week: int  # 1 = 月 … 7 = 日
+class WorkSpec:
+    day_of_week: int  # 0 = 日 … 6 = 土
     start: time
     end: time
-    valid_from: date | None = None
-    valid_to: date | None = None
 
 
+# 稼働時間から除外する休日・停止の日本時間の日時。
 @dataclass(frozen=True)
 class ExceptionSpec:
-    start: datetime  # naive な UTC
-    end: datetime  # naive な UTC
-    is_working: bool
+    start: datetime  # 時差情報なしの日本時間
+    end: datetime  # 時差情報なしの日本時間
 
 
+# 重なる勤務時間や連続した勤務時間をまとめる。
 def merge(intervals: list[Interval]) -> list[Interval]:
     out: list[Interval] = []
     for s, e in sorted(i for i in intervals if i[1] > i[0]):
@@ -38,6 +37,7 @@ def merge(intervals: list[Interval]) -> list[Interval]:
     return out
 
 
+# 勤務時間から休日・停止時間を差し引く。
 def subtract(intervals: list[Interval], holes: list[Interval]) -> list[Interval]:
     result: list[Interval] = []
     holes = merge(holes)
@@ -58,39 +58,35 @@ def subtract(intervals: list[Interval], holes: list[Interval]) -> list[Interval]
     return merge(result)
 
 
+# 確認・計画期間からはみ出す部分を切り取る。
 def clip(intervals: list[Interval], start: datetime, end: datetime) -> list[Interval]:
     return [(max(s, start), min(e, end)) for s, e in intervals if e > start and s < end]
 
 
+# 週次勤務を実際の日付へ展開し、停止例外と指定期間を反映する。
 def expand_working_time(
-    patterns: list[PatternSpec],
+    work_rows: list[WorkSpec],
     exceptions: list[ExceptionSpec],
     start: datetime,
     end: datetime,
     tz: str,
 ) -> list[Interval]:
-    """`start` から `end` まで（naive な UTC）の稼働区間（naive な UTC）。"""
-    zone = ZoneInfo(tz)
-    # 現地の日付を、開始の前日から順にたどる（日をまたぐ夜勤のため）
-    first_local = start.replace(tzinfo=ZoneInfo("UTC")).astimezone(zone).date() - timedelta(days=1)
-    last_local = end.replace(tzinfo=ZoneInfo("UTC")).astimezone(zone).date()
+    """`start` から `end` まで（時差情報なしの日本時間）の稼働区間（時差情報なしの日本時間）。"""
+    # 確認期間の開始日から、同じ日付内の勤務だけを展開する。
+    first_local = to_jst_naive(start).date()
+    last_local = to_jst_naive(end).date()
     base: list[Interval] = []
     day = first_local
     while day <= last_local:
-        for p in patterns:
-            if p.day_of_week != day.isoweekday():
-                continue
-            if p.valid_from and day < p.valid_from:
-                continue
-            if p.valid_to and day > p.valid_to:
+        for p in work_rows:
+            if p.day_of_week != weekday_number(day):
                 continue
             local_start = datetime.combine(day, p.start)
-            end_day = day + timedelta(days=1) if p.end <= p.start else day
-            local_end = datetime.combine(end_day, p.end)
-            base.append((to_utc_naive(local_start, tz), to_utc_naive(local_end, tz)))
+            local_end = datetime.combine(day, p.end)
+            base.append((to_jst_naive(local_start), to_jst_naive(local_end)))
         day += timedelta(days=1)
-    working = merge(base + [(x.start, x.end) for x in exceptions if x.is_working])
-    working = subtract(working, [(x.start, x.end) for x in exceptions if not x.is_working])
+    # 例外はすべて休日・停止として扱い、追加稼働には使わない。
+    working = subtract(base, [(x.start, x.end) for x in exceptions])
     return clip(working, start, end)
 
 

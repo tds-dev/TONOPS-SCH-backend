@@ -1,5 +1,9 @@
 <!-- SCH全体の構成、業務仕様、データ構造、APIと画面の対応をまとめる資料。 -->
+
+> 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 # TONOPS-SCH システム概要
+
+2026-11-11：[組織削除・週次カレンダー統合とDB作成手順](DB_SCHEMA_UPDATE_20261111.md)に対応。拠点ごとの曜日・時間帯を`M_Calendars`の複数行で管理し、例外は休日・設備停止として稼働枠から除外する。
 
 2026-11-10：[DB構成変更と再作成手順](DB_SCHEMA_UPDATE_20261110.md)に対応。日時は共通の日本時間（Asia/Tokyo）で入力・表示する。
 
@@ -90,9 +94,8 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 
 | 用語 | テーブル | 説明 |
 |---|---|---|
-| 組織 | M_Organizations | 会社。属性定義の単位 |
-| 拠点 | M_Locations | 工場・事業所。タイムゾーンと既定カレンダーを持つ。左サイドバーのアプリ名の下で切り替え |
-| カレンダー | M_Calendars ほか | 稼働時間（週次のシフト＋例外）。リソースごとに設定、未設定なら拠点の既定 |
+| 拠点 | M_Locations | 工場・事業所。CalendarIDで代表勤務行を参照し、拠点ごとに週次カレンダーを持つ。左サイドバーのアプリ名の下で切り替え |
+| カレンダー | M_Calendars / M_CalendarExceptions | 同じLocationIDの曜日・時間帯をまとめた週次勤務と、休日・設備停止の例外。日時は共通の日本時間で扱う |
 | リソースグループ | M_ResourceGroups | 同種のリソースのまとまり（例: 配合、充填、包装） |
 | リソース | M_Resources | 作業を行うもの。設備・人・チーム・部屋など（`ResourceKind`） |
 | 製品 | M_Product | 製品・成果物。拠点と名称を持つ |
@@ -127,7 +130,7 @@ flowchart TD
   I -.->|"状況変化（追加受注・設備停止）"| D
 ```
 
-1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、製品・工程、制約ルール・段取り替えを登録（API / Swagger からも登録可能）。組織・拠点・プラン計算設定の登録は引き続き API / Swagger を使用。
+1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、製品・工程、制約ルール・段取り替えを登録（API / Swagger からも登録可能）。拠点・プラン計算設定の登録は引き続き API / Swagger を使用。
 2. **オーダー登録** → **作業生成**: オーダーの製品に属する工程を展開し、作業ごとに作業、リソース候補、前後の依存関係を作ります。
    所要時間 = 作業リソース候補の `SetupMinutes` + `FixedMinutes` + 数量 × `MinutesPerUnit`（分、切り上げ）。
 3. **計画作成**: 計画期間（拠点の現地時刻）とプロファイルを指定。現在のマスタ計画が「元計画（BasePlanID）」になります。
@@ -149,7 +152,7 @@ flowchart TD
 | 入力 | 読み込み元 | 内容 |
 |---|---|---|
 | リソース | M_Resources（論理削除を除く） | 能力（Capacity）、稼働枠 |
-| 稼働枠 | M_Calendars / M_CalendarPatterns / M_CalendarExceptions | リソースのカレンダー（なければ拠点の既定、それもなければ常時稼働）を計画期間に展開。親カレンダー（ParentCalendarID）を継承 |
+| 稼働枠 | M_Calendars / M_CalendarExceptions | リソースのCalendarID、未指定なら拠点のCalendarIDから所属拠点を求め、同じLocationIDの全有効勤務行を計画期間に展開。拠点内の例外を休日・停止として除外。カレンダー指定がなければ常時稼働 |
 | オーダー | T_Orders | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、`PlanOwner = SCHEDULER`、着手可能日時が期間終了より前 |
 | 作業 | T_Tasks | 上記オーダーの作業のうち、サマリーでなく `DONE`/`CANCELLED` 以外 |
 | 候補 | T_TaskResourceOptions | グループ指定の候補はグループ内の全リソースに展開 |
@@ -270,9 +273,9 @@ stateDiagram-v2
 ### 6.1 共通の規約
 
 * `M_`（マスタ）/ `T_`（トランザクション）、列名は PascalCase、主キーは `<Entity>ID`（IDENTITY）。
-* 監査列（全テーブル共通、`T_PlanKpis` を除く）: `CreatedAt`（UTC）、`CreatedBy`、`UpdatedAt`、`UpdatedBy`。
+* 監査列（全テーブル共通、`T_PlanKpis` を除く）: `CreatedAt`（日本時間）、`CreatedBy`、`UpdatedAt`、`UpdatedBy`。
 * 論理削除: `DeleteFlag`（BIT）を持つテーブルは DELETE API で論理削除。一覧は既定で削除済みを除外。
-* 型（SQL Server）: 文字列 `NVARCHAR(n)`、長文 `NVARCHAR(MAX)`、日時 `DATETIME2`（naive UTC）、JSON 列は `NVARCHAR(MAX)`。
+* 型（SQL Server）: 文字列 `NVARCHAR(n)`、長文 `NVARCHAR(MAX)`、日時 `DATETIME2(7)`（naive 日本時間）、JSON 列は `NVARCHAR(MAX)`。
 * 制約名: `PK_<表>`、`FK_<表>_<列>_<参照表>`、`UQ_<表>_<列>…`、`CK_<表>_<名前>`、`IX_<表>_<列>…`。
 * 区分値は CHECK 制約で制限（下表の「値」）。
 * 初期設定は `python -m DataBase.setup_database` でDB・テーブル作成とデモデータ登録を行います。SQLファイルへの出力機能はありません。
@@ -281,11 +284,9 @@ stateDiagram-v2
 
 ```mermaid
 erDiagram
-  M_Organizations ||--o{ M_Locations : ""
-  M_Organizations ||--o{ M_AttributeDefinitions : ""
-  M_Locations ||--o{ M_Calendars : ""
-  M_Calendars ||--o{ M_CalendarPatterns : ""
-  M_Calendars ||--o{ M_CalendarExceptions : ""
+  M_Locations ||--o{ M_Calendars : "曜日・時間帯"
+  M_Calendars |o--o| M_Locations : "代表勤務行"
+  M_Calendars ||--o{ M_CalendarExceptions : "休日・停止"
   M_Locations ||--o{ M_ResourceGroups : ""
   M_Locations ||--o{ M_Resources : ""
   M_ResourceGroups ||--o{ M_Resources : ""
@@ -316,49 +317,38 @@ erDiagram
 
 ### 6.3 マスタテーブル（M_）
 
-#### M_Organizations（組織）
-| 列 | 型 | 説明 |
-|---|---|---|
-| OrganizationID | INT PK | |
-| OrganizationName | NVARCHAR(100) | |
-| DeleteFlag | BIT | |
-
 #### M_Locations（拠点）
 | 列 | 型 | 説明 |
 |---|---|---|
 | LocationID | INT PK | |
-| OrganizationID | INT FK | |
 | LocationName | NVARCHAR(100) | 拠点の表示名。識別にはLocationIDを使う |
-| DefaultCalendarID | INT FK NULL | リソースにカレンダーがない場合に使う |
+| CalendarID | INT FK NULL | 同じ拠点の週次カレンダーを代表する勤務行。CalendarID＋LocationIDの組で参照先の所属拠点も確認 |
 | DeleteFlag | BIT | |
 
-#### M_Calendars（カレンダー）
+#### M_Calendars（拠点ごとの週次勤務）
+
+1行は1曜日・1時間帯。同じLocationIDの有効な勤務行をまとめて、拠点の1つの週次カレンダーとして使う。月曜午前・月曜午後などは別の行で登録する。
+
 | 列 | 型 | 説明 |
 |---|---|---|
-| CalendarID | INT PK | |
-| LocationID | INT FK | |
-| CalendarName | NVARCHAR(100) | カレンダーの表示名。識別にはCalendarIDを使う |
-| ParentCalendarID | INT FK NULL | 親のパターン・例外を継承（例: 拠点共通 → ライン別） |
-| DeleteFlag | BIT | |
+| CalendarID | INT PK | 曜日・時間帯1件のID。自動採番 |
+| LocationID | INT FK | 所属拠点。1拠点に複数の勤務行を登録 |
+| DayOfWeek | SMALLINT | 0 = 日 … 6 = 土 |
+| StartTime / EndTime | TIME | 日本時間の同日内の勤務時刻。EndTime > StartTimeとし、日をまたぐ勤務は登録不可 |
+| WorkName | NVARCHAR(50) NULL | 例: 午前、午後 |
+| DeleteFlag | BIT | 削除済みの勤務行を計算から除外 |
 
-#### M_CalendarPatterns（稼働パターン — 週次シフト、拠点の現地時刻）
-| 列 | 型 | 説明 |
-|---|---|---|
-| PatternID | INT PK | |
-| CalendarID | INT FK（CASCADE） | |
-| DayOfWeek | SMALLINT | 1 = 月 … 7 = 日 |
-| StartTime / EndTime | TIME | EndTime ≤ StartTime は日をまたぐ（例: 22:00–06:00） |
-| ShiftName | NVARCHAR(50) | 例: 午前、夜勤 |
-| ValidFrom / ValidTo | DATE NULL | 適用期間 |
+履歴は共通のCreatedAt・CreatedBy・UpdatedAt・UpdatedByを使う。親からの継承と曜日勤務の適用期間は持たない。最初の勤務登録時に拠点の代表行を設定し、代表行の削除時は残る勤務行へ拠点・設備・例外の参照を付け替える。例外が残る場合は最後の勤務行を削除できない。
 
-#### M_CalendarExceptions（稼働例外）
+#### M_CalendarExceptions（休日・設備停止）
 | 列 | 型 | 説明 |
 |---|---|---|
 | ExceptionID | INT PK | |
-| CalendarID | INT FK（CASCADE） | |
-| StartAt / EndAt | DATETIME2（UTC） | |
-| IsWorking | BIT | 0 = 休日・停止（稼働から除く）、1 = 残業・休日出勤（稼働に加える） |
-| Reason | NVARCHAR(100) | |
+| CalendarID | INT FK（CASCADE） | 拠点の勤務行を参照。例外は同じLocationIDの勤務全体に適用 |
+| StartTime / EndTime | DATETIME2(7)（日本時間） | 休日・停止の開始終了日時。EndTime > StartTime。曜日勤務のTIME型とは区別 |
+| Reason | NVARCHAR(100) NULL | 休日・設備停止の説明 |
+
+すべて稼働枠から除外する例外として扱う。残業・休日出勤による稼働枠の追加は行わない。
 
 #### M_ResourceGroups（リソースグループ）
 | 列 | 型 | 説明 |
@@ -379,7 +369,7 @@ erDiagram
 | ResourceKind | NVARCHAR(20) | 値: `MACHINE` `PERSON` `TEAM` `ROOM` `OTHER` |
 | Capacity | DECIMAL(9,2) | 同時に処理できる作業数（1 = 重なり禁止） |
 | DailyCapacityHours | DECIMAL(5,2) NULL | 予約（未使用） |
-| CalendarID | INT FK NULL | なければ拠点の既定カレンダー |
+| CalendarID | INT FK NULL | 同じ拠点の勤務行を参照。未指定ならM_Locations.CalendarIDを使い、いずれも拠点の勤務行全体を計算 |
 | SortOrder | INT | ボードの表示順 |
 | DeleteFlag | BIT | |
 
@@ -389,9 +379,8 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | AttributeDefID | INT PK | |
-| OrganizationID | INT FK | |
-| EntityType | NVARCHAR(20) | 値: `PRODUCT` `RESOURCE` `JOB` `TASK` |
-| AttributeKey | NVARCHAR(50) | JSON のキー（例: `family`） |
+| EntityType | NVARCHAR(20) | 値: `PRODUCT` `RESOURCE` `ORDER` `TASK`。AttributeKeyとの組で重複不可 |
+| AttributeKey | NVARCHAR(50) | JSON のキー（例: `family`）。EntityTypeとの組で重複不可。組織別の区分は持たない |
 | Label | NVARCHAR(100) | 表示名（例: 系統） |
 | DataType | NVARCHAR(20) | 値: `TEXT` `NUMBER` `BOOL` `DATE` `ENUM` |
 | EnumValuesJSON | NVARCHAR(MAX) | ENUM の選択肢 |
@@ -488,9 +477,9 @@ erDiagram
 | ProductID | INT FK NULL | 製品。タスク生成時は指定が必要で、この製品の工程番号順に展開する |
 | Quantity | DECIMAL(18,3) NULL | 数量 |
 | CustomerName | NVARCHAR(100) | |
-| ReleaseAt | DATETIME2 NULL | 着手可能日時（UTC） |
-| DeadLine | DATETIME2 NULL | 納期（UTC） |
-| ShippingDate | DATETIME2(7) NULL | 任意の出荷日時（UTC）。自動計算の納期条件には使用しない |
+| ReleaseAt | DATETIME2(7) NULL | 着手可能日時（日本時間） |
+| DeadLine | DATETIME2(7) NULL | 納期（日本時間） |
+| ShippingDate | DATETIME2(7) NULL | 任意の出荷日時（日本時間）。自動計算の納期条件には使用しない |
 | Priority | INT | 1 = 最優先 … 100（既定 50） |
 | Status | NVARCHAR(20) | 値: `OPEN`（未計画）`PLANNED`（計画済）`IN_PROGRESS` `DONE` `CANCELLED` |
 | PlanOwner | NVARCHAR(20) | 値: `SCHEDULER`（このシステムで計画）`EXTERNAL`（SynViz など外部で計画、計算対象外） |
@@ -508,8 +497,8 @@ erDiagram
 | TaskName | NVARCHAR(200) | |
 | Sequence | INT | 表示順 |
 | IsSummary | BIT | 1 = サマリー（計算対象外） |
-| EarliestStartAt | DATETIME2 NULL | 作業単位の着手可能日時 |
-| DeadlineAt | DATETIME2 NULL | 作業単位の期限 |
+| EarliestStartAt | DATETIME2(7) NULL | 作業単位の着手可能日時 |
+| DeadlineAt | DATETIME2(7) NULL | 作業単位の期限 |
 | Status | NVARCHAR(20) | 値: `NOT_STARTED` `IN_PROGRESS` `DONE` `CANCELLED`（配台表の開始・完了で更新） |
 | ProgressPct | DECIMAL(5,2) | 予約 |
 | AttributesJSON | NVARCHAR(MAX) | オーダーから引き継いだタスク属性。ルール・段取り・色分けはこの値を使う |
@@ -541,10 +530,10 @@ erDiagram
 | LocationID | INT FK | |
 | PlanName | NVARCHAR(100) | |
 | Status | NVARCHAR(20) | 値: `DRAFT` `MASTER` `SUPERSEDED` `DISCARDED` `ARCHIVED` |
-| HorizonStart / HorizonEnd | DATETIME2（UTC） | 計画期間 |
+| HorizonStart / HorizonEnd | DATETIME2(7)（日本時間） | 計画期間 |
 | CalculationSettingID | INT FK | |
 | BasePlanID | INT FK NULL | 元計画（作成時のマスタ、またはコピー元） |
-| SupersededAt | DATETIME2 NULL | 置換された時刻（この時刻より前の割付は有効） |
+| SupersededAt | DATETIME2(7) NULL | 置換された時刻（この時刻より前の割付は有効） |
 | ApprovedAt / ApprovedBy | | 承認日時・承認者 |
 | Remarks | NVARCHAR(500) | |
 | RowVer | INT | 楽観的排他制御 |
@@ -556,7 +545,7 @@ erDiagram
 | PlanID | INT FK（CASCADE） | (PlanID, TaskID) 一意 |
 | TaskID | INT FK | |
 | ResourceID | INT FK | |
-| StartAt / EndAt | DATETIME2（UTC） | 作業本体の開始・終了（EndAt > StartAt） |
+| StartAt / EndAt | DATETIME2(7)（日本時間） | 作業本体の開始・終了（EndAt > StartAt） |
 | SetupMinutes | INT | 段取り替え時間。StartAt の **直前** に置く（ボードでは斜線のブロック） |
 | Units | DECIMAL(5,2) | 予約 |
 | IsLocked | BIT | 固定（再計算で動かさない） |
@@ -573,7 +562,7 @@ erDiagram
 | Status | NVARCHAR(20) | 値: `QUEUED`（待機中）`RUNNING`（計算中）`SUCCEEDED` `FAILED` `CANCELLED` |
 | Scope | NVARCHAR(20) | 値: `FULL` `REPAIR` |
 | RequestedBy / RequestedAt | | 依頼者・依頼日時 |
-| StartedAt / FinishedAt | DATETIME2 NULL | |
+| StartedAt / FinishedAt | DATETIME2(7) NULL | |
 | TimeLimitSec | INT | |
 | SolverStatus | NVARCHAR(20) | `OPTIMAL` `FEASIBLE` `INFEASIBLE` `UNKNOWN` など |
 | ObjectiveValue / BestBound | FLOAT | 目的値と下限 |
@@ -607,7 +596,7 @@ erDiagram
 | WorkActualID | BIGINT PK | |
 | TaskID | INT FK | |
 | ResourceID | INT FK NULL | |
-| StartAt / EndAt | DATETIME2 NULL | |
+| StartAt / EndAt | DATETIME2(7) NULL | |
 | WorkDate / WorkHours | DATE / DECIMAL NULL | 工程くん（作業時間）連携用 |
 | Quantity | DECIMAL NULL | |
 | Status | NVARCHAR(20) | 値: `IN_PROGRESS` `DONE` `SUSPENDED` |
@@ -626,17 +615,17 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | サイドバーの拠点選択（アプリ名の下） | `GET /locations` | M_Locations | — |
 | ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /orders` | T_Plans, T_PlanKpis, T_Orders, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
 | 計画一覧（`/plans`） | `GET /plans`、`GET /calculation-settings`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_CalculationSettings, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
-| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・Patterns・Exceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_Rules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
+| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・M_CalendarExceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_Rules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
 | 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Orders, M_Resources | T_Plans（承認・破棄） |
 | オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業生成） | T_Tasks, T_TaskResourceOptions, T_TaskDependencies（作業生成） |
 | 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に作業候補・作業候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
-| カレンダー（`/calendars`） | `/calendars`、`/calendar-patterns`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarPatterns, M_CalendarExceptions, M_Locations, M_Resources | M_Calendars, M_CalendarPatterns, M_CalendarExceptions |
+| カレンダー（`/calendars`） | `/calendars`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarExceptions, M_Locations, M_Resources | M_Calendars, M_CalendarExceptions。代表勤務行の設定・削除時はM_Locations・M_Resourcesの参照も更新 |
 | 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にオーダー・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
 | 制約ルール（`/rules`） | `/rules`、`/product-switch-times`、`/product-switch-rules` の CRUD、`GET /rule-types` | M_Rules, M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups, サーバーのルール種類定義 | M_Rules, M_ProductSwitchTimes, M_ProductSwitchRules |
 | 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
 
-**画面で使っていないテーブル**: M_Organizations、M_AttributeDefinitions（デモデータのみ）、T_WorkActuals（今後）。
+**画面で使っていないテーブル**: M_AttributeDefinitions（デモデータのみ）、T_WorkActuals（今後）。
 
 ---
 
@@ -655,11 +644,9 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | パス | テーブル | 並び順 |
 |---|---|---|
-| `/organizations` | M_Organizations | ID |
 | `/locations` | M_Locations | ID |
-| `/calendars` | M_Calendars | ID |
-| `/calendar-patterns` | M_CalendarPatterns | DayOfWeek |
-| `/calendar-exceptions` | M_CalendarExceptions | StartAt |
+| `/calendars` | M_Calendars | DayOfWeek |
+| `/calendar-exceptions` | M_CalendarExceptions | StartTime |
 | `/resource-groups` | M_ResourceGroups | SortOrder |
 | `/resources` | M_Resources | SortOrder |
 | `/attribute-definitions` | M_AttributeDefinitions | ID |
@@ -674,6 +661,8 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `/tasks` | T_Tasks | Sequence |
 | `/task-resource-options` | T_TaskResourceOptions | ID |
 | `/dependencies` | T_TaskDependencies | ID |
+
+`GET /calendar-exceptions?locationId=1`では、その拠点の勤務行に紐づく停止例外をまとめて取得する。`GET /calendars/{id}/working-time?from=...&to=...`は、指定勤務行と同じ拠点の全有効勤務・停止例外から日本時間の稼働区間を返す。
 
 ### 8.2 オーダー・作業
 
@@ -695,7 +684,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | GET | `/solver-runs/{runId}` | 計算の状態 |
 | GET | `/solver-runs/{runId}/events` | 進捗の Server-Sent Events（状態が変わるたびに送信、終了で切断） |
 | POST | `/solver-runs/{runId}/cancel` | キャンセル（実行中は数秒以内に停止し、それまでの最良解を保存） |
-| GET | `/plans/{planId}/assignments` | 割付一覧（UTC） |
+| GET | `/plans/{planId}/assignments` | 割付一覧（日本時間） |
 | GET | `/plans/{planId}/kpis` | KPI（`{key: value}`） |
 | GET | `/plans/{planId}/violations` | 違反一覧 |
 | GET | `/rule-types` | 制約ルールのプラグイン一覧（パラメータの JSON Schema 付き） |
@@ -733,13 +722,14 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | 場所 | 形式 |
 |---|---|
-| DB | **naive な UTC**（DATETIME2、オフセットなし） |
-| 通常の API の出力 | UTC の ISO 文字列（`2026-10-27T21:00:00Z`） |
-| 通常の API の入力 | オフセット付きならそのまま UTC に変換、なしは UTC とみなす |
-| 計画作成（`POST /plans`）の入力 | オフセットなしは **拠点の現地時刻** |
-| ボード・編集・配台表 | **拠点の現地時刻**（オフセットなし `2026-10-28T06:00:00`）。DayPilot がそのまま扱える |
-| カレンダーのパターン | 拠点の現地時刻（TIME） |
-| 画面の表示 | UTC の値は拠点のタイムゾーンで表示（`Intl.DateTimeFormat`） |
+| DB | **naive な 日本時間**（DATETIME2(7)、オフセットなし） |
+| 通常の API の出力 | 日本時間 の ISO 文字列（`2026-10-27T21:00:00Z`） |
+| 通常の API の入力 | オフセット付きならそのまま 日本時間 に変換、なしは 日本時間 とみなす |
+| 計画作成（`POST /plans`）の入力 | オフセットなしは **共通の日本時間（Asia/Tokyo）** |
+| ボード・編集・配台表 | **共通の日本時間**（オフセットなし `2026-10-28T06:00:00`）。DayPilot がそのまま扱える |
+| 週次勤務（M_Calendars）のStartTime・EndTime | 日本時間の時刻（TIME） |
+| 停止例外（M_CalendarExceptions）のStartTime・EndTime | 日付を含む日本時間日時（DATETIME2(7)）。通常の日時APIと同じ扱い |
+| 画面の表示 | 日本時間 の値は共通の日本時間で表示（`Intl.DateTimeFormat`） |
 
 サーバーの OS のタイムゾーンには依存しません（`tzdata` を使用）。
 
@@ -832,6 +822,6 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 * CSV 取込（オーダー・マスタ）
 * 実績入力と工程くん連携、実績を反映したローリング再計画
-* 組織・拠点・プラン計算設定など、今回の対象外マスタの画面対応
+* 拠点・プラン計算設定など、今回の対象外マスタの画面対応
 * 認証（Firebase）と権限
 * Docker Compose による配備

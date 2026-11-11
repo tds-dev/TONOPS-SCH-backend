@@ -15,7 +15,7 @@ from sqlalchemy import false, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.timeutil import utc_to_local
+from app.core.timeutil import as_jst
 from app.engine.problem import (
     PChangeover,
     PDependency,
@@ -64,15 +64,16 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     rows = db.scalars(
         select(Resource).where(Resource.LocationID == location.LocationID, Resource.DeleteFlag == false())
     ).all()
-    calendar_cache: dict[int, list[tuple[int, int]]] = {}
+    # 勤務行IDが異なっても拠点共通の稼働枠になるため、展開結果を設備間で共有する。
+    calendar_windows: list[tuple[int, int]] | None = None
     for r in rows:
-        cal_id = r.CalendarID or location.DefaultCalendarID
+        cal_id = r.CalendarID or location.CalendarID
         if cal_id is None:
             windows = [(0, horizon)]  # カレンダーなし: 常に稼働
         else:
-            if cal_id not in calendar_cache:
-                calendar_cache[cal_id] = _windows(working_time(db, cal_id, start, end, tz), start, horizon)
-            windows = calendar_cache[cal_id]
+            if calendar_windows is None:
+                calendar_windows = _windows(working_time(db, cal_id, start, end, tz), start, horizon)
+            windows = calendar_windows
         resources[r.ResourceID] = PResource(
             id=r.ResourceID, name=r.ResourceName,
             capacity=max(1, int(r.Capacity or 1)), windows=windows, group_id=r.ResourceGroupID,
@@ -161,7 +162,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
             entries={(rule.FromValue, rule.ToValue): (int(rule.SetupMinutes or 0), bool(rule.IsForbidden))
                      for rule in switch_time.rules},
         ))
-    plan_day = utc_to_local(start, tz).date()  # ルールの有効期間は現地の開始日で判定する
+    plan_day = as_jst(start).date()  # ルールの有効期間は現地の開始日で判定する
     rules = [
         PRule(r.RuleID, r.RuleTypeKey, r.RuleName, dict(r.SelectorJSON or {}), dict(r.ParamsJSON or {}),
               bool(r.IsHard), int(r.Weight or 100))

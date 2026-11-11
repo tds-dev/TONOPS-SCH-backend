@@ -1,16 +1,16 @@
 """全テーブル共通の列（監査列、論理削除）。"""
 from sqlalchemy import Boolean, Column
 
-from app.core.timeutil import utcnow
+from app.core.timeutil import jst_now
 from app.models.types import DateTime, String
 
 
 class AuditMixin:
     """CreatedAt / CreatedBy / UpdatedAt / UpdatedBy（工程くんと同じ）。"""
 
-    CreatedAt = Column(DateTime, nullable=False, default=utcnow)
+    CreatedAt = Column(DateTime, nullable=False, default=jst_now)
     CreatedBy = Column(String(254), nullable=True)
-    UpdatedAt = Column(DateTime, nullable=True, onupdate=utcnow)
+    UpdatedAt = Column(DateTime, nullable=True, onupdate=jst_now)
     UpdatedBy = Column(String(254), nullable=True)
 
 

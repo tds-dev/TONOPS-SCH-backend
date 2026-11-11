@@ -47,6 +47,7 @@ def crud_router(
     validate_write: Callable[[Session, Any, dict[str, Any]], None] | None = None,
     write_handler: Callable[[Session, Any, dict[str, Any], str], Any] | None = None,
     delete_handler: Callable[[Session, Any, str], None] | None = None,
+    filter_list: Callable[[Any, Request], Any] | None = None,
 ) -> APIRouter:
     Read, Create, Update = schemas_for(model)
     pk = _pk_column(model)
@@ -88,6 +89,9 @@ def crud_router(
                 stmt = stmt.where(col == _parse(value, python_type(col.type)))
         if has_delete_flag and params.get("includeDeleted", "false").lower() != "true":
             stmt = stmt.where(model.DeleteFlag == false())
+        # 直接の列を持たない検索条件は、対象マスタ専用の関連検索へ委ねる。
+        if filter_list is not None:
+            stmt = filter_list(stmt, request)
         sort_col = model.__table__.columns.get(order_by) if order_by else None
         stmt = stmt.order_by(sort_col if sort_col is not None else pk)
         return db.scalars(stmt).all()

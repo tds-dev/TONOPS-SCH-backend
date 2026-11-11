@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.timeutil import utcnow
+from app.core.timeutil import jst_now
 from app.models.masters import CalculationSetting, Location
 from app.models.transactions import Plan, SolverRun
 from app.services.plan_validation import flush_named_plan, validate_plan_name
@@ -77,7 +77,7 @@ def queue_run(db: Session, plan: Plan, user: str, scope: str = "FULL", time_limi
         raise HTTPException(status.HTTP_409_CONFLICT, f"Plan already has an active solver run ({busy})")
     setting = db.get(CalculationSetting, plan.CalculationSettingID)
     run = SolverRun(
-        PlanID=plan.PlanID, Status="QUEUED", Scope=scope, RequestedBy=user, RequestedAt=utcnow(),
+        PlanID=plan.PlanID, Status="QUEUED", Scope=scope, RequestedBy=user, RequestedAt=jst_now(),
         TimeLimitSec=time_limit_sec or (setting.TimeLimitSec if setting else 60), CreatedBy=user,
     )
     db.add(run)

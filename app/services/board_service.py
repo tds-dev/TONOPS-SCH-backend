@@ -9,7 +9,7 @@ from sqlalchemy import false, select, true
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.timeutil import to_utc_naive, utc_to_local
+from app.core.timeutil import to_jst_naive, as_jst
 from app.engine.snapshot import build_problem
 from app.models.masters import ProductSwitchTime, Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
@@ -20,9 +20,9 @@ from app.services.worktime import gaps
 SEVERITY_ORDER = {"HARD": 0, "SOFT": 1, "INFO": 2}
 
 
-# UTCの日時を、拠点の現地時刻を表す文字列へ変換する。
+# 日本時間の日時を、拠点の現地時刻を表す文字列へ変換する。
 def _local(dt: datetime, tz: str) -> str:
-    return utc_to_local(dt, tz).replace(tzinfo=None).isoformat(timespec="seconds")
+    return as_jst(dt).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
 # 有効な製品切替時間の属性を、ボードの既定の色分けに使う。
@@ -47,8 +47,8 @@ def build_board(
     # 対象の拠点と、アプリ共通の時刻設定。
     location = db.get(Location, plan.LocationID)
     tz = get_settings().app_timezone
-    start = to_utc_naive(start, tz) if start else plan.HorizonStart
-    end = to_utc_naive(end, tz) if end else plan.HorizonEnd
+    start = to_jst_naive(start) if start else plan.HorizonStart
+    end = to_jst_naive(end) if end else plan.HorizonEnd
     color_by = color_by or default_color_attribute(db, location.LocationID)
     problem = build_problem(db, plan)
 

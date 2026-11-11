@@ -16,23 +16,20 @@ from sqlalchemy.types import TypeEngine
 from app.models.base import AUDIT_COLUMNS
 
 
-# 時差情報がある日時をUTCへ揃えて、保存用に時差情報を外す。
-def _to_naive_utc(value: dt.datetime) -> dt.datetime:
-    if value.tzinfo is not None:
-        value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
-    return value
+# API入力と出力に共通の日本時間処理を使い、変換の重複を避ける。
+from app.core.timeutil import as_jst, to_jst_naive
 
 
-# APIへ返す日時を、UTCであることが分かる文字列にする。
-def _iso_utc(value: dt.datetime) -> str:
-    return value.isoformat() + "Z" if value.tzinfo is None else value.isoformat()
+# APIへ返す日時に、日本時間を示す+09:00を付ける。
+def _iso_jst(value: dt.datetime) -> str:
+    return as_jst(value).isoformat()
 
 
-# 保存は naive な UTC。入力は任意のオフセット可。出力は "...Z"。
-UtcDatetime = Annotated[
+# 保存は時差情報なしの日本時間。API出力は+09:00付きとする。
+JstDatetime = Annotated[
     dt.datetime,
-    AfterValidator(_to_naive_utc),
-    PlainSerializer(_iso_utc, return_type=str, when_used="json"),
+    AfterValidator(to_jst_naive),
+    PlainSerializer(_iso_jst, return_type=str, when_used="json"),
 ]
 
 
@@ -71,7 +68,7 @@ def python_type(col_type: TypeEngine) -> Any:
     if isinstance(col_type, (Numeric, Float)):
         return float
     if isinstance(col_type, DateTime):
-        return UtcDatetime
+        return JstDatetime
     if isinstance(col_type, Date):
         return dt.date
     if isinstance(col_type, Time):

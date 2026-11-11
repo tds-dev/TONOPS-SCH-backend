@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 from app import models  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.core.timeutil import utcnow
+from app.core.timeutil import jst_now
 from app.engine.solve import execute_run
 from app.models.transactions import SolverRun
 
@@ -36,7 +36,7 @@ def claim_next(db) -> int | None:
     claimed = db.execute(
         update(SolverRun)
         .where(SolverRun.RunID == run_id, SolverRun.Status == "QUEUED")
-        .values(Status="RUNNING", StartedAt=utcnow())
+        .values(Status="RUNNING", StartedAt=jst_now())
     )
     db.commit()
     return run_id if claimed.rowcount == 1 else None

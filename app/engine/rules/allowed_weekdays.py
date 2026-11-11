@@ -1,21 +1,22 @@
 """allowed_weekdays: 対象タスクは指定した曜日にのみ実行できる
-（拠点の現地時間、1 = 月 … 7 = 日）。必須ルール。
+（拠点の現地時間、0 = 日 … 6 = 土）。必須ルール。
 
 例（M_Rules）: SelectorJSON {"family": "C"}, ParamsJSON {"weekdays": [1,2,3,4,5]}
 → 系統C は土曜・日曜に生産しない。
 """
+from app.core.timeutil import weekday_number
 from app.engine.problem import Problem, PRule, matches
 from app.engine.result import SAssignment, Violation, fmt
 from app.engine.rules import RulePlugin, register
 
-# 許可曜日を画面に表示するための、月曜から日曜までの文字列。
-DAY_NAMES = "月火水木金土日"
+# 許可曜日を画面に表示するための、日曜から土曜までの文字列。
+DAY_NAMES = "日月火水木金土"
 
 
 # 許可されていない曜日の時間帯を、計画開始からの分数で返す。
 def blocked_ranges(problem: Problem, weekdays: list[int]) -> list[tuple[int, int]]:
     allowed = set(weekdays)
-    return [(s, e) for day, s, e in problem.local_days() if day.isoweekday() not in allowed]
+    return [(s, e) for day, s, e in problem.local_days() if weekday_number(day) not in allowed]
 
 
 @register
@@ -30,8 +31,8 @@ class AllowedWeekdays(RulePlugin):
         "properties": {
             "weekdays": {
                 "type": "array",
-                "items": {"type": "integer", "minimum": 1, "maximum": 7},
-                "title": "曜日（1=月 … 7=日）",
+                "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                "title": "曜日（0=日 … 6=土）",
             }
         },
     }
@@ -56,7 +57,7 @@ class AllowedWeekdays(RulePlugin):
             if t is None or a.locked or not matches(rule.selector, t.attrs):
                 continue
             if any(a.start < e and s < a.end for s, e in blocked):
-                allowed = "".join(DAY_NAMES[d - 1] for d in sorted(rule.params.get("weekdays", [])))
+                allowed = "".join(DAY_NAMES[d] for d in sorted(rule.params.get("weekdays", [])))
                 out.append(Violation(
                     "HARD" if rule.hard else "SOFT", "WEEKDAY",
                     f"ルール「{rule.name}」: {t.name} は {allowed} のみ実行可能です（{fmt(problem, a.start)}）",

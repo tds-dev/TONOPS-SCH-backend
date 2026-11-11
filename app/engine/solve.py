@@ -13,7 +13,7 @@ from dataclasses import replace
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.timeutil import utcnow
+from app.core.timeutil import jst_now
 from app.engine.evaluate import check_schedule, compute_kpis
 from app.engine.problem import Problem
 from app.engine.result import SAssignment
@@ -104,7 +104,7 @@ def execute_run(db: Session, run_id: int, session_factory: sessionmaker | None =
     factory = session_factory or sessionmaker(bind=db.get_bind(), expire_on_commit=False)
     run = db.get(SolverRun, run_id)
     plan = db.get(Plan, run.PlanID)
-    run.Status, run.StartedAt = "RUNNING", run.StartedAt or utcnow()
+    run.Status, run.StartedAt = "RUNNING", run.StartedAt or jst_now()
     db.commit()
     try:
         problem = build_problem(db, plan, run.Scope)
@@ -134,6 +134,6 @@ def execute_run(db: Session, run_id: int, session_factory: sessionmaker | None =
         run = db.get(SolverRun, run_id)
         run.Status = "FAILED"
         run.ErrorMessage = traceback.format_exc()[-4000:]
-    run.FinishedAt = utcnow()
+    run.FinishedAt = jst_now()
     db.commit()
     return run

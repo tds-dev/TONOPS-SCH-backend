@@ -1,22 +1,28 @@
-"""時刻ユーティリティ。DBの日時は時差情報を外したUTC（datetime2(7)）で保存する。"""
-from datetime import datetime, timezone
+"""日本時間の日時取得・保存値への正規化・API表現を共通化する処理。"""
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-
-def utcnow() -> datetime:
-    """現在時刻を naive な UTC で返す（秒未満は切り捨て）。"""
-    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+# OSやDBサーバーの時差設定に依存しない日本時間。
+JST = ZoneInfo("Asia/Tokyo")
 
 
-def to_utc_naive(dt: datetime, tz: str | None = None) -> datetime:
-    """aware な日時（または `tz` の naive な日時）を naive な UTC に変換する。"""
-    if dt.tzinfo is None:
-        if tz is None:
-            return dt  # 規約により既に naive な UTC
-        dt = dt.replace(tzinfo=ZoneInfo(tz))
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+# 日本時間の現在日時を、DB保存用に時差情報なしで返す。従来どおり秒単位とする。
+def jst_now() -> datetime:
+    return datetime.now(JST).replace(tzinfo=None, microsecond=0)
 
 
-def utc_to_local(dt: datetime, tz: str) -> datetime:
-    """naive な UTC を `tz` の aware なローカル時刻に変換する。"""
-    return dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(tz))
+# 時差付き入力は日本時間へ揃え、時差なし入力は日本時間として保存する。
+def to_jst_naive(value: datetime) -> datetime:
+    if value.tzinfo is not None:
+        value = value.astimezone(JST)
+    return value.replace(tzinfo=None)
+
+
+# DBの日本時間に+09:00を付ける。既に時差があれば日本時間へ揃える。
+def as_jst(value: datetime) -> datetime:
+    return to_jst_naive(value).replace(tzinfo=JST)
+
+
+# Pythonの曜日番号を、DB・画面で共通の日曜0～土曜6へ変換する。
+def weekday_number(value: date) -> int:
+    return value.isoweekday() % 7

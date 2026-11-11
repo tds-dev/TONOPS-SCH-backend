@@ -6,6 +6,7 @@ from sqlalchemy import (
     Column,
     Date,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Numeric,
     SmallInteger,
@@ -26,76 +27,64 @@ DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
 TIME_UNITS = ["MINUTE", "DAY"]
 
 
-# ---------------------------------------------------------------- テナント
-class Organization(AuditMixin, SoftDeleteMixin, Base):
-    """組織マスタ"""
-
-    __tablename__ = "M_Organizations"
-    OrganizationID = Column(Integer, primary_key=True, autoincrement=True)
-    # 組織の表示名。識別には自動採番のOrganizationIDを使う。
-    OrganizationName = Column(String(100), nullable=False)
-
-
+# ---------------------------------------------------------------- 拠点
 class Location(AuditMixin, SoftDeleteMixin, Base):
     """拠点マスタ"""
 
     __tablename__ = "M_Locations"
+    # 代表勤務行が必ず同じ拠点に属するよう、拠点番号も組み合わせて参照する。
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["CalendarID", "LocationID"], ["M_Calendars.CalendarID", "M_Calendars.LocationID"],
+            name="FK_M_Locations_CalendarID_M_Calendars", use_alter=True,
+        ),
+    )
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, primary_key=True, autoincrement=True)
-    OrganizationID = Column(Integer, ForeignKey("M_Organizations.OrganizationID"), nullable=False)
     # 画面の拠点選択欄に表示する名称。
     LocationName = Column(String(100), nullable=False)
-    # 拠点に属する設備で、個別指定がない場合に使うカレンダー。
-    DefaultCalendarID = Column(
-        Integer, ForeignKey("M_Calendars.CalendarID", use_alter=True), nullable=True
-    )
+    # 拠点共通カレンダーの代表勤務行。計算には同じ拠点の全勤務行を使う。
+    CalendarID = Column(Integer, nullable=True)
 
 
 # ---------------------------------------------------------------- カレンダー
 class Calendar(AuditMixin, SoftDeleteMixin, Base):
-    """カレンダーマスタ"""
+    """拠点ごとの週次勤務。1行が1曜日・1時間帯を表す。"""
 
     __tablename__ = "M_Calendars"
+    # 曜日と同日勤務の範囲、拠点の代表勤務行を参照する組合せを定義する。
+    __table_args__ = (
+        CheckConstraint("DayOfWeek BETWEEN 0 AND 6", name="DayOfWeek"),
+        CheckConstraint("EndTime > StartTime", name="EndAfterStart"),
+        UniqueConstraint("CalendarID", "LocationID"),
+    )
+    # 勤務行を識別する番号。カレンダー全体はLocationIDでまとめる。
     CalendarID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    # カレンダーの表示名。識別にはCalendarIDを使う。
-    CalendarName = Column(String(100), nullable=False)
-    ParentCalendarID = Column(Integer, ForeignKey("M_Calendars.CalendarID"), nullable=True)
-
-    patterns = relationship("CalendarPattern", cascade="all, delete-orphan", lazy="selectin")
-    exceptions = relationship("CalendarException", cascade="all, delete-orphan", lazy="selectin")
-    parent = relationship("Calendar", remote_side=[CalendarID])
-
-
-class CalendarPattern(AuditMixin, Base):
-    """稼働パターンマスタ — 拠点の現地時間による週次シフト。"""
-
-    __tablename__ = "M_CalendarPatterns"
-    __table_args__ = (CheckConstraint("DayOfWeek BETWEEN 1 AND 7", name="DayOfWeek"),)
-    PatternID = Column(Integer, primary_key=True, autoincrement=True)
-    CalendarID = Column(
-        Integer, ForeignKey("M_Calendars.CalendarID", ondelete="CASCADE"), nullable=False
-    )
-    DayOfWeek = Column(SmallInteger, nullable=False)  # 1 = 月 … 7 = 日
+    # 曜日と日本時間の勤務帯。開始から終了までを同じ日付内に収める。
+    DayOfWeek = Column(SmallInteger, nullable=False)  # 0 = 日 … 6 = 土
     StartTime = Column(Time, nullable=False)
-    EndTime = Column(Time, nullable=False)  # StartTime 以下は「日をまたぐ」の意味
-    ShiftName = Column(String(50), nullable=True)
-    ValidFrom = Column(Date, nullable=True)
-    ValidTo = Column(Date, nullable=True)
+    EndTime = Column(Time, nullable=False)  # 同じ日のStartTimeより後の時刻。
+    # 午前・午後などの勤務名。
+    WorkName = Column(String(50), nullable=True)
 
 
 class CalendarException(AuditMixin, Base):
-    """稼働例外マスタ — 休日・停止（IsWorking=0）または残業（IsWorking=1）。"""
+    """拠点共通の休日・停止時間。週次勤務から指定日時を差し引く。"""
 
     __tablename__ = "M_CalendarExceptions"
+    # 終了が開始より後の停止時間のみ登録する。
+    __table_args__ = (CheckConstraint("EndTime > StartTime", name="EndAfterStart"),)
+    # 例外の識別番号と、その拠点の代表勤務行。
     ExceptionID = Column(Integer, primary_key=True, autoincrement=True)
     CalendarID = Column(
         Integer, ForeignKey("M_Calendars.CalendarID", ondelete="CASCADE"), nullable=False
     )
-    StartAt = Column(DateTime, nullable=False)  # UTC
-    EndAt = Column(DateTime, nullable=False)  # UTC
-    IsWorking = Column(Boolean, nullable=False, default=False)
+    # 時刻だけでなく日付も持つ日本時間の日時。API入出力では時差を変換する。
+    StartTime = Column(DateTime, nullable=False)
+    EndTime = Column(DateTime, nullable=False)
+    # 休日・設備点検などの登録理由。
     Reason = Column(String(100), nullable=True)
 
 
@@ -139,12 +128,11 @@ class AttributeDefinition(AuditMixin, Base):
 
     __tablename__ = "M_AttributeDefinitions"
     __table_args__ = (
-        UniqueConstraint("OrganizationID", "EntityType", "AttributeKey"),
+        UniqueConstraint("EntityType", "AttributeKey"),
         CheckConstraint(in_check("EntityType", ENTITY_TYPES), name="EntityType"),
         CheckConstraint(in_check("DataType", DATA_TYPES), name="DataType"),
     )
     AttributeDefID = Column(Integer, primary_key=True, autoincrement=True)
-    OrganizationID = Column(Integer, ForeignKey("M_Organizations.OrganizationID"), nullable=False)
     # オーダーの属性はORDER区分として保存・検索する。
     EntityType = Column(String(20), nullable=False)
     AttributeKey = Column(String(50), nullable=False)

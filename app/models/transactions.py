@@ -62,7 +62,7 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     Quantity = Column(Numeric(18, 3), nullable=True)
     CustomerName = Column(String(100), nullable=True)
     ReleaseAt = Column(DateTime, nullable=True)
-    # 計算で使う納期と、任意入力の出荷日時。日時はUTCで保存する。
+    # 計算で使う納期と、任意入力の出荷日時。日時は日本時間で保存する。
     DeadLine = Column(DateTime, nullable=True)
     ShippingDate = Column(DateTime, nullable=True)
     Priority = Column(Integer, nullable=False, default=50)  # 1 = 最優先
@@ -189,8 +189,8 @@ class PlanAssignment(AuditMixin, Base):
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), nullable=False)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=False)
-    StartAt = Column(DateTime, nullable=False)  # UTC。タスク開始時刻（段取りは SetupMinutes として直前に置く）
-    EndAt = Column(DateTime, nullable=False)  # UTC
+    StartAt = Column(DateTime, nullable=False)  # 日本時間。タスク開始時刻（段取りは SetupMinutes として直前に置く）
+    EndAt = Column(DateTime, nullable=False)  # 日本時間
     SetupMinutes = Column(Integer, nullable=False, default=0)
     Units = Column(Numeric(5, 2), nullable=False, default=1)
     IsLocked = Column(Boolean, nullable=False, default=False)

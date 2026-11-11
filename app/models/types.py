@@ -8,7 +8,7 @@ from sqlalchemy.dialects import mssql
 
 String = Unicode  # SQL Server: NVARCHAR(n)
 Text = UnicodeText  # SQL Server: NVARCHAR(max)
-# SQL Serverでは出荷日時を含めDATETIME2(7)を使い、UTCで保存する。
+# SQL Serverでは出荷日時を含めDATETIME2(7)を使い、日本時間で保存する。
 DateTime = _DateTime().with_variant(mssql.DATETIME2(precision=7), "mssql")
 
 __all__ = ["DateTime", "String", "Text"]

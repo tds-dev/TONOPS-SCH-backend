@@ -16,7 +16,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core.timeutil import utcnow
+from app.core.timeutil import jst_now
 from app.models.masters import Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.services.plan_validation import copy_plan_name, flush_named_plan, validate_plan_name
@@ -97,7 +97,7 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
     ):
         old.SupersededAt = plan.HorizonStart
 
-    plan.Status, plan.ApprovedAt, plan.ApprovedBy, plan.UpdatedBy = "MASTER", utcnow(), user, user
+    plan.Status, plan.ApprovedAt, plan.ApprovedBy, plan.UpdatedBy = "MASTER", jst_now(), user, user
     order_ids = select(Task.OrderID).join(PlanAssignment, PlanAssignment.TaskID == Task.TaskID).where(
         PlanAssignment.PlanID == plan.PlanID
     )

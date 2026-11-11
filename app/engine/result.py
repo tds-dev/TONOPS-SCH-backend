@@ -1,6 +1,6 @@
 """エンジン共通の結果型（純粋 Python）。"""
 from dataclasses import dataclass
-from zoneinfo import ZoneInfo
+from app.core.timeutil import as_jst
 
 from app.engine.problem import Problem
 
@@ -27,7 +27,7 @@ class Violation:
 
 def fmt(problem: Problem, minute: int) -> str:
     """分オフセット -> 拠点時刻の 'MM/DD HH:MM'（メッセージ用）。"""
-    local = problem.to_dt(minute).replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo(problem.tz))
+    local = as_jst(problem.to_dt(minute))
     return local.strftime("%m/%d %H:%M")
 
 

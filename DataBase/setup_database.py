@@ -22,7 +22,8 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 デモはパン6製品、製品工程18件、実行候補18件、店舗向けオーダー7件、タスク21件、下書き計画2件を登録する。
 計画名は「各店舗向けパン製造・通常計画」「各店舗向けパン製造・見直し計画」とする。
 新規テーブルには、同じ拠点内で計画名を重複させない現在のモデル定義を適用する。
-デモ組織が登録済みの場合は、以前の内容も含めて既存データを保持する。
+デモ拠点が登録済みの場合は、以前の内容も含めて既存データを保持する。
+勤務時間はM_Calendarsへ直接登録し、組織・カレンダーパターンは作成しない。
 """
 import argparse
 
@@ -33,8 +34,8 @@ from sqlalchemy.exc import DBAPIError
 from app import models  # noqa: F401  全テーブルの定義を登録する。
 from app.core.config import get_settings
 from app.core.db import Base, SessionLocal, engine
-from app.models.masters import Organization
-from app.services.demo_seed import DEMO_ORGANIZATION_NAME, seed_demo
+from app.models.masters import Location
+from app.services.demo_seed import DEMO_LOCATION_NAME, seed_demo
 
 
 def ensure_database() -> None:
@@ -88,8 +89,8 @@ def setup_database() -> None:
     # 現在のモデルで未作成テーブルを追加する。既存DBの列削除・名称変更は行わないため、構成変更後は新規DBを使う。
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
-        # 共通のデモ組織名で登録済みを確認し、初期設定の再実行による重複を防ぐ。
-        demo_id = db.scalar(select(Organization.OrganizationID).where(Organization.OrganizationName == DEMO_ORGANIZATION_NAME))
+        # 削除済みも含めてデモ拠点を確認し、再実行による重複を防ぐ。
+        demo_id = db.scalar(select(Location.LocationID).where(Location.LocationName == DEMO_LOCATION_NAME))
         if demo_id is None:
             # 初期データの登録件数を受け取り、下書き計画も作成されたことを通知する。
             result = seed_demo(db)

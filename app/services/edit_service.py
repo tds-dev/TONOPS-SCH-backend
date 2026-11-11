@@ -10,8 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
-from app.core.timeutil import to_utc_naive
+from app.core.timeutil import to_jst_naive
 from app.engine.edit import Change, apply_changes, new_violations
 from app.engine.evaluate import compute_kpis
 from app.engine.problem import Problem
@@ -61,7 +60,6 @@ def _load(db: Session, plan: Plan) -> tuple[Problem, dict[int, PlanAssignment], 
 # 画面から受け取った変更要求を、アプリ共通の時刻設定で検証用の形式へ変換する。
 def _to_changes(problem: Problem, rows: dict[int, PlanAssignment],
                 requests: list[ChangeRequest]) -> list[Change]:
-    tz = get_settings().app_timezone
     by_id = {a.AssignmentID: a for a in rows.values()}
     out = []
     for r in requests:
@@ -79,8 +77,8 @@ def _to_changes(problem: Problem, rows: dict[int, PlanAssignment],
         out.append(Change(
             task_id=task_id,
             resource_id=r.resource_id,
-            start=problem.to_min(to_utc_naive(r.start_at, tz)) if r.start_at else None,
-            end=problem.to_min(to_utc_naive(r.end_at, tz)) if r.end_at else None,
+            start=problem.to_min(to_jst_naive(r.start_at)) if r.start_at else None,
+            end=problem.to_min(to_jst_naive(r.end_at)) if r.end_at else None,
             lock=r.is_locked,
             remove=r.remove,
         ))

@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 
 @dataclass
@@ -95,7 +94,7 @@ class PRule:
 
 @dataclass
 class Problem:
-    horizon_start: datetime  # naive な UTC
+    horizon_start: datetime  # 時差情報なしの日本時間
     horizon: int  # 分
     tz: str
     resources: dict[int, PResource]
@@ -115,15 +114,13 @@ class Problem:
 
     def local_days(self) -> list[tuple[date, int, int]]:
         """計画期間に重なる現地の各暦日: (日付, 開始分, 終了分)。"""
-        zone = ZoneInfo(self.tz)
-        utc = ZoneInfo("UTC")
-        start_local = self.horizon_start.replace(tzinfo=utc).astimezone(zone)
+        # 計画開始も暦日の境界も、保存値と同じ日本時間で扱う。
+        start_local = self.horizon_start
         day = start_local.date()
         out = []
         while True:
-            d0 = datetime.combine(day, datetime.min.time(), tzinfo=zone).astimezone(utc).replace(tzinfo=None)
-            d1 = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=zone)
-            d1 = d1.astimezone(utc).replace(tzinfo=None)
+            d0 = datetime.combine(day, datetime.min.time())
+            d1 = datetime.combine(day + timedelta(days=1), datetime.min.time())
             s, e = max(0, self.to_min(d0)), min(self.horizon, self.to_min(d1))
             if s >= self.horizon:
                 break

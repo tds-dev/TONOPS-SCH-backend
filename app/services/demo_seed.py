@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.timeutil import to_utc_naive
+from app.core.timeutil import to_jst_naive
 from app.models import masters as m
 from app.models import transactions as t
 from app.services.order_service import generate_tasks
@@ -19,42 +19,41 @@ from app.services.plan_service import create_plan
 # パン工場の現地時刻と、初期データの登録者。
 TZ = get_settings().app_timezone
 USER = "seed"
-# 初期設定の登録済み判定と、デモ作成で共通に使う組織名。
-DEMO_ORGANIZATION_NAME = "デモベーカリー"
+# 初期設定の登録済み判定と、デモ作成で共通に使う拠点名。
+DEMO_LOCATION_NAME = "パン工場"
 
 # 店舗向けの製造計画を想像できる名称。計画番号は名前に含めず、同じ拠点内で重複させない。
 DEMO_PLAN_NAMES = ("各店舗向けパン製造・通常計画", "各店舗向けパン製造・見直し計画")
 
 
-# 指定日または現在日の翌日06:00を、保存用のUTC日時へ変換する。
+# 指定日または現在日の翌日06:00を、保存用の日本時間の日時へ変換する。
 def demo_start(now: datetime | None = None) -> datetime:
-    """翌日 06:00（現地時刻）を naive な UTC で返す。"""
+    """翌日 06:00（現地時刻）を 時差情報なしの日本時間 で返す。"""
     local_now = (now or datetime.now(ZoneInfo(TZ))).astimezone(ZoneInfo(TZ))
     tomorrow = local_now.date() + timedelta(days=1)
-    return to_utc_naive(datetime.combine(tomorrow, time(6, 0)), TZ)
+    return to_jst_naive(datetime.combine(tomorrow, time(6, 0)))
 
 
 # パン製品・製品工程・オーダー・下書き計画を含む新規デモデータを登録する。
 def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
-    # 廃止した組織コードを使わず、共通の組織名で初期データを識別する。
-    org = m.Organization(OrganizationName=DEMO_ORGANIZATION_NAME, CreatedBy=USER)
-    db.add(org)
-    db.flush()
-    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
-    location = m.Location(
-        OrganizationID=org.OrganizationID, LocationName="パン工場", CreatedBy=USER,
-    )
+    # 組織を介さず、共通の拠点名で初期データを識別する。
+    location = m.Location(LocationName=DEMO_LOCATION_NAME, CreatedBy=USER)
     db.add(location)
     db.flush()
 
     # パン工場のデモ稼働時間。月〜土06:00〜12:00・13:00〜18:00、日曜は休みとする。
-    cal = m.Calendar(LocationID=location.LocationID, CalendarName="パン工場標準カレンダー", CreatedBy=USER)
+    # 曜日番号は日曜0、月曜1～土曜6。月〜土の午前・午後を直接登録し、日曜は休みとする。
+    calendars = []
     for dow in range(1, 7):
-        cal.patterns.append(m.CalendarPattern(DayOfWeek=dow, StartTime=time(6), EndTime=time(12), ShiftName="午前"))
-        cal.patterns.append(m.CalendarPattern(DayOfWeek=dow, StartTime=time(13), EndTime=time(18), ShiftName="午後"))
-    db.add(cal)
+        for start_hour, end_hour, work_name in [(6, 12, "午前"), (13, 18, "午後")]:
+            calendars.append(m.Calendar(
+                LocationID=location.LocationID, DayOfWeek=dow, StartTime=time(start_hour),
+                EndTime=time(end_hour), WorkName=work_name, CreatedBy=USER,
+            ))
+    db.add_all(calendars)
     db.flush()
-    location.DefaultCalendarID = cal.CalendarID
+    # 先頭の勤務行を代表とし、すべての勤務行を拠点共通として使う。
+    location.CalendarID = calendars[0].CalendarID
 
     # 工程ごとに使える設備の集合。各工程には同じグループの設備を候補として紐付ける。
     groups = {}
@@ -71,12 +70,12 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ]):
         db.add(m.Resource(
             LocationID=location.LocationID, ResourceGroupID=groups[grp].ResourceGroupID,
-            ResourceName=name, ResourceType="MACHINE", Capacity=1, CalendarID=cal.CalendarID,
+            ResourceName=name, ResourceType="MACHINE", Capacity=1, CalendarID=location.CalendarID,
             SortOrder=i, CreatedBy=USER,
         ))
 
     db.add(m.AttributeDefinition(
-        OrganizationID=org.OrganizationID, EntityType="ORDER", AttributeKey="family",
+        EntityType="ORDER", AttributeKey="family",
         Label="パンの分類", DataType="ENUM", EnumValuesJSON=["食事パン", "菓子パン", "ナッツ入り"], CreatedBy=USER,
     ))
 
@@ -169,5 +168,5 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             user=USER, plan_name=plan_name, use_master_as_base=False,
             remarks="駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。",
         )
-    return {"organizationId": org.OrganizationID, "locationId": location.LocationID,
+    return {"locationId": location.LocationID,
             "orders": len(orders), "plans": len(DEMO_PLAN_NAMES)}

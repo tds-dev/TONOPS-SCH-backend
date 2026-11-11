@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.db import chunks
-from app.core.timeutil import to_utc_naive, utc_to_local
+from app.core.timeutil import to_jst_naive, as_jst
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
 from app.models.masters import Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, Task
@@ -19,7 +19,7 @@ KIND_LABEL = {"MOVED": "時刻変更", "RESOURCE": "設備変更", "ADDED": "追
 
 # 日時を拠点の現地時刻へ変換して表示用の文字列にする。
 def _hhmm(dt: datetime, tz: str) -> str:
-    return utc_to_local(dt, tz).strftime("%m/%d %H:%M")
+    return as_jst(dt).strftime("%m/%d %H:%M")
 
 
 # 割付の移動分数と設備変更から、比較結果の説明を組み立てる。
@@ -100,8 +100,8 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
     if location is None:
         raise HTTPException(404, f"拠点 {location_id} が見つかりません")
     tz = get_settings().app_timezone
-    start = to_utc_naive(datetime.combine(day, time()), tz)
-    end = to_utc_naive(datetime.combine(day + timedelta(days=1), time()), tz)
+    start = to_jst_naive(datetime.combine(day, time()))
+    end = to_jst_naive(datetime.combine(day + timedelta(days=1), time()))
     rows = master_assignments(db, location_id, start, end)
     task_ids = [a.TaskID for a in rows]
     detail = {
@@ -128,9 +128,9 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
                 "assignmentId": a.AssignmentID, "taskId": t.TaskID, "wbsNumber": j.WBSNumber, "taskName": t.TaskName,
                 "productName": product.ProductName if product else None,
                 "quantity": coerce(j.Quantity),
-                "start": utc_to_local(a.StartAt, tz).strftime("%H:%M"),
-                "end": utc_to_local(a.EndAt, tz).strftime("%H:%M"),
-                "startAt": a.StartAt.isoformat() + "Z", "endAt": a.EndAt.isoformat() + "Z",
+                "start": as_jst(a.StartAt).strftime("%H:%M"),
+                "end": as_jst(a.EndAt).strftime("%H:%M"),
+                "startAt": as_jst(a.StartAt).isoformat(), "endAt": as_jst(a.EndAt).isoformat(),
                 "setupMinutes": a.SetupMinutes, "isLocked": a.IsLocked, "taskStatus": t.Status,
                 "attributes": t.AttributesJSON or {},
             })
