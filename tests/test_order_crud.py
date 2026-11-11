@@ -17,8 +17,8 @@ with patch("app.core.config.get_settings", return_value=Settings(
     _env_file=None, database_url="sqlite:///:memory:", default_user="order-test",
 )):
     from app.core.db import Base, get_db, make_engine
-    from app.models.masters import Location, Organization, Product, ProductProcess, ProductProcessResource, PlanProfile, Resource, ResourceGroup
-    from app.models.transactions import Actual, Order, Plan, PlanAssignment, Task
+    from app.models.masters import Location, Organization, Product, ProductProcess, ProductProcessResource, CalculationSetting, Resource, ResourceGroup
+    from app.models.transactions import WorkActual, Order, Plan, PlanAssignment, Task
     from app.routers.orders import routers
     from app.routers.masters import routers as master_routers
 
@@ -62,10 +62,10 @@ class OrderCrudTest(unittest.TestCase):
         for router in master_routers:
             self.app.include_router(router, prefix="/api/v1")
         self.app.dependency_overrides[get_db] = lambda: self.db
-        self.db.add(Organization(OrganizationID=1, OrganizationCode="ORG", OrganizationName="組織"))
+        self.db.add(Organization(OrganizationID=1, OrganizationName="組織"))
         self.db.flush()
-        self.db.add_all([Location(LocationID=1, OrganizationID=1, LocationCode="A", LocationName="拠点A"),
-                         Location(LocationID=2, OrganizationID=1, LocationCode="B", LocationName="拠点B")])
+        self.db.add_all([Location(LocationID=1, OrganizationID=1, LocationName="拠点A"),
+                         Location(LocationID=2, OrganizationID=1, LocationName="拠点B")])
         self.db.flush()
         self.db.add_all([Product(ProductID=1, LocationID=1, ProductName="製品A"),
                          Product(ProductID=2, LocationID=2, ProductName="製品B")])
@@ -84,27 +84,34 @@ class OrderCrudTest(unittest.TestCase):
 
     # 最小限の有効なオーダーを登録し、必要な項目だけ上書きする。
     def create(self, **values):
-        body = {"locationId": 1, "orderNo": "ORD-001", "orderName": "製造依頼", "productId": 1, **values}
+        body = {"locationId": 1, "wbsNumber": "ORD-001", "orderName": "製造依頼", "productId": 1, **values}
         status, order = self.call("POST", "/orders", body)
         self.assertEqual(status, 201, order)
         return order
 
-    # CRUD全体と、論理削除後に番号・タスク・親の情報が保持されることを確認する。
+    # CRUD全体と、論理削除後に番号・タスク・別オーダーが保持されることを確認する。
     def test_crud_preserves_unedited_data_and_tasks(self):
-        parent = self.create(orderNo="PARENT")
-        order = self.create(parentOrderId=parent["orderId"], quantity=12.345,
-                            releaseAt="2026-10-30T09:00:00+09:00", dueAt="2026-10-30T12:00:00+09:00")
+        self.create(wbsNumber="OTHER")
+        order = self.create(quantity=12.345,
+                            releaseAt="2026-10-30T09:00:00+09:00", deadLine="2026-10-30T12:00:00+09:00",
+                            shippingDate="2026-10-30T15:00:00+09:00")
         order_id = order["orderId"]
         self.assertEqual(order["releaseAt"], "2026-10-30T00:00:00Z")
+        self.assertEqual(order["shippingDate"], "2026-10-30T06:00:00Z")
+        # 廃止した親オーダーIDをAPIへ返さない。
+        self.assertNotIn("parentOrderId", order)
         self.assertEqual(order["priority"], 50)
         self.assertEqual(order["createdBy"], "order-test")
         self.assertEqual(self.call("GET", f"/orders/{order_id}")[0], 200)
         status, tasks = self.call("POST", f"/orders/{order_id}/generate-tasks")
         self.assertEqual(status, 200, tasks)
         self.assertEqual(len(tasks), 1)
+        # タスクの親階層・マイルストーン・工数の旧項目をAPIへ返さない。
+        for key in ("parentTaskId", "isMilestone", "effortHours"):
+            self.assertNotIn(key, tasks[0])
         status, updated = self.call("PATCH", f"/orders/{order_id}", {"orderName": "変更後", "remarks": "備考"})
         self.assertEqual(status, 200, updated)
-        for key in ("parentOrderId", "productId", "quantity", "releaseAt", "dueAt", "createdAt"):
+        for key in ("productId", "quantity", "releaseAt", "deadLine", "shippingDate", "createdAt"):
             self.assertEqual(updated[key], order[key])
         self.assertEqual(updated["orderName"], "変更後")
         self.assertEqual(updated["updatedBy"], "order-test")
@@ -117,29 +124,31 @@ class OrderCrudTest(unittest.TestCase):
 
     # 無効な値を保存せず、必須・範囲・所属・日時・選択値を確認する。
     def test_rejects_invalid_create(self):
-        for values in ({"orderNo": "  "}, {"orderName": "x" * 201}, {"quantity": -1}, {"quantity": 0.0001},
+        for values in ({"wbsNumber": "  "}, {"orderName": "x" * 201}, {"quantity": -1}, {"quantity": 0.0001},
                        {"quantity": 1e15}, {"priority": 0}, {"priority": None}, {"status": "UNKNOWN"},
                        {"orderType": None}, {"planOwner": "UNKNOWN"}, {"productId": 2},
                        {"locationId": 999}, {"attributesJSON": []},
-                       {"releaseAt": "2026-10-30T12:00:00Z", "dueAt": "2026-10-30T11:00:00Z"}):
+                       {"releaseAt": "2026-10-30T12:00:00Z", "deadLine": "2026-10-30T11:00:00Z"}):
             with self.subTest(values=values):
-                status, result = self.call("POST", "/orders", {"locationId": 1, "orderNo": "INVALID", "orderName": "依頼", **values})
+                status, result = self.call("POST", "/orders", {"locationId": 1, "wbsNumber": "INVALID", "orderName": "依頼", **values})
                 self.assertEqual(status, 422, result)
                 self.assertIsNone(self.db.scalar(select(Order.OrderID)))
 
     # 既存値と変更値を合わせた日時の前後関係と、所属拠点変更を拒否する。
     def test_partial_update_uses_existing_values(self):
-        order = self.create(releaseAt="2026-10-30T09:00:00Z", dueAt="2026-10-30T12:00:00Z")
-        for values in ({"dueAt": "2026-10-30T08:00:00Z"}, {"locationId": 2}, {"orderName": None}):
+        order = self.create(releaseAt="2026-10-30T09:00:00Z", deadLine="2026-10-30T12:00:00Z")
+        for values in ({"deadLine": "2026-10-30T08:00:00Z"}, {"locationId": 2}, {"orderName": None}):
             with self.subTest(values=values):
                 self.assertEqual(self.call("PATCH", f'/orders/{order["orderId"]}', values)[0], 422)
-        self.assertEqual(self.call("PATCH", f'/orders/{order["orderId"]}', {"dueAt": None})[0], 200)
+        self.assertEqual(self.call("PATCH", f'/orders/{order["orderId"]}', {"deadLine": None})[0], 200)
+        # 任意の出荷日時は、日時を入力した後でも空欄へ戻せる。
+        self.assertEqual(self.call("PATCH", f'/orders/{order["orderId"]}', {"shippingDate": None})[0], 200)
 
     # 削除済み番号も重複扱いとし、DBの不明瞭な制約エラーを避ける。
     def test_duplicate_numbers_include_deleted_orders(self):
         order = self.create()
         self.assertEqual(self.call("DELETE", f'/orders/{order["orderId"]}')[0], 204)
-        self.assertEqual(self.call("POST", "/orders", {"locationId": 1, "orderNo": "ORD-001", "orderName": "重複"})[0], 409)
+        self.assertEqual(self.call("POST", "/orders", {"locationId": 1, "wbsNumber": "ORD-001", "orderName": "重複"})[0], 409)
         self.assertEqual(self.create(locationId=2, productId=2)["locationId"], 2)
 
     # 計画に割付済みのタスクがある場合も、名称編集・履歴を残す削除は維持する。
@@ -148,15 +157,21 @@ class OrderCrudTest(unittest.TestCase):
         order_id = order["orderId"]
         status, tasks = self.call("POST", f"/orders/{order_id}/generate-tasks")
         self.assertEqual(status, 200, tasks)
-        self.db.add_all([PlanProfile(ProfileID=1, LocationID=1, ProfileName="標準"),
-                         Resource(ResourceID=1, LocationID=1, ResourceCode="R1", ResourceName="設備", ResourceType="MACHINE")])
+        self.db.add_all([CalculationSetting(CalculationSettingID=1, LocationID=1, CalculationSettingName="標準"),
+                         Resource(ResourceID=1, LocationID=1, ResourceName="設備", ResourceType="MACHINE")])
         self.db.flush()
-        self.db.add(Plan(PlanID=1, LocationID=1, PlanNo="PLAN", PlanName="計画", ProfileID=1,
+        self.db.add(Plan(PlanID=1, LocationID=1, PlanName="計画", CalculationSettingID=1,
                          HorizonStart=datetime(2026, 10, 30), HorizonEnd=datetime(2026, 10, 31)))
         self.db.flush()
         self.db.add(PlanAssignment(PlanID=1, TaskID=tasks[0]["taskId"], ResourceID=1,
                                    StartAt=datetime(2026, 10, 30, 9), EndAt=datetime(2026, 10, 30, 10)))
         self.db.commit()
+        # 設備名などの既存情報を返し、廃止した単価と設備属性を含めない。
+        status, resource = self.call("GET", "/resources/1")
+        self.assertEqual(status, 200, resource)
+        self.assertEqual(resource["resourceName"], "設備")
+        for key in ("costPerHour", "attributesJSON"):
+            self.assertNotIn(key, resource)
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"quantity": 20})[0], 409)
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"quantity": 10.123})[0], 200)
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"remarks": "編集可"})[0], 200)
@@ -173,11 +188,11 @@ class OrderCrudTest(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"quantity": 20})[0], 409)
         self.db.get(Task, 1).Status = "NOT_STARTED"
-        self.db.add(Actual(TaskID=1, Status="DONE"))
+        self.db.add(WorkActual(TaskID=1, Status="DONE"))
         self.db.commit()
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"attributesJSON": {"family": "B"}})[0], 409)
         self.assertEqual(self.call("DELETE", f"/orders/{order_id}")[0], 204)
-        self.assertIsNotNone(self.db.scalar(select(Actual.ActualID)))
+        self.assertIsNotNone(self.db.scalar(select(WorkActual.WorkActualID)))
         self.assertIsNotNone(self.db.get(Task, 1))
 
     # 未割付のタスクは、既存の再生成操作で変更した数量を反映できる。
@@ -205,7 +220,7 @@ class OrderCrudTest(unittest.TestCase):
         self.assertEqual(status, 200, updated)
         self.assertEqual(updated["productId"], 1)
         self.assertNotIn("routingId", updated)
-        self.assertEqual(self.call("POST", "/orders", {"locationId": 1, "orderNo": "NEW", "orderName": "無効参照", "productId": 1})[0], 422)
+        self.assertEqual(self.call("POST", "/orders", {"locationId": 1, "wbsNumber": "NEW", "orderName": "無効参照", "productId": 1})[0], 422)
 
     # 廃止したルート・製品コード・単位・製品属性をAPIへ返さないことを確認する。
     def test_product_contract_has_no_route_or_removed_fields(self):
@@ -242,9 +257,9 @@ class OrderCrudTest(unittest.TestCase):
     # 設備候補の所属拠点、片方指定、時間の範囲をサーバーでも確認する。
     def test_process_resource_api_checks_scope_and_duration(self):
         self.db.add_all([
-            Resource(ResourceID=1, LocationID=1, ResourceCode="LOCAL", ResourceName="同じ拠点"),
-            Resource(ResourceID=2, LocationID=2, ResourceCode="OTHER", ResourceName="別拠点"),
-            ResourceGroup(ResourceGroupID=1, LocationID=1, GroupCode="G", GroupName="設備群"),
+            Resource(ResourceID=1, LocationID=1, ResourceName="同じ拠点"),
+            Resource(ResourceID=2, LocationID=2, ResourceName="別拠点"),
+            ResourceGroup(ResourceGroupID=1, LocationID=1, GroupName="設備群"),
         ])
         self.db.commit()
         # 有効な候補。既定値で補う他の時間は0にする。
@@ -262,8 +277,8 @@ class OrderCrudTest(unittest.TestCase):
     def test_product_process_generation_preserves_execution_data(self):
         # 既存の工程を後続にし、後から登録する工程を先行にする。
         self.db.get(ProductProcess, 1).SequenceNumber = 2
-        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceCode="R", ResourceName="設備"))
-        self.db.add(ResourceGroup(ResourceGroupID=1, LocationID=1, GroupCode="G", GroupName="設備群"))
+        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceName="設備"))
+        self.db.add(ResourceGroup(ResourceGroupID=1, LocationID=1, GroupName="設備群"))
         self.db.add(ProductProcess(ProductProcessID=2, ProductID=1, SequenceNumber=1, ProcessName="準備", MinLagAfterMin=3, MaxLagAfterMin=9))
         self.db.flush()
         self.db.add_all([
@@ -295,9 +310,9 @@ class OrderCrudTest(unittest.TestCase):
     # 製品未指定・工程未登録で生成を拒否し、入力不備の再生成で既存タスクを失わない。
     def test_generation_requires_product_processes_and_preserves_existing_tasks(self):
         # 製品未指定のオーダー自体は登録できるが、タスクは生成しない。
-        no_product = self.create(orderNo="NO-PRODUCT", productId=None)
+        no_product = self.create(wbsNumber="NO-PRODUCT", productId=None)
         self.assertEqual(self.call("POST", f'/orders/{no_product["orderId"]}/generate-tasks')[0], 422)
-        no_process = self.create(orderNo="NO-PROCESS", locationId=2, productId=2)
+        no_process = self.create(wbsNumber="NO-PROCESS", locationId=2, productId=2)
         self.assertEqual(self.call("POST", f'/orders/{no_process["orderId"]}/generate-tasks')[0], 422)
         # 登録後に製品が無効になった場合も、生成済みタスクを保持する。
         order = self.create()
@@ -314,7 +329,7 @@ class OrderCrudTest(unittest.TestCase):
         second = self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 2, "processName": "第二"})[1]
         third = self.call("POST", "/product-processes", {"productId": 1, "sequenceNumber": 3, "processName": "第三"})[1]
         other = self.call("POST", "/product-processes", {"productId": 2, "sequenceNumber": 1, "processName": "別製品"})[1]
-        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceCode="R", ResourceName="設備"))
+        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceName="設備"))
         self.db.flush()
         self.db.add(ProductProcessResource(ProductProcessID=1, ResourceID=1, FixedMinutes=5))
         self.db.commit()
@@ -373,7 +388,7 @@ class OrderCrudTest(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 409)
         task.Status = "NOT_STARTED"
-        self.db.add(Actual(TaskID=task.TaskID, Status="DONE"))
+        self.db.add(WorkActual(TaskID=task.TaskID, Status="DONE"))
         self.db.commit()
         self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 409)
         self.assertIsNotNone(self.db.get(Task, task.TaskID))

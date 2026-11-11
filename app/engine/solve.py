@@ -60,7 +60,7 @@ def write_evaluation(db: Session, plan: Plan, problem: Problem, assignments: lis
     for v in check_schedule(problem, checked):
         db.add(PlanViolation(
             PlanID=plan.PlanID, RuleID=v.rule_id, TaskID=v.task_id, Severity=v.severity,
-            ViolationCode=v.code, Penalty=v.penalty, Message=v.message[:500], CreatedBy=user,
+            Penalty=v.penalty, Message=v.message[:500], CreatedBy=user,
         ))
 
 

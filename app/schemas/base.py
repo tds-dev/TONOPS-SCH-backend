@@ -40,6 +40,9 @@ def to_camel(name: str) -> str:
     """'ResourceName' -> 'resourceName', 'LocationID' -> 'locationId', 'start_at' -> 'startAt'."""
     if not name:
         return name
+    # WBSのような大文字略語を、画面で使うwbsNumberへ揃える。
+    if name.startswith("WBS"):
+        return "wbs" + name[3:]
     if "_" in name:
         head, *rest = name.split("_")
         out = head + "".join(p[:1].upper() + p[1:] for p in rest)

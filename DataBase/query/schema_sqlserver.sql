@@ -1,4 +1,7 @@
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
+-- 改名したID・名称と外部キーを統一し、出荷日時は任意入力として保持する。
+-- 設備の費用・属性、オーダーとタスクの親ID、節目指定・予定工数の6列は持たない。
+-- 曜日勤務の時刻はTIME、有効期間と実作業日はDATEとし、Pythonのモデル定義に合わせる。
 -- 工程番号はアプリの保存処理で製品ごとに1からの連番へ整え、重複指定時は順番を交換する。
 
 -- 既存DBを作り直した後、create_database_sqlserver.sql、このSQL、seed_demo_sqlserver.sqlの順で実行する。
@@ -8,15 +11,13 @@ GO
 
 CREATE TABLE [M_Organizations] (
 	[OrganizationID] INTEGER NOT NULL IDENTITY, 
-	[OrganizationCode] NVARCHAR(30) NOT NULL, 
 	[OrganizationName] NVARCHAR(100) NOT NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
-	CONSTRAINT [PK_M_Organizations] PRIMARY KEY ([OrganizationID]), 
-	CONSTRAINT [UQ_M_Organizations_OrganizationCode] UNIQUE ([OrganizationCode])
+	CONSTRAINT [PK_M_Organizations] PRIMARY KEY ([OrganizationID])
 );
 GO
 
@@ -45,9 +46,7 @@ GO
 CREATE TABLE [M_Locations] (
 	[LocationID] INTEGER NOT NULL IDENTITY, 
 	[OrganizationID] INTEGER NOT NULL, 
-	[LocationCode] NVARCHAR(30) NOT NULL, 
 	[LocationName] NVARCHAR(100) NOT NULL, 
-	[TimeZone] NVARCHAR(50) NOT NULL, 
 	[DefaultCalendarID] INTEGER NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
@@ -55,7 +54,6 @@ CREATE TABLE [M_Locations] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Locations] PRIMARY KEY ([LocationID]), 
-	CONSTRAINT [UQ_M_Locations_OrganizationID_LocationCode] UNIQUE ([OrganizationID], [LocationCode]), 
 	CONSTRAINT [FK_M_Locations_OrganizationID_M_Organizations] FOREIGN KEY([OrganizationID]) REFERENCES [M_Organizations] ([OrganizationID])
 );
 GO
@@ -63,7 +61,6 @@ GO
 CREATE TABLE [M_Calendars] (
 	[CalendarID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[CalendarCode] NVARCHAR(30) NOT NULL, 
 	[CalendarName] NVARCHAR(100) NOT NULL, 
 	[ParentCalendarID] INTEGER NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
@@ -72,16 +69,15 @@ CREATE TABLE [M_Calendars] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Calendars] PRIMARY KEY ([CalendarID]), 
-	CONSTRAINT [UQ_M_Calendars_LocationID_CalendarCode] UNIQUE ([LocationID], [CalendarCode]), 
 	CONSTRAINT [FK_M_Calendars_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_M_Calendars_ParentCalendarID_M_Calendars] FOREIGN KEY([ParentCalendarID]) REFERENCES [M_Calendars] ([CalendarID])
 );
 GO
 
-CREATE TABLE [M_PlanProfiles] (
-	[ProfileID] INTEGER NOT NULL IDENTITY, 
+CREATE TABLE [M_CalculationSettings] (
+	[CalculationSettingID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[ProfileName] NVARCHAR(100) NOT NULL, 
+	[CalculationSettingName] NVARCHAR(100) NOT NULL, 
 	[TimeUnit] NVARCHAR(10) NOT NULL, 
 	[ObjectiveWeightsJSON] NVARCHAR(max) NOT NULL, 
 	[TimeLimitSec] INTEGER NOT NULL, 
@@ -91,9 +87,9 @@ CREATE TABLE [M_PlanProfiles] (
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_PlanProfiles] PRIMARY KEY ([ProfileID]), 
-	CONSTRAINT [CK_M_PlanProfiles_TimeUnit] CHECK (TimeUnit IN ('MINUTE','DAY')), 
-	CONSTRAINT [FK_M_PlanProfiles_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
+	CONSTRAINT [PK_M_CalculationSettings] PRIMARY KEY ([CalculationSettingID]), 
+	CONSTRAINT [CK_M_CalculationSettings_TimeUnit] CHECK (TimeUnit IN ('MINUTE','DAY')), 
+	CONSTRAINT [FK_M_CalculationSettings_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
 
@@ -115,7 +111,6 @@ GO
 CREATE TABLE [M_ResourceGroups] (
 	[ResourceGroupID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[GroupCode] NVARCHAR(30) NOT NULL, 
 	[GroupName] NVARCHAR(100) NOT NULL, 
 	[SortOrder] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
@@ -124,7 +119,6 @@ CREATE TABLE [M_ResourceGroups] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_ResourceGroups] PRIMARY KEY ([ResourceGroupID]), 
-	CONSTRAINT [UQ_M_ResourceGroups_LocationID_GroupCode] UNIQUE ([LocationID], [GroupCode]), 
 	CONSTRAINT [FK_M_ResourceGroups_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
@@ -138,8 +132,8 @@ CREATE TABLE [M_Rules] (
 	[ParamsJSON] NVARCHAR(max) NOT NULL, 
 	[IsHard] BIT NOT NULL, 
 	[Weight] INTEGER NOT NULL, 
-	[ValidFrom] DATETIME NULL, 
-	[ValidTo] DATETIME NULL, 
+	[ValidFrom] DATE NULL, 
+	[ValidTo] DATE NULL, 
 	[IsActive] BIT NOT NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
@@ -170,11 +164,11 @@ CREATE TABLE [M_CalendarPatterns] (
 	[PatternID] INTEGER NOT NULL IDENTITY, 
 	[CalendarID] INTEGER NOT NULL, 
 	[DayOfWeek] SMALLINT NOT NULL, 
-	[StartTime] DATETIME NOT NULL, 
-	[EndTime] DATETIME NOT NULL, 
+	[StartTime] TIME NOT NULL, 
+	[EndTime] TIME NOT NULL, 
 	[ShiftName] NVARCHAR(50) NULL, 
-	[ValidFrom] DATETIME NULL, 
-	[ValidTo] DATETIME NULL, 
+	[ValidFrom] DATE NULL, 
+	[ValidTo] DATE NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
@@ -185,10 +179,10 @@ CREATE TABLE [M_CalendarPatterns] (
 );
 GO
 
-CREATE TABLE [M_ChangeoverMatrices] (
-	[MatrixID] INTEGER NOT NULL IDENTITY, 
+CREATE TABLE [M_ProductSwitchTimes] (
+	[ProductSwitchTimeID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[MatrixName] NVARCHAR(100) NOT NULL, 
+	[ProductSwitchTimeName] NVARCHAR(100) NOT NULL, 
 	[AttributeKey] NVARCHAR(50) NOT NULL, 
 	[ResourceGroupID] INTEGER NULL, 
 	[DefaultMinutes] INTEGER NOT NULL, 
@@ -197,9 +191,9 @@ CREATE TABLE [M_ChangeoverMatrices] (
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_ChangeoverMatrices] PRIMARY KEY ([MatrixID]), 
-	CONSTRAINT [FK_M_ChangeoverMatrices_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
-	CONSTRAINT [FK_M_ChangeoverMatrices_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID])
+	CONSTRAINT [PK_M_ProductSwitchTimes] PRIMARY KEY ([ProductSwitchTimeID]), 
+	CONSTRAINT [FK_M_ProductSwitchTimes_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
+	CONSTRAINT [FK_M_ProductSwitchTimes_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID])
 );
 GO
 
@@ -224,14 +218,11 @@ CREATE TABLE [M_Resources] (
 	[ResourceID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[ResourceGroupID] INTEGER NULL, 
-	[ResourceCode] NVARCHAR(30) NOT NULL, 
 	[ResourceName] NVARCHAR(100) NOT NULL, 
 	[ResourceType] NVARCHAR(20) NOT NULL, 
 	[Capacity] NUMERIC(9, 2) NOT NULL, 
 	[DailyCapacityHours] NUMERIC(5, 2) NULL, 
 	[CalendarID] INTEGER NULL, 
-	[CostPerHour] NUMERIC(12, 2) NULL, 
-	[AttributesJSON] NVARCHAR(max) NULL, 
 	[SortOrder] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
@@ -239,7 +230,6 @@ CREATE TABLE [M_Resources] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Resources] PRIMARY KEY ([ResourceID]), 
-	CONSTRAINT [UQ_M_Resources_LocationID_ResourceCode] UNIQUE ([LocationID], [ResourceCode]), 
 	CONSTRAINT [CK_M_Resources_ResourceType] CHECK (ResourceType IN ('MACHINE','PERSON','TEAM','ROOM','OTHER')), 
 	CONSTRAINT [FK_M_Resources_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_M_Resources_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID]), 
@@ -250,15 +240,15 @@ GO
 CREATE TABLE [T_Orders] (
 	[OrderID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[OrderNo] NVARCHAR(30) NOT NULL, 
+	[WBSNumber] NVARCHAR(30) NOT NULL, 
 	[OrderName] NVARCHAR(200) NOT NULL, 
 	[OrderType] NVARCHAR(20) NOT NULL, 
-	[ParentOrderID] INTEGER NULL, 
 	[ProductID] INTEGER NULL, 
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[CustomerName] NVARCHAR(100) NULL, 
 	[ReleaseAt] DATETIME2 NULL, 
-	[DueAt] DATETIME2 NULL, 
+	[DeadLine] DATETIME2 NULL,
+	[ShippingDate] DATETIME2(7) NULL, 
 	[Priority] INTEGER NOT NULL, 
 	[Status] NVARCHAR(20) NOT NULL, 
 	[PlanOwner] NVARCHAR(20) NOT NULL, 
@@ -270,12 +260,11 @@ CREATE TABLE [T_Orders] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_T_Orders] PRIMARY KEY ([OrderID]), 
-	CONSTRAINT [UQ_T_Orders_LocationID_OrderNo] UNIQUE ([LocationID], [OrderNo]), 
+	CONSTRAINT [UQ_T_Orders_LocationID_WBSNumber] UNIQUE ([LocationID], [WBSNumber]), 
 	CONSTRAINT [CK_T_Orders_OrderType] CHECK (OrderType IN ('ORDER','PROJECT')), 
 	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [CK_T_Orders_PlanOwner] CHECK (PlanOwner IN ('SCHEDULER','EXTERNAL')), 
 	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
-	CONSTRAINT [FK_T_Orders_ParentOrderID_T_Orders] FOREIGN KEY([ParentOrderID]) REFERENCES [T_Orders] ([OrderID]), 
 	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
 );
 GO
@@ -283,35 +272,33 @@ GO
 CREATE TABLE [T_Plans] (
 	[PlanID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
-	[PlanNo] NVARCHAR(30) NOT NULL, 
 	[PlanName] NVARCHAR(100) NOT NULL, 
 	[Status] NVARCHAR(20) NOT NULL, 
 	[HorizonStart] DATETIME2 NOT NULL, 
 	[HorizonEnd] DATETIME2 NOT NULL, 
-	[ProfileID] INTEGER NOT NULL, 
+	[CalculationSettingID] INTEGER NOT NULL, 
 	[BasePlanID] INTEGER NULL, 
 	[SupersededAt] DATETIME2 NULL, 
 	[ApprovedAt] DATETIME2 NULL, 
 	[ApprovedBy] NVARCHAR(254) NULL, 
-	[Memo] NVARCHAR(500) NULL, 
+	[Remarks] NVARCHAR(500) NULL, 
 	[RowVer] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_T_Plans] PRIMARY KEY ([PlanID]), 
-	CONSTRAINT [UQ_T_Plans_LocationID_PlanNo] UNIQUE ([LocationID], [PlanNo]), 
 	CONSTRAINT [UQ_T_Plans_LocationID_PlanName] UNIQUE ([LocationID], [PlanName]), 
 	CONSTRAINT [CK_T_Plans_Status] CHECK (Status IN ('DRAFT','MASTER','SUPERSEDED','DISCARDED','ARCHIVED')), 
 	CONSTRAINT [FK_T_Plans_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
-	CONSTRAINT [FK_T_Plans_ProfileID_M_PlanProfiles] FOREIGN KEY([ProfileID]) REFERENCES [M_PlanProfiles] ([ProfileID]), 
+	CONSTRAINT [FK_T_Plans_CalculationSettingID_M_CalculationSettings] FOREIGN KEY([CalculationSettingID]) REFERENCES [M_CalculationSettings] ([CalculationSettingID]), 
 	CONSTRAINT [FK_T_Plans_BasePlanID_T_Plans] FOREIGN KEY([BasePlanID]) REFERENCES [T_Plans] ([PlanID])
 );
 GO
 
-CREATE TABLE [M_ChangeoverEntries] (
-	[EntryID] INTEGER NOT NULL IDENTITY, 
-	[MatrixID] INTEGER NOT NULL, 
+CREATE TABLE [M_ProductSwitchRules] (
+	[ProductSwitchRuleID] INTEGER NOT NULL IDENTITY, 
+	[ProductSwitchTimeID] INTEGER NOT NULL, 
 	[FromValue] NVARCHAR(50) NOT NULL, 
 	[ToValue] NVARCHAR(50) NOT NULL, 
 	[SetupMinutes] INTEGER NOT NULL, 
@@ -321,9 +308,9 @@ CREATE TABLE [M_ChangeoverEntries] (
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_ChangeoverEntries] PRIMARY KEY ([EntryID]), 
-	CONSTRAINT [UQ_M_ChangeoverEntries_MatrixID_FromValue_ToValue] UNIQUE ([MatrixID], [FromValue], [ToValue]), 
-	CONSTRAINT [FK_M_ChangeoverEntries_MatrixID_M_ChangeoverMatrices] FOREIGN KEY([MatrixID]) REFERENCES [M_ChangeoverMatrices] ([MatrixID]) ON DELETE CASCADE
+	CONSTRAINT [PK_M_ProductSwitchRules] PRIMARY KEY ([ProductSwitchRuleID]), 
+	CONSTRAINT [UQ_M_ProductSwitchRules_ProductSwitchTimeID_FromValue_ToValue] UNIQUE ([ProductSwitchTimeID], [FromValue], [ToValue]), 
+	CONSTRAINT [FK_M_ProductSwitchRules_ProductSwitchTimeID_M_ProductSwitchTimes] FOREIGN KEY([ProductSwitchTimeID]) REFERENCES [M_ProductSwitchTimes] ([ProductSwitchTimeID]) ON DELETE CASCADE
 );
 GO
 
@@ -390,14 +377,11 @@ GO
 CREATE TABLE [T_Tasks] (
 	[TaskID] INTEGER NOT NULL IDENTITY, 
 	[OrderID] INTEGER NOT NULL, 
-	[ParentTaskID] INTEGER NULL, 
 	[ProductProcessID] INTEGER NULL, 
 	[TaskNo] NVARCHAR(30) NOT NULL, 
 	[TaskName] NVARCHAR(200) NOT NULL, 
 	[Sequence] INTEGER NOT NULL, 
 	[IsSummary] BIT NOT NULL, 
-	[IsMilestone] BIT NOT NULL, 
-	[EffortHours] NUMERIC(9, 2) NULL, 
 	[EarliestStartAt] DATETIME2 NULL, 
 	[DeadlineAt] DATETIME2 NULL, 
 	[Status] NVARCHAR(20) NOT NULL, 
@@ -411,18 +395,17 @@ CREATE TABLE [T_Tasks] (
 	CONSTRAINT [UQ_T_Tasks_OrderID_TaskNo] UNIQUE ([OrderID], [TaskNo]), 
 	CONSTRAINT [CK_T_Tasks_Status] CHECK (Status IN ('NOT_STARTED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [FK_T_Tasks_OrderID_T_Orders] FOREIGN KEY([OrderID]) REFERENCES [T_Orders] ([OrderID]), 
-	CONSTRAINT [FK_T_Tasks_ParentTaskID_T_Tasks] FOREIGN KEY([ParentTaskID]) REFERENCES [T_Tasks] ([TaskID]), 
 	CONSTRAINT [FK_T_Tasks_ProductProcessID_M_ProductProcesses] FOREIGN KEY([ProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID])
 );
 GO
 
-CREATE TABLE [T_Actuals] (
-	[ActualID] BIGINT NOT NULL IDENTITY, 
+CREATE TABLE [T_WorkActuals] (
+	[WorkActualID] BIGINT NOT NULL IDENTITY, 
 	[TaskID] INTEGER NOT NULL, 
 	[ResourceID] INTEGER NULL, 
 	[StartAt] DATETIME2 NULL, 
 	[EndAt] DATETIME2 NULL, 
-	[WorkDate] DATETIME NULL, 
+	[WorkDate] DATE NULL, 
 	[WorkHours] NUMERIC(9, 2) NULL, 
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[Status] NVARCHAR(20) NOT NULL, 
@@ -433,11 +416,11 @@ CREATE TABLE [T_Actuals] (
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2 NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_T_Actuals] PRIMARY KEY ([ActualID]), 
-	CONSTRAINT [CK_T_Actuals_Status] CHECK (Status IN ('IN_PROGRESS','DONE','SUSPENDED')), 
-	CONSTRAINT [CK_T_Actuals_Source] CHECK (Source IN ('MANUAL','PMS','IMPORT')), 
-	CONSTRAINT [FK_T_Actuals_TaskID_T_Tasks] FOREIGN KEY([TaskID]) REFERENCES [T_Tasks] ([TaskID]), 
-	CONSTRAINT [FK_T_Actuals_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID])
+	CONSTRAINT [PK_T_WorkActuals] PRIMARY KEY ([WorkActualID]), 
+	CONSTRAINT [CK_T_WorkActuals_Status] CHECK (Status IN ('IN_PROGRESS','DONE','SUSPENDED')), 
+	CONSTRAINT [CK_T_WorkActuals_Source] CHECK (Source IN ('MANUAL','PMS','IMPORT')), 
+	CONSTRAINT [FK_T_WorkActuals_TaskID_T_Tasks] FOREIGN KEY([TaskID]) REFERENCES [T_Tasks] ([TaskID]), 
+	CONSTRAINT [FK_T_WorkActuals_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID])
 );
 GO
 
@@ -476,7 +459,6 @@ CREATE TABLE [T_PlanViolations] (
 	[RuleID] INTEGER NULL, 
 	[TaskID] INTEGER NULL, 
 	[Severity] NVARCHAR(10) NOT NULL, 
-	[ViolationCode] NVARCHAR(30) NOT NULL, 
 	[Penalty] NUMERIC(18, 2) NULL, 
 	[Message] NVARCHAR(500) NOT NULL, 
 	[CreatedAt] DATETIME2 NOT NULL, 

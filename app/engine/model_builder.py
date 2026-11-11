@@ -139,7 +139,7 @@ def _add_changeovers(ctx: BuildContext) -> None:
         if not nodes:
             continue
         if len(nodes) > MAX_CIRCUIT_NODES:
-            ctx.notes.append(f"resource {r.code}: {len(nodes)} candidate tasks, changeovers ignored")
+            ctx.notes.append(f"resource {r.name}: {len(nodes)} candidate tasks, changeovers ignored")
             continue
         arcs = []
         for i, (_, ov) in enumerate(nodes, start=1):

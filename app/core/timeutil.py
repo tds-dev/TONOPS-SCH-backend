@@ -1,4 +1,4 @@
-"""時刻ユーティリティ。DB の日時はすべて naive な UTC（datetime2(0)）で保存する。"""
+"""時刻ユーティリティ。DBの日時は時差情報を外したUTC（datetime2(7)）で保存する。"""
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 

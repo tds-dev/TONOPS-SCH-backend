@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.timeutil import to_utc_naive
 from app.engine.edit import Change, apply_changes, new_violations
 from app.engine.evaluate import compute_kpis
@@ -17,7 +18,6 @@ from app.engine.problem import Problem
 from app.engine.result import SAssignment, Violation
 from app.engine.snapshot import build_problem
 from app.engine.solve import write_evaluation
-from app.models.masters import Location
 from app.models.transactions import Plan, PlanAssignment
 from app.services.plan_lifecycle import NON_BLOCKING_HARD
 
@@ -58,10 +58,10 @@ def _load(db: Session, plan: Plan) -> tuple[Problem, dict[int, PlanAssignment], 
     return problem, rows, current
 
 
-# 画面から受け取った変更要求を、拠点の時刻設定で検証用の形式へ変換する。
-def _to_changes(db: Session, plan: Plan, problem: Problem, rows: dict[int, PlanAssignment],
+# 画面から受け取った変更要求を、アプリ共通の時刻設定で検証用の形式へ変換する。
+def _to_changes(problem: Problem, rows: dict[int, PlanAssignment],
                 requests: list[ChangeRequest]) -> list[Change]:
-    tz = db.get(Location, plan.LocationID).TimeZone
+    tz = get_settings().app_timezone
     by_id = {a.AssignmentID: a for a in rows.values()}
     out = []
     for r in requests:
@@ -91,7 +91,7 @@ def evaluate_edit(db: Session, plan: Plan, requests: list[ChangeRequest], lock_m
     if plan.Status != "DRAFT":
         raise HTTPException(status.HTTP_409_CONFLICT, f"下書きの計画のみ編集できます（現在: {plan.Status}）")
     problem, rows, current = _load(db, plan)
-    changes = _to_changes(db, plan, problem, rows, requests)
+    changes = _to_changes(problem, rows, requests)
     after, _, changed, errors = apply_changes(problem, current, changes, lock_moved=lock_moved)
     found = new_violations(problem, current, after) if not errors else []
     # 未割付（タスクを外した結果）は保存を妨げない。承認時と同じ扱い

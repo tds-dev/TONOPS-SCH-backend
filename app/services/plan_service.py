@@ -2,24 +2,16 @@
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.timeutil import utc_to_local, utcnow
-from app.models.masters import PlanProfile, Location
+from app.core.timeutil import utcnow
+from app.models.masters import CalculationSetting, Location
 from app.models.transactions import Plan, SolverRun
 from app.services.plan_validation import flush_named_plan, validate_plan_name
 
 
-# 拠点の現地日付と既存件数から、次の計画番号を組み立てる。
-def next_plan_no(db: Session, location: Location, horizon_start: datetime) -> str:
-    prefix = f"P-{utc_to_local(horizon_start, location.TimeZone):%Y%m%d}-"
-    count = db.scalar(
-        select(func.count()).select_from(Plan).where(Plan.LocationID == location.LocationID, Plan.PlanNo.like(prefix + "%"))
-    )
-    return f"{prefix}{(count or 0) + 1:02d}"
-
-
+# 指定時点に対する、開始が最も遅いマスタ計画を取得する。
 def current_master(db: Session, location_id: int, at: datetime) -> Plan | None:
     """`at` を含む MASTER 計画（計画開始が最も遅いものを優先）。"""
     return db.scalars(
@@ -39,34 +31,33 @@ def create_plan(
     horizon_end: datetime,
     user: str,
     plan_name: str | None = None,
-    profile_id: int | None = None,
+    calculation_setting_id: int | None = None,
     base_plan_id: int | None = None,
     use_master_as_base: bool = True,
-    memo: str | None = None,
+    remarks: str | None = None,
 ) -> Plan:
-    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    # 対象の拠点が存在することを確認する。
     location = db.get(Location, location_id)
     if location is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Location {location_id} not found")
     if horizon_end <= horizon_start:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "horizonEnd must be after horizonStart")
-    # 計画番号へ代替せず、同じ拠点で重複しない計画名を必須にする。
+    # 同じ拠点で重複しない計画名を必須にする。
     name = validate_plan_name(db, location_id, plan_name)
-    if profile_id is None:
-        profile = db.scalars(
-            select(PlanProfile).where(PlanProfile.LocationID == location_id).order_by(PlanProfile.IsDefault.desc())
+    if calculation_setting_id is None:
+        setting = db.scalars(
+            select(CalculationSetting).where(CalculationSetting.LocationID == location_id).order_by(CalculationSetting.IsDefault.desc())
         ).first()
-        if profile is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "No plan profile for this location")
-        profile_id = profile.ProfileID
+        if setting is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "この拠点の計算設定がありません")
+        calculation_setting_id = setting.CalculationSettingID
     if base_plan_id is None and use_master_as_base:
         master = current_master(db, location_id, horizon_start)
         base_plan_id = master.PlanID if master else None
-    plan_no = next_plan_no(db, location, horizon_start)
     plan = Plan(
-        LocationID=location_id, PlanNo=plan_no, PlanName=name, Status="DRAFT",
-        HorizonStart=horizon_start, HorizonEnd=horizon_end, ProfileID=profile_id,
-        BasePlanID=base_plan_id, Memo=memo, CreatedBy=user,
+        LocationID=location_id, PlanName=name, Status="DRAFT",
+        HorizonStart=horizon_start, HorizonEnd=horizon_end, CalculationSettingID=calculation_setting_id,
+        BasePlanID=base_plan_id, Remarks=remarks, CreatedBy=user,
     )
     db.add(plan)
     flush_named_plan(db, plan)
@@ -84,10 +75,10 @@ def queue_run(db: Session, plan: Plan, user: str, scope: str = "FULL", time_limi
     )
     if busy is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Plan already has an active solver run ({busy})")
-    profile = db.get(PlanProfile, plan.ProfileID)
+    setting = db.get(CalculationSetting, plan.CalculationSettingID)
     run = SolverRun(
         PlanID=plan.PlanID, Status="QUEUED", Scope=scope, RequestedBy=user, RequestedAt=utcnow(),
-        TimeLimitSec=time_limit_sec or (profile.TimeLimitSec if profile else 60), CreatedBy=user,
+        TimeLimitSec=time_limit_sec or (setting.TimeLimitSec if setting else 60), CreatedBy=user,
     )
     db.add(run)
     db.commit()

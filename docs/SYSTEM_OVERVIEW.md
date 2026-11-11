@@ -1,7 +1,9 @@
 <!-- SCH全体の構成、業務仕様、データ構造、APIと画面の対応をまとめる資料。 -->
 # TONOPS-SCH システム概要
 
-2026-11-09：製品・工程のDB構成を更新。製品→工程→実行候補の3階層とし、ルート階層・版・既定指定、製品のコード・単位・属性、工程の属性を廃止した。現行の正式なオーダー名・APIは `T_Orders`・`/orders`。本資料の旧ジョブ名の記載はオーダーへ読み替える。
+2026-11-10：[DB構成変更と再作成手順](DB_SCHEMA_UPDATE_20261110.md)に対応。日時は共通の日本時間（Asia/Tokyo）で入力・表示する。
+
+2026-11-09：製品・工程のDB構成を更新。製品→工程→実行候補の3階層とし、ルート階層・版・既定指定、製品のコード・単位・属性、工程の属性を廃止した。現行の正式なオーダー名・APIは `T_Orders`・`/orders`。
 
 TONOPS-SCH は、業種に依存しない **生産・プロジェクト 生産スケジューラ** です。
 「どの作業を・どのリソース（設備・人・チーム・部屋など）で・いつ行うか」を、
@@ -95,16 +97,16 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | リソース | M_Resources | 作業を行うもの。設備・人・チーム・部屋など（`ResourceKind`） |
 | 製品 | M_Product | 製品・成果物。拠点と名称を持つ |
 | 工程 | M_ProductProcesses / M_ProductProcessResources | 製品ごとの工程順・待ち時間・実行候補・所要時間 |
-| ジョブ | T_Jobs | 需要の単位。受注（ORDER）またはプロジェクト（PROJECT）。納期・優先度を持つ |
-| 作業 | T_Tasks | スケジュールの最小単位。ジョブの製品の工程から生成、または直接登録 |
+| オーダー | T_Orders | 需要の単位。受注（ORDER）またはプロジェクト（PROJECT）。納期・優先度を持つ |
+| 作業 | T_Tasks | スケジュールの最小単位。オーダーの製品の工程から生成、または直接登録 |
 | リソース候補 | T_TaskResourceOptions | 作業を実行できるリソース（またはグループ）と所要時間 |
 | 依存関係 | T_TaskDependencies | 作業間の順序（FS/SS/FF/SF とラグ） |
 | 計画 | T_Plans | スケジュールの 1 つの版。下書き → マスタ（承認） |
 | 割付 | T_PlanAssignments | 計画内で「作業 × リソース × 時刻」を決めたもの |
 | 計算（ソルバー実行） | T_SolverRunResult | エンジンによる自動計画の 1 回分。作業キューも兼ねる |
-| 段取り替え | M_ChangeoverMatrices | 同じリソースで属性値が変わるときに必要な時間（例: 系統 A→C は 45 分） |
+| 段取り替え | M_ProductSwitchTimes | 同じリソースで属性値が変わるときに必要な時間（例: 系統 A→C は 45 分） |
 | 制約ルール | M_Rules | プラグインで実装された追加の制約（例: 系統 C は平日のみ） |
-| 計画プロファイル | M_PlanProfiles | 目的関数の重み・計算時間の上限など、計算の方針 |
+| 計算設定 | M_CalculationSettings | 目的関数の重み・計算時間の上限など、計算の方針 |
 | ロック（固定） | PlanAssignment.IsLocked | 再計算で動かさない割付。手動で動かした割付は既定でロック |
 | マスタ計画 | T_Plans.Status = MASTER | 承認済みで現場が使う計画。配台表の元データ |
 
@@ -114,7 +116,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 
 ```mermaid
 flowchart TD
-  A["マスタ登録<br/>拠点・カレンダー・リソース・製品・工程・ルール"] --> B["ジョブ登録<br/>製品・数量・納期・優先度"]
+  A["マスタ登録<br/>拠点・カレンダー・リソース・製品・工程・ルール"] --> B["オーダー登録<br/>製品・数量・納期・優先度"]
   B --> C["作業生成<br/>製品の工程 → 作業・候補・依存関係"]
   C --> D["計画作成（下書き）<br/>期間・プロファイル"]
   D --> E["計算実行<br/>CP-SAT による自動割付"]
@@ -126,7 +128,7 @@ flowchart TD
 ```
 
 1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、製品・工程、制約ルール・段取り替えを登録（API / Swagger からも登録可能）。組織・拠点・プラン計算設定の登録は引き続き API / Swagger を使用。
-2. **ジョブ登録** → **作業生成**: ジョブの製品に属する工程を展開し、作業ごとに作業、リソース候補、前後の依存関係を作ります。
+2. **オーダー登録** → **作業生成**: オーダーの製品に属する工程を展開し、作業ごとに作業、リソース候補、前後の依存関係を作ります。
    所要時間 = 作業リソース候補の `SetupMinutes` + `FixedMinutes` + 数量 × `MinutesPerUnit`（分、切り上げ）。
 3. **計画作成**: 計画期間（拠点の現地時刻）とプロファイルを指定。現在のマスタ計画が「元計画（BasePlanID）」になります。
 4. **計算実行**: ワーカーが CP-SAT で割付を計算し、KPI と違反（課題）を保存します。
@@ -148,13 +150,13 @@ flowchart TD
 |---|---|---|
 | リソース | M_Resources（論理削除を除く） | 能力（Capacity）、稼働枠 |
 | 稼働枠 | M_Calendars / M_CalendarPatterns / M_CalendarExceptions | リソースのカレンダー（なければ拠点の既定、それもなければ常時稼働）を計画期間に展開。親カレンダー（ParentCalendarID）を継承 |
-| ジョブ | T_Jobs | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、`PlanOwner = SCHEDULER`、着手可能日時が期間終了より前 |
-| 作業 | T_Tasks | 上記ジョブの作業のうち、サマリーでなく `DONE`/`CANCELLED` 以外 |
+| オーダー | T_Orders | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、`PlanOwner = SCHEDULER`、着手可能日時が期間終了より前 |
+| 作業 | T_Tasks | 上記オーダーの作業のうち、サマリーでなく `DONE`/`CANCELLED` 以外 |
 | 候補 | T_TaskResourceOptions | グループ指定の候補はグループ内の全リソースに展開 |
 | 依存関係 | T_TaskDependencies | |
-| 段取り替え | M_ChangeoverMatrices / M_ChangeoverEntries | 有効なもの。グループ指定ならそのグループのリソースに適用 |
+| 段取り替え | M_ProductSwitchTimes / M_ProductSwitchRules | 有効なもの。グループ指定ならそのグループのリソースに適用 |
 | ルール | M_Rules | 有効かつ計画開始日（現地）が有効期間内のもの |
-| 重み・上限 | M_PlanProfiles | `ObjectiveWeightsJSON`、`TimeLimitSec`、`FrozenWindowHours` |
+| 重み・上限 | M_CalculationSettings | `ObjectiveWeightsJSON`、`TimeLimitSec`、`FrozenWindowHours` |
 | 前回の位置 | T_PlanAssignments | この計画の割付、なければ元計画（マスタ）の割付 |
 
 **前回の位置の扱い**
@@ -169,7 +171,7 @@ flowchart TD
 | 要素 | モデル化 |
 |---|---|
 | 作業 | 開始・終了の整数変数と「割り付けるか」のフラグ。候補リソースごとに任意区間（Optional Interval）を作り、割り付ける場合は **ちょうど 1 つ** を選ぶ |
-| 着手可能日時 | 開始 ≥ ジョブの ReleaseAt / 作業の EarliestStartAt / 確定期間の終わり |
+| 着手可能日時 | 開始 ≥ オーダーの ReleaseAt / 作業の EarliestStartAt / 確定期間の終わり |
 | リソースの重なり | 能力 1: `AddNoOverlap`（同時に 1 作業）。能力 > 1: `AddCumulative` |
 | 稼働時間 | 非稼働時間を「固定のブロック区間」としてリソースに追加 → 作業は 1 つの稼働枠に収まる（休憩や夜間をまたいで分割はしない） |
 | 依存関係 | FS（前の終了→後の開始）、SS、FF、SF。最小ラグ（LagMin）と最大ラグ（MaxLagMin）。後作業を割り付けるなら前作業も割り付ける |
@@ -177,7 +179,7 @@ flowchart TD
 | ロック | 開始・終了・リソースを固定。非稼働時間に置かれたロックもそのまま受け入れる |
 | ルール | プラグインが制約を追加（例: `allowed_weekdays` は許可されない曜日をブロック区間として追加） |
 
-段取り時間の照合（`M_ChangeoverEntries`）: 同じ値どうしは 0 分（明細があればその値）。
+段取り時間の照合（`M_ProductSwitchRules`）: 同じ値どうしは 0 分（明細があればその値）。
 異なる値は `(From, To)` → `(From, *)` → `(*, To)` → `(*, *)` の順に探し、なければマトリクスの `DefaultMinutes`。
 
 ### 4.3 目的関数（最小化）
@@ -185,7 +187,7 @@ flowchart TD
 | 項目 | 既定の重み | 内容 |
 |---|---|---|
 | `unscheduled` | 100000 | 割り付けられなかった作業 1 件あたり |
-| `lateness` | 1000 | ジョブの納期遅れ（分）× 優先度の倍率。未割付作業は「期間の終わりに完了」とみなす（外す方が得にならないように） |
+| `lateness` | 1000 | オーダーの納期遅れ（分）× 優先度の倍率。未割付作業は「期間の終わりに完了」とみなす（外す方が得にならないように） |
 | `setup` | 10 | 段取り時間（分）の合計 |
 | `makespan` | 1 | 最終作業の終了時刻（分） |
 | `stability` | 0（部分再計算は 20） | 前回の位置からのずれ（分）。リソースの変更は 60 分のずれとみなす |
@@ -193,7 +195,7 @@ flowchart TD
 優先度の倍率: `Priority` 1（最優先）= 4.9 倍、50 = 3.0 倍、100 = 1.0 倍。
 作業に期限（DeadlineAt）がある場合は、その超過分も `lateness` の重みで加算します。
 
-重みは計画プロファイルの `ObjectiveWeightsJSON` で上書きできます（例: `{"lateness": 1000, "setup": 50}`）。
+重みは計算設定の `ObjectiveWeightsJSON` で上書きできます（例: `{"lateness": 1000, "setup": 50}`）。
 
 ### 4.4 全体計算と部分再計算
 
@@ -254,7 +256,7 @@ stateDiagram-v2
 * 期間が重なる既存の MASTER:
   * 新しい計画より **前に始まる** → `SUPERSEDED`、`SupersededAt` = 新計画の開始
   * 新しい計画と **同時刻以降に始まる** → `DISCARDED`
-* 割付のあるジョブは `OPEN` → `PLANNED`。
+* 割付のあるオーダーは `OPEN` → `PLANNED`。
 
 **「現在のマスタ計画」の割付**（配台表・ダッシュボード）= MASTER の割付 ＋ SUPERSEDED 計画のうち `SupersededAt` より前に始まる割付。
 同じ作業が両方にあれば MASTER を優先します。これにより、計画を日々ローリングで更新しても、過去分の配台表は残ります。
@@ -292,24 +294,24 @@ erDiagram
   M_Product ||--o{ M_ProductProcesses : ""
   M_ProductProcesses ||--o{ M_ProductProcessResources : ""
   M_Locations ||--o{ M_Rules : ""
-  M_Locations ||--o{ M_ChangeoverMatrices : ""
-  M_ChangeoverMatrices ||--o{ M_ChangeoverEntries : ""
-  M_Locations ||--o{ M_PlanProfiles : ""
-  M_Locations ||--o{ T_Jobs : ""
-  M_Product ||--o{ T_Jobs : ""
-  T_Jobs ||--o{ T_Tasks : ""
+  M_Locations ||--o{ M_ProductSwitchTimes : ""
+  M_ProductSwitchTimes ||--o{ M_ProductSwitchRules : ""
+  M_Locations ||--o{ M_CalculationSettings : ""
+  M_Locations ||--o{ T_Orders : ""
+  M_Product ||--o{ T_Orders : ""
+  T_Orders ||--o{ T_Tasks : ""
   M_ProductProcesses ||--o{ T_Tasks : "生成元"
   T_Tasks ||--o{ T_TaskResourceOptions : ""
   T_Tasks ||--o{ T_TaskDependencies : "前/後"
   M_Locations ||--o{ T_Plans : ""
-  M_PlanProfiles ||--o{ T_Plans : ""
+  M_CalculationSettings ||--o{ T_Plans : ""
   T_Plans ||--o{ T_PlanAssignments : ""
   T_Tasks ||--o{ T_PlanAssignments : ""
   M_Resources ||--o{ T_PlanAssignments : ""
   T_Plans ||--o{ T_SolverRunResult : ""
   T_Plans ||--o{ T_PlanKpis : ""
   T_Plans ||--o{ T_PlanViolations : ""
-  T_Tasks ||--o{ T_Actuals : ""
+  T_Tasks ||--o{ T_WorkActuals : ""
 ```
 
 ### 6.3 マスタテーブル（M_）
@@ -318,7 +320,6 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | OrganizationID | INT PK | |
-| OrganizationCode | NVARCHAR(30) UQ | |
 | OrganizationName | NVARCHAR(100) | |
 | DeleteFlag | BIT | |
 
@@ -327,8 +328,7 @@ erDiagram
 |---|---|---|
 | LocationID | INT PK | |
 | OrganizationID | INT FK | |
-| LocationCode / LocationName | NVARCHAR | 組織内で LocationCode 一意 |
-| TimeZone | NVARCHAR(50) | IANA 名（既定 `Asia/Tokyo`）。画面の表示・入力はこの時刻 |
+| LocationName | NVARCHAR(100) | 拠点の表示名。識別にはLocationIDを使う |
 | DefaultCalendarID | INT FK NULL | リソースにカレンダーがない場合に使う |
 | DeleteFlag | BIT | |
 
@@ -337,7 +337,7 @@ erDiagram
 |---|---|---|
 | CalendarID | INT PK | |
 | LocationID | INT FK | |
-| CalendarCode / CalendarName | NVARCHAR | 拠点内で CalendarCode 一意 |
+| CalendarName | NVARCHAR(100) | カレンダーの表示名。識別にはCalendarIDを使う |
 | ParentCalendarID | INT FK NULL | 親のパターン・例外を継承（例: 拠点共通 → ライン別） |
 | DeleteFlag | BIT | |
 
@@ -365,7 +365,7 @@ erDiagram
 |---|---|---|
 | ResourceGroupID | INT PK | |
 | LocationID | INT FK | |
-| GroupCode / GroupName | NVARCHAR | 拠点内で GroupCode 一意 |
+| GroupName | NVARCHAR(100) | グループの表示名。識別にはResourceGroupIDを使う |
 | SortOrder | INT | 表示順 |
 | DeleteFlag | BIT | |
 
@@ -375,18 +375,16 @@ erDiagram
 | ResourceID | INT PK | |
 | LocationID | INT FK | |
 | ResourceGroupID | INT FK NULL | |
-| ResourceCode / ResourceName | NVARCHAR | 拠点内で ResourceCode 一意 |
+| ResourceName | NVARCHAR(100) | 設備・人員の表示名。識別にはResourceIDを使う |
 | ResourceKind | NVARCHAR(20) | 値: `MACHINE` `PERSON` `TEAM` `ROOM` `OTHER` |
 | Capacity | DECIMAL(9,2) | 同時に処理できる作業数（1 = 重なり禁止） |
 | DailyCapacityHours | DECIMAL(5,2) NULL | 予約（未使用） |
 | CalendarID | INT FK NULL | なければ拠点の既定カレンダー |
-| CostPerHour | DECIMAL(12,2) NULL | 予約（未使用） |
-| AttributesJSON | NVARCHAR(MAX) | 任意の属性 |
 | SortOrder | INT | ボードの表示順 |
 | DeleteFlag | BIT | |
 
 #### M_AttributeDefinitions（属性定義）
-製品・リソース・ジョブ・作業の `AttributesJSON` に入れる項目の定義（画面の入力欄やルールの対象に使う予定）。
+オーダー・タスクの `AttributesJSON` に入れる項目の定義。区分の保存値にはPRODUCT・RESOURCEも残すが、製品・リソースは属性保存列を持たない。
 
 | 列 | 型 | 説明 |
 |---|---|---|
@@ -413,33 +411,33 @@ erDiagram
 | ValidFrom / ValidTo | DATE NULL | 有効期間（計画開始日で判定） |
 | IsActive | BIT | |
 
-#### M_ChangeoverMatrices（段取り替えマトリクス）
+#### M_ProductSwitchTimes（段取り替えマトリクス）
 | 列 | 型 | 説明 |
 |---|---|---|
-| MatrixID | INT PK | |
+| ProductSwitchTimeID | INT PK | |
 | LocationID | INT FK | |
-| MatrixName | NVARCHAR(100) | |
+| ProductSwitchTimeName | NVARCHAR(100) | |
 | AttributeKey | NVARCHAR(50) | 切り替えの基準となる作業属性（例: `family`）。ボードの色分けにも使う |
 | ResourceGroupID | INT FK NULL | 適用するグループ（NULL = 拠点の全リソース） |
 | DefaultMinutes | INT | 明細にない組合せの段取り時間 |
 | IsActive | BIT | |
 
-#### M_ChangeoverEntries（段取り替え明細）
+#### M_ProductSwitchRules（段取り替え明細）
 | 列 | 型 | 説明 |
 |---|---|---|
-| EntryID | INT PK | |
-| MatrixID | INT FK（CASCADE） | |
-| FromValue / ToValue | NVARCHAR(50) | 前後の属性値。`*` は任意の値。(MatrixID, From, To) 一意 |
+| ProductSwitchRuleID | INT PK | |
+| ProductSwitchTimeID | INT FK（CASCADE） | |
+| FromValue / ToValue | NVARCHAR(50) | 前後の属性値。`*` は任意の値。(ProductSwitchTimeID, From, To) 一意 |
 | SetupMinutes | INT | 段取り時間（分） |
 | IsForbidden | BIT | 1 = この順序は禁止 |
 | Cost | DECIMAL NULL | 予約 |
 
-#### M_PlanProfiles（計画プロファイル）
+#### M_CalculationSettings（計算設定）
 | 列 | 型 | 説明 |
 |---|---|---|
-| ProfileID | INT PK | |
+| CalculationSettingID | INT PK | |
 | LocationID | INT FK | |
-| ProfileName | NVARCHAR(100) | 例: 納期優先、段取り最小 |
+| CalculationSettingName | NVARCHAR(100) | 例: 納期優先、段取り最小 |
 | TimeUnit | NVARCHAR(10) | 値: `MINUTE` `DAY`（現在は MINUTE のみ使用） |
 | ObjectiveWeightsJSON | NVARCHAR(MAX) | 目的関数の重み（[4.3](#43-目的関数最小化)） |
 | TimeLimitSec | INT | 計算時間の上限（秒） |
@@ -479,20 +477,20 @@ erDiagram
 
 ### 6.4 トランザクションテーブル（T_）
 
-#### T_Jobs（ジョブ）
+#### T_Orders（オーダー）
 | 列 | 型 | 説明 |
 |---|---|---|
-| JobID | INT PK | |
+| OrderID | INT PK | |
 | LocationID | INT FK | |
-| JobNo | NVARCHAR(30) | 拠点内で一意（受注番号・プロジェクト番号） |
-| JobName | NVARCHAR(200) | |
-| JobKind | NVARCHAR(20) | 値: `ORDER`（受注）`PROJECT`（プロジェクト） |
-| ParentJobID | INT FK NULL | 親ジョブ（プロジェクト階層用） |
+| WBSNumber | NVARCHAR(30) | 拠点内で一意（受注番号・プロジェクト番号） |
+| OrderName | NVARCHAR(200) | |
+| OrderType | NVARCHAR(20) | 値: `ORDER`（受注）`PROJECT`（プロジェクト） |
 | ProductID | INT FK NULL | 製品。タスク生成時は指定が必要で、この製品の工程番号順に展開する |
 | Quantity | DECIMAL(18,3) NULL | 数量 |
 | CustomerName | NVARCHAR(100) | |
 | ReleaseAt | DATETIME2 NULL | 着手可能日時（UTC） |
-| DueAt | DATETIME2 NULL | 納期（UTC） |
+| DeadLine | DATETIME2 NULL | 納期（UTC） |
+| ShippingDate | DATETIME2(7) NULL | 任意の出荷日時（UTC）。自動計算の納期条件には使用しない |
 | Priority | INT | 1 = 最優先 … 100（既定 50） |
 | Status | NVARCHAR(20) | 値: `OPEN`（未計画）`PLANNED`（計画済）`IN_PROGRESS` `DONE` `CANCELLED` |
 | PlanOwner | NVARCHAR(20) | 値: `SCHEDULER`（このシステムで計画）`EXTERNAL`（SynViz など外部で計画、計算対象外） |
@@ -504,15 +502,12 @@ erDiagram
 | 列 | 型 | 説明 |
 |---|---|---|
 | TaskID | INT PK | |
-| JobID | INT FK | |
-| ParentTaskID | INT FK NULL | WBS の親作業 |
+| OrderID | INT FK | |
 | ProductProcessID | INT FK NULL | 生成元の作業 |
-| TaskNo | NVARCHAR(30) | ジョブ内で一意 |
+| TaskNo | NVARCHAR(30) | オーダー内で一意 |
 | TaskName | NVARCHAR(200) | |
 | Sequence | INT | 表示順 |
 | IsSummary | BIT | 1 = サマリー（計算対象外） |
-| IsMilestone | BIT | 予約 |
-| EffortHours | DECIMAL NULL | 予約（工数ベースの計画用） |
 | EarliestStartAt | DATETIME2 NULL | 作業単位の着手可能日時 |
 | DeadlineAt | DATETIME2 NULL | 作業単位の期限 |
 | Status | NVARCHAR(20) | 値: `NOT_STARTED` `IN_PROGRESS` `DONE` `CANCELLED`（配台表の開始・完了で更新） |
@@ -544,15 +539,14 @@ erDiagram
 |---|---|---|
 | PlanID | INT PK | |
 | LocationID | INT FK | |
-| PlanNo | NVARCHAR(30) | `P-YYYYMMDD-NN`。拠点内で一意 |
 | PlanName | NVARCHAR(100) | |
 | Status | NVARCHAR(20) | 値: `DRAFT` `MASTER` `SUPERSEDED` `DISCARDED` `ARCHIVED` |
 | HorizonStart / HorizonEnd | DATETIME2（UTC） | 計画期間 |
-| ProfileID | INT FK | |
+| CalculationSettingID | INT FK | |
 | BasePlanID | INT FK NULL | 元計画（作成時のマスタ、またはコピー元） |
 | SupersededAt | DATETIME2 NULL | 置換された時刻（この時刻より前の割付は有効） |
 | ApprovedAt / ApprovedBy | | 承認日時・承認者 |
-| Memo | NVARCHAR(500) | |
+| Remarks | NVARCHAR(500) | |
 | RowVer | INT | 楽観的排他制御 |
 
 #### T_PlanAssignments（計画割付）
@@ -604,14 +598,13 @@ erDiagram
 | RuleID | INT FK NULL | ルールによる違反の場合 |
 | TaskID | INT FK NULL | |
 | Severity | NVARCHAR(10) | 値: `HARD`（必須）`SOFT`（推奨）`INFO` |
-| ViolationCode | NVARCHAR(30) | [違反コード](#10-kpi-と違反コード) |
 | Penalty | DECIMAL NULL | 遅れ分など |
 | Message | NVARCHAR(500) | 日本語のメッセージ |
 
-#### T_Actuals（実績） ※テーブルのみ。画面・API は今後
+#### T_WorkActuals（実績） ※テーブルのみ。画面・API は今後
 | 列 | 型 | 説明 |
 |---|---|---|
-| ActualID | BIGINT PK | |
+| WorkActualID | BIGINT PK | |
 | TaskID | INT FK | |
 | ResourceID | INT FK NULL | |
 | StartAt / EndAt | DATETIME2 NULL | |
@@ -631,19 +624,19 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | 画面（URL） | 主な API | 参照（R） | 更新（W） |
 |---|---|---|---|
 | サイドバーの拠点選択（アプリ名の下） | `GET /locations` | M_Locations | — |
-| ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /jobs` | T_Plans, T_PlanKpis, T_Jobs, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
-| 計画一覧（`/plans`） | `GET /plans`、`GET /plan-profiles`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_PlanProfiles, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
-| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Jobs, M_Product, M_Resources, M_ResourceGroups, M_Calendars・Patterns・Exceptions, M_ChangeoverMatrices・Entries, M_Rules, M_PlanProfiles, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Jobs.Status（承認時 OPEN→PLANNED） |
-| 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Jobs, M_Resources | T_Plans（承認・破棄） |
-| ジョブ（`/jobs`） | `GET /jobs`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /jobs/{id}/tasks`、`GET /jobs/{id}/dependencies`、`POST /jobs/{id}/generate-tasks` | T_Jobs, M_Product, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業生成） | T_Tasks, T_TaskResourceOptions, T_TaskDependencies（作業生成） |
-| 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Jobs, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
+| ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /orders` | T_Plans, T_PlanKpis, T_Orders, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
+| 計画一覧（`/plans`） | `GET /plans`、`GET /calculation-settings`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_CalculationSettings, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
+| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・Patterns・Exceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_Rules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
+| 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Orders, M_Resources | T_Plans（承認・破棄） |
+| オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, T_TaskResourceOptions, T_TaskDependencies, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業生成） | T_Tasks, T_TaskResourceOptions, T_TaskDependencies（作業生成） |
+| 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に作業候補・作業候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
 | カレンダー（`/calendars`） | `/calendars`、`/calendar-patterns`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarPatterns, M_CalendarExceptions, M_Locations, M_Resources | M_Calendars, M_CalendarPatterns, M_CalendarExceptions |
-| 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にジョブ・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
-| 制約ルール（`/rules`） | `/rules`、`/changeover-matrices`、`/changeover-entries` の CRUD、`GET /rule-types` | M_Rules, M_ChangeoverMatrices, M_ChangeoverEntries, M_ResourceGroups, サーバーのルール種類定義 | M_Rules, M_ChangeoverMatrices, M_ChangeoverEntries |
+| 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にオーダー・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
+| 制約ルール（`/rules`） | `/rules`、`/product-switch-times`、`/product-switch-rules` の CRUD、`GET /rule-types` | M_Rules, M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups, サーバーのルール種類定義 | M_Rules, M_ProductSwitchTimes, M_ProductSwitchRules |
 | 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
 
-**画面で使っていないテーブル**: M_Organizations、M_AttributeDefinitions（デモデータのみ）、T_Actuals（今後）。
+**画面で使っていないテーブル**: M_Organizations、M_AttributeDefinitions（デモデータのみ）、T_WorkActuals（今後）。
 
 ---
 
@@ -671,31 +664,31 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `/resources` | M_Resources | SortOrder |
 | `/attribute-definitions` | M_AttributeDefinitions | ID |
 | `/rules` | M_Rules | ID |
-| `/changeover-matrices` | M_ChangeoverMatrices | ID |
-| `/changeover-entries` | M_ChangeoverEntries | ID |
-| `/plan-profiles` | M_PlanProfiles | ID |
+| `/product-switch-times` | M_ProductSwitchTimes | ID |
+| `/product-switch-rules` | M_ProductSwitchRules | ID |
+| `/calculation-settings` | M_CalculationSettings | ID |
 | `/products` | M_Product | ID |
 | `/product-processes` | M_ProductProcesses | SequenceNumber |
 | `/product-process-resources` | M_ProductProcessResources | ID |
-| `/jobs` | T_Jobs | DueAt |
+| `/orders` | T_Orders | DeadLine |
 | `/tasks` | T_Tasks | Sequence |
 | `/task-resource-options` | T_TaskResourceOptions | ID |
 | `/dependencies` | T_TaskDependencies | ID |
 
-### 8.2 ジョブ・作業
+### 8.2 オーダー・作業
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| POST | `/jobs/{jobId}/generate-tasks?replace=false` | 製品の工程から作業・候補・依存関係を生成。既に作業がある場合は `replace=true` が必要（ない場合は 409）。いずれかの計画で割付済みの作業があると作り直せない（409） |
-| GET | `/jobs/{jobId}/tasks` | 作業一覧（リソース候補 `options` 付き） |
-| GET | `/jobs/{jobId}/dependencies` | ジョブ内の依存関係 |
+| POST | `/orders/{jobId}/generate-tasks?replace=false` | 製品の工程から作業・候補・依存関係を生成。既に作業がある場合は `replace=true` が必要（ない場合は 409）。いずれかの計画で割付済みの作業があると作り直せない（409） |
+| GET | `/orders/{jobId}/tasks` | 作業一覧（リソース候補 `options` 付き） |
+| GET | `/orders/{jobId}/dependencies` | オーダー内の依存関係 |
 
 ### 8.3 計画・計算
 
 | メソッド | パス | 説明 |
 |---|---|---|
 | GET | `/plans?locationId=&status=DRAFT,MASTER` | 計画一覧（期間開始の新しい順） |
-| POST | `/plans` | 計画作成。`{locationId, horizonStart, horizonEnd, planName, profileId?, basePlanId?, useMasterAsBase?, memo?}`。計画名は必須・100文字以内・同じ拠点内で重複不可。前後の空白は除去。オフセットなしの日時は拠点の現地時刻 |
+| POST | `/plans` | 計画作成。`{locationId, horizonStart, horizonEnd, planName, calculationSettingId?, basePlanId?, useMasterAsBase?, remarks?}`。計画名は必須・100文字以内・同じ拠点内で重複不可。前後の空白は除去。オフセットなしの日時はアプリ共通の日本時間（Asia/Tokyo） |
 | GET | `/plans/{planId}` | 計画 |
 | POST | `/plans/{planId}/solve` | 計算依頼。`{scope: "FULL"|"REPAIR", timeLimitSec?, wait?}` → 202 と実行情報。`wait: true` はリクエスト内で同期計算 |
 | GET | `/plans/{planId}/solver-runs` | 計算履歴（新しい順） |
@@ -758,7 +751,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | キー | 表示名 | 単位 | 計算 |
 |---|---|---|---|
-| `late_jobs` | 納期遅れ | 件 | 最終作業の終了が納期を過ぎたジョブ数 |
+| `late_jobs` | 納期遅れ | 件 | 最終作業の終了が納期を過ぎたオーダー数 |
 | `total_lateness_min` | 遅れ時間の合計 | 分 | 遅れの合計 |
 | `setup_min` | 段取り時間 | 分 | 段取り替え時間の合計 |
 | `makespan_min` | 最終完了 | 分 | 計画開始から最後の作業の終了まで |
@@ -766,7 +759,9 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `scheduled_tasks` | 割付済み作業 | 件 | |
 | `unscheduled_tasks` | 未割付作業 | 件 | |
 
-### 違反コード（`T_PlanViolations.ViolationCode`）
+### 計算エンジン内部の違反コード
+
+以下のコードは計算中の分類に使用し、DBの列やAPI項目には含めない。保存する課題は重要度・ルールID・タスクID・説明を持つ。計画承認では、追加ルールに由来しない未割付タスクの必須違反を阻止対象から除く。
 
 | コード | 重大度 | 内容 |
 |---|---|---|
@@ -780,7 +775,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `DEPENDENCY` | HARD | 依存関係（最小ラグ）を満たしていない |
 | `MAX_LAG` | HARD | 最大ラグを超えている |
 | `WEEKDAY` | HARD / SOFT | 生産可能曜日ルール違反（ルールの IsHard による） |
-| `LATE_JOB` | SOFT | ジョブの納期遅れ |
+| `LATE_ORDER` | SOFT | オーダーの納期遅れ |
 | `LATE_TASK` | SOFT | 作業の期限超過 |
 
 ボードでは HARD の違反があるイベントをオレンジの枠で表示します。
@@ -795,8 +790,8 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 タスク生成時にオーダーの属性を引き継ぎ、ルールのセレクター・段取り替えの基準・ボードの色分けに使います。製品・工程のマスタに属性列はありません。
 
 例: アレルゲンの切り替えに洗浄 120 分が必要
-1. 製品の `AttributesJSON` に `{"allergen": "milk"}` などを設定
-2. `M_ChangeoverMatrices` に `AttributeKey = "allergen"` のマトリクスを作り、`M_ChangeoverEntries` に `milk → none: 120 分` などを登録
+1. オーダーの `AttributesJSON` に `{"allergen": "milk"}` などを設定し、生成したタスクへ引き継ぐ
+2. `M_ProductSwitchTimes` に `AttributeKey = "allergen"` のマトリクスを作り、`M_ProductSwitchRules` に `milk → none: 120 分` などを登録
 3. 戻れない順序は `IsForbidden = 1`
 
 ### 11.2 ルールプラグインの追加
@@ -816,9 +811,9 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | システム | 連携方法（設計） |
 |---|---|
-| **工程くん（TRENG-PMS、作業時間の記録）** | 工程くんの作業時間を `T_Actuals`（`Source = PMS`、`ExternalKey`）に取り込み、作業の進捗・残り時間に反映。テーブル命名規則・監査列は工程くんと同じ |
-| **SynViz S2（プロジェクト計画）** | SynViz で計画したプロジェクトは `T_Jobs.JobKind = PROJECT`、`PlanOwner = EXTERNAL` として取り込み、作業の日程は外部の値を尊重（このシステムでは計算しない）。リソースの負荷・配台表には含める |
-| CSV 取込 | ジョブ・マスタの一括登録（フェーズ 5） |
+| **工程くん（TRENG-PMS、作業時間の記録）** | 工程くんの作業時間を `T_WorkActuals`（`Source = PMS`、`ExternalKey`）に取り込み、作業の進捗・残り時間に反映。テーブル命名規則・監査列は工程くんと同じ |
+| **SynViz S2（プロジェクト計画）** | SynViz で計画したプロジェクトは `T_Orders.OrderType = PROJECT`、`PlanOwner = EXTERNAL` として取り込み、作業の日程は外部の値を尊重（このシステムでは計算しない）。リソースの負荷・配台表には含める |
+| CSV 取込 | オーダー・マスタの一括登録（フェーズ 5） |
 
 ---
 
@@ -835,7 +830,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 **今後の予定（フェーズ 5 以降）**
 
-* CSV 取込（ジョブ・マスタ）
+* CSV 取込（オーダー・マスタ）
 * 実績入力と工程くん連携、実績を反映したローリング再計画
 * 組織・拠点・プラン計算設定など、今回の対象外マスタの画面対応
 * 認証（Firebase）と権限

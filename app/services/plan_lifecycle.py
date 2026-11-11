@@ -13,13 +13,12 @@
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import utcnow
 from app.models.masters import Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
-from app.services.plan_service import next_plan_no
 from app.services.plan_validation import copy_plan_name, flush_named_plan, validate_plan_name
 
 # 承認を妨げない必須違反（未割付は「計画に入らなかった」だけで、計画自体は実行可能）
@@ -39,21 +38,31 @@ def _active_run(db: Session, plan_id: int) -> int | None:
     )
 
 
+# 計画全体の割付を使い、承認を妨げる必須違反か判定する。
+def blocks_plan_approval(violation: PlanViolation, assigned_task_ids: set[int]) -> bool:
+    # ルール指定なしの未割付違反だけを承認の阻止対象から除く。
+    return violation.Severity == "HARD" and (
+        violation.RuleID is not None or violation.TaskID is None or violation.TaskID in assigned_task_ids
+    )
+
+
 # 拠点内の計画状態と割付を確認し、対象計画をマスタ計画にする。
 def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Plan:
     _require_draft(plan)
     if _active_run(db, plan.PlanID):
         raise HTTPException(status.HTTP_409_CONFLICT, "計算中の計画は承認できません")
-    n_assign = db.scalar(select(func.count()).select_from(PlanAssignment).where(PlanAssignment.PlanID == plan.PlanID))
-    if not n_assign:
+    # 全割付のタスクIDを一度だけ取得し、割付なしの拒否と違反判定で共通に使う。
+    assigned_task_ids = set(db.scalars(select(PlanAssignment.TaskID).where(PlanAssignment.PlanID == plan.PlanID)))
+    if not assigned_task_ids:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "割付のない計画は承認できません")
     blocking = db.scalars(
         select(PlanViolation).where(
             PlanViolation.PlanID == plan.PlanID,
             PlanViolation.Severity == "HARD",
-            PlanViolation.ViolationCode.notin_(NON_BLOCKING_HARD),
         )
     ).all()
+    # ボード表示と同じ関数で、実際に承認を妨げる違反だけを残す。
+    blocking = [v for v in blocking if blocks_plan_approval(v, assigned_task_ids)]
     if blocking and not force:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -114,16 +123,14 @@ def discard_plan(db: Session, plan: Plan, user: str) -> Plan:
 # 割付・評価値・違反を保持したまま、拠点内で重複しない名前の下書きへ複製する。
 def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Plan:
     """割付・KPI・違反ごと複製した新しい下書きを作る（what-if 用）。"""
-    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
-    location = db.get(Location, plan.LocationID)
     # 名前の指定がなければコピー名を自動生成し、指定がある場合は重複を拒否する。
     plan_name = copy_plan_name(db, plan.LocationID, plan.PlanName) if name is None else validate_plan_name(db, plan.LocationID, name)
     # 割付や評価値の複製先となる新しい下書き。
     new = Plan(
-        LocationID=plan.LocationID, PlanNo=next_plan_no(db, location, plan.HorizonStart),
+        LocationID=plan.LocationID,
         PlanName=plan_name, Status="DRAFT",
-        HorizonStart=plan.HorizonStart, HorizonEnd=plan.HorizonEnd, ProfileID=plan.ProfileID,
-        BasePlanID=plan.BasePlanID, Memo=plan.Memo, CreatedBy=user,
+        HorizonStart=plan.HorizonStart, HorizonEnd=plan.HorizonEnd, CalculationSettingID=plan.CalculationSettingID,
+        BasePlanID=plan.BasePlanID, Remarks=plan.Remarks, CreatedBy=user,
     )
     db.add(new)
     flush_named_plan(db, new)
@@ -137,7 +144,7 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
     for v in db.scalars(select(PlanViolation).where(PlanViolation.PlanID == plan.PlanID)):
         db.add(PlanViolation(
             PlanID=new.PlanID, RuleID=v.RuleID, TaskID=v.TaskID, Severity=v.Severity,
-            ViolationCode=v.ViolationCode, Penalty=v.Penalty, Message=v.Message, CreatedBy=user,
+            Penalty=v.Penalty, Message=v.Message, CreatedBy=user,
         ))
     db.commit()
     db.refresh(new)

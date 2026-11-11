@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import chunks
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
@@ -35,7 +36,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     plan_a, plan_b = db.get(Plan, a_id), db.get(Plan, b_id)
     if plan_a is None or plan_b is None:
         raise HTTPException(404, "計画が見つかりません")
-    tz = db.get(Location, plan_a.LocationID).TimeZone
+    tz = get_settings().app_timezone
 
     # 指定した計画の評価値を項目名で引ける形にまとめる。
     def kpis(pid):
@@ -52,7 +53,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     changes = assignment_diff(sa, sb)
     task_ids = {c.task_id for c in changes}
     info = {
-        t.TaskID: (j.OrderNo, t.TaskName)
+        t.TaskID: (j.WBSNumber, t.TaskName)
         for ids in chunks(task_ids)
         for t, j in db.execute(select(Task, Order).join(Order, Order.OrderID == Task.OrderID).where(Task.TaskID.in_(ids)))
     }
@@ -68,7 +69,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
 
     # 比較対象の計画名・状態・期間を表示用にまとめる。
     def summary(p: Plan):
-        return {"planId": p.PlanID, "planNo": p.PlanNo, "planName": p.PlanName, "status": p.Status,
+        return {"planId": p.PlanID, "planName": p.PlanName, "status": p.Status,
                 "horizonStart": _hhmm(p.HorizonStart, tz), "horizonEnd": _hhmm(p.HorizonEnd, tz)}
 
     return {
@@ -82,7 +83,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
         "totalTasks": len(set(sa) | set(sb)),
         "changes": [
             {
-                "taskId": c.task_id, "orderNo": info.get(c.task_id, ("", ""))[0], "taskName": info.get(c.task_id, ("", ""))[1],
+                "taskId": c.task_id, "wbsNumber": info.get(c.task_id, ("", ""))[0], "taskName": info.get(c.task_id, ("", ""))[1],
                 "kind": c.kind, "shiftMinutes": c.shift_minutes, "description": _shift_text(c.kind, c.shift_minutes),
                 "a": slot_view(c.a), "b": slot_view(c.b),
             }
@@ -91,13 +92,14 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     }
 
 
+# 指定日のマスタ計画の割付を、設備別・開始順の配台表へまとめる。
 def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: int | None = None) -> dict:
     """マスタ計画の配台表（指定日の現地 0:00〜24:00、リソース別・開始順）。"""
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
     location = db.get(Location, location_id)
     if location is None:
         raise HTTPException(404, f"拠点 {location_id} が見つかりません")
-    tz = location.TimeZone
+    tz = get_settings().app_timezone
     start = to_utc_naive(datetime.combine(day, time()), tz)
     end = to_utc_naive(datetime.combine(day + timedelta(days=1), time()), tz)
     rows = master_assignments(db, location_id, start, end)
@@ -115,7 +117,7 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
         r for r in db.scalars(select(Resource).where(Resource.LocationID == location_id, Resource.DeleteFlag == false()))
         if resource_group_id is None or r.ResourceGroupID == resource_group_id
     ]
-    resources.sort(key=lambda r: (groups[r.ResourceGroupID].SortOrder if r.ResourceGroupID in groups else 9999, r.SortOrder))
+    resources.sort(key=lambda r: (groups[r.ResourceGroupID].SortOrder if r.ResourceGroupID in groups else 9999, r.SortOrder, r.ResourceName, r.ResourceID))
     out = []
     for r in resources:
         # このリソースの配台表に表示する割付一覧。画面側のassignmentsと対応する。
@@ -123,7 +125,7 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
         for a in (x for x in rows if x.ResourceID == r.ResourceID):
             t, j, product = detail[a.TaskID]
             assignments.append({
-                "assignmentId": a.AssignmentID, "taskId": t.TaskID, "orderNo": j.OrderNo, "taskName": t.TaskName,
+                "assignmentId": a.AssignmentID, "taskId": t.TaskID, "wbsNumber": j.WBSNumber, "taskName": t.TaskName,
                 "productName": product.ProductName if product else None,
                 "quantity": coerce(j.Quantity),
                 "start": utc_to_local(a.StartAt, tz).strftime("%H:%M"),
@@ -133,7 +135,7 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
                 "attributes": t.AttributesJSON or {},
             })
         out.append({
-            "resourceId": r.ResourceID, "resourceCode": r.ResourceCode, "resourceName": r.ResourceName,
+            "resourceId": r.ResourceID, "resourceName": r.ResourceName,
             "groupName": groups[r.ResourceGroupID].GroupName if r.ResourceGroupID in groups else None,
             "assignments": assignments,
         })

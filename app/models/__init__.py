@@ -4,11 +4,11 @@ from app.models.masters import (  # noqa: F401
     Calendar,
     CalendarException,
     CalendarPattern,
-    ChangeoverEntry,
-    ChangeoverMatrix,
+    ProductSwitchRule,
+    ProductSwitchTime,
     Product,
     Organization,
-    PlanProfile,
+    CalculationSetting,
     Resource,
     ResourceGroup,
     ProductProcess,
@@ -17,7 +17,7 @@ from app.models.masters import (  # noqa: F401
     Location,
 )
 from app.models.transactions import (  # noqa: F401
-    Actual,
+    WorkActual,
     Order,
     Plan,
     PlanAssignment,

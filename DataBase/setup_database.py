@@ -34,7 +34,7 @@ from app import models  # noqa: F401  全テーブルの定義を登録する。
 from app.core.config import get_settings
 from app.core.db import Base, SessionLocal, engine
 from app.models.masters import Organization
-from app.services.demo_seed import seed_demo
+from app.services.demo_seed import DEMO_ORGANIZATION_NAME, seed_demo
 
 
 def ensure_database() -> None:
@@ -88,8 +88,8 @@ def setup_database() -> None:
     # 現在のモデルで未作成テーブルを追加する。既存DBの列削除・名称変更は行わないため、構成変更後は新規DBを使う。
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
-        # 既存の登録済み判定を維持し、デモ組織があれば重複登録しない。
-        demo_id = db.scalar(select(Organization.OrganizationID).where(Organization.OrganizationCode == "DEMO"))
+        # 共通のデモ組織名で登録済みを確認し、初期設定の再実行による重複を防ぐ。
+        demo_id = db.scalar(select(Organization.OrganizationID).where(Organization.OrganizationName == DEMO_ORGANIZATION_NAME))
         if demo_id is None:
             # 初期データの登録件数を受け取り、下書き計画も作成されたことを通知する。
             result = seed_demo(db)

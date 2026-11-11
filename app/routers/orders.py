@@ -61,7 +61,7 @@ def get_order_dependencies(order_id: int, db: Session = Depends(get_db)):
 # オーダーだけに追加の入力確認を適用し、他のCRUDは従来どおり登録する。
 routers = [
     order_extra,  # /orders/{id}/tasks が隠れないよう先に登録する
-    crud_router(Order, "/orders", "Orders", order_by="DueAt", validate_write=validate_order_write),
+    crud_router(Order, "/orders", "Orders", order_by="DeadLine", validate_write=validate_order_write),
     crud_router(Task, "/tasks", "Orders", order_by="Sequence"),
     crud_router(TaskResourceOption, "/task-resource-options", "Orders"),
     crud_router(TaskDependency, "/dependencies", "Orders"),

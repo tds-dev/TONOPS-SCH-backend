@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 
 @dataclass
 class PResource:
+    # 計算で使う設備の識別番号・表示名・同時処理能力と稼働時間帯。
     id: int
-    code: str
     name: str
     capacity: int  # 1 = 同時に 1 タスクのみ
     windows: list[tuple[int, int]]  # 稼働時間（分）[開始, 終了)

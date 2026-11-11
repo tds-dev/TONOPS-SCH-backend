@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core import db as dbmod
 from app.core.db import get_db
 from app.core.timeutil import to_utc_naive
@@ -37,10 +38,12 @@ class PlanCreateBody(ApiModel):
     horizon_end: datetime
     # 画面で識別するための必須名。空欄・文字数・拠点内の重複はサービスで確認する。
     plan_name: str
-    profile_id: int | None = None
+    # 未指定時は拠点の既定の計算設定を選ぶ。
+    calculation_setting_id: int | None = None
     base_plan_id: int | None = None
     use_master_as_base: bool = True
-    memo: str | None = None
+    # 計画の備考。指定がなければ空欄のまま保存する。
+    remarks: str | None = None
 
 
 # 計算対象の範囲・制限時間・完了待機の指定。
@@ -55,10 +58,11 @@ class AssignmentView(ApiModel):
     assignment_id: int
     task_id: int
     order_id: int
-    order_no: str
+    wbs_number: str
     task_name: str
     resource_id: int
-    resource_code: str
+    # 設備コードの代わりに表示する設備名。
+    resource_name: str
     start_at: UtcDatetime
     end_at: UtcDatetime
     setup_minutes: int
@@ -108,8 +112,8 @@ def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = D
     if location is None:
         raise HTTPException(404, f"拠点 {body.location_id} が見つかりません")
     data = body.model_dump()
-    data["horizon_start"] = to_utc_naive(body.horizon_start, location.TimeZone)
-    data["horizon_end"] = to_utc_naive(body.horizon_end, location.TimeZone)
+    data["horizon_start"] = to_utc_naive(body.horizon_start, get_settings().app_timezone)
+    data["horizon_end"] = to_utc_naive(body.horizon_end, get_settings().app_timezone)
     return create_plan(db, user=user, **data)
 
 
@@ -173,8 +177,8 @@ def list_assignments(plan_id: int, db: Session = Depends(get_db)):
     ).all()
     return [
         AssignmentView(
-            assignment_id=a.AssignmentID, task_id=t.TaskID, order_id=j.OrderID, order_no=j.OrderNo,
-            task_name=t.TaskName, resource_id=r.ResourceID, resource_code=r.ResourceCode,
+            assignment_id=a.AssignmentID, task_id=t.TaskID, order_id=j.OrderID, wbs_number=j.WBSNumber,
+            task_name=t.TaskName, resource_id=r.ResourceID, resource_name=r.ResourceName,
             start_at=a.StartAt, end_at=a.EndAt, setup_minutes=a.SetupMinutes,
             is_locked=a.IsLocked, source=a.Source, attributes=t.AttributesJSON or {},
         )

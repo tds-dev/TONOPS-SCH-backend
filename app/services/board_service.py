@@ -8,11 +8,13 @@ from datetime import datetime
 from sqlalchemy import false, select, true
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.timeutil import to_utc_naive, utc_to_local
 from app.engine.snapshot import build_problem
-from app.models.masters import ChangeoverMatrix, Product, Resource, ResourceGroup, Location
+from app.models.masters import ProductSwitchTime, Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
 from app.schemas.base import coerce
+from app.services.plan_lifecycle import blocks_plan_approval
 from app.services.worktime import gaps
 
 SEVERITY_ORDER = {"HARD": 0, "SOFT": 1, "INFO": 2}
@@ -23,12 +25,13 @@ def _local(dt: datetime, tz: str) -> str:
     return utc_to_local(dt, tz).replace(tzinfo=None).isoformat(timespec="seconds")
 
 
+# 有効な製品切替時間の属性を、ボードの既定の色分けに使う。
 def default_color_attribute(db: Session, location_id: int) -> str | None:
-    """色分けの既定属性: 拠点の有効な段取り替えマトリクスの属性（段取りの単位なので見分けたい）。"""
+    """色分けの既定属性: 拠点の有効な製品切替時間設定の属性。"""
     return db.scalar(
-        select(ChangeoverMatrix.AttributeKey)
-        .where(ChangeoverMatrix.LocationID == location_id, ChangeoverMatrix.IsActive == true())
-        .order_by(ChangeoverMatrix.MatrixID)
+        select(ProductSwitchTime.AttributeKey)
+        .where(ProductSwitchTime.LocationID == location_id, ProductSwitchTime.IsActive == true())
+        .order_by(ProductSwitchTime.ProductSwitchTimeID)
     )
 
 
@@ -41,9 +44,9 @@ def build_board(
     resource_group_id: int | None = None,
     color_by: str | None = None,
 ) -> dict:
-    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
+    # 対象の拠点と、アプリ共通の時刻設定。
     location = db.get(Location, plan.LocationID)
-    tz = location.TimeZone
+    tz = get_settings().app_timezone
     start = to_utc_naive(start, tz) if start else plan.HorizonStart
     end = to_utc_naive(end, tz) if end else plan.HorizonEnd
     color_by = color_by or default_color_attribute(db, location.LocationID)
@@ -56,12 +59,13 @@ def build_board(
     ).all()
     if resource_group_id is not None:
         res_rows = [r for r in res_rows if r.ResourceGroupID == resource_group_id]
+    # コード廃止後もグループ順・設備の表示順を優先し、同順は名前とIDで揃える。
     res_rows.sort(key=lambda r: (groups[r.ResourceGroupID].SortOrder if r.ResourceGroupID in groups else 9999,
-                                 r.SortOrder, r.ResourceCode))
+                                 r.SortOrder, r.ResourceName, r.ResourceID))
     resource_ids = {r.ResourceID for r in res_rows}
     resources = [
         {
-            "id": r.ResourceID, "code": r.ResourceCode, "name": r.ResourceName, "type": r.ResourceType,
+            "id": r.ResourceID, "name": r.ResourceName, "type": r.ResourceType,
             "capacity": coerce(r.Capacity), "groupId": r.ResourceGroupID,
             "groupName": groups[r.ResourceGroupID].GroupName if r.ResourceGroupID in groups else None,
         }
@@ -72,6 +76,9 @@ def build_board(
         if not group_list or group_list[-1]["id"] != r["groupId"]:
             group_list.append({"id": r["groupId"], "name": r["groupName"], "resourceIds": []})
         group_list[-1]["resourceIds"].append(r["id"])
+
+    # 表示期間や設備の絞り込みに左右されない、計画全体の割付済みタスク。
+    assigned = set(db.scalars(select(PlanAssignment.TaskID).where(PlanAssignment.PlanID == plan.PlanID)))
 
     # ---- 課題（タスク別の最も重い違反）
     issues = db.scalars(select(PlanViolation).where(PlanViolation.PlanID == plan.PlanID)).all()
@@ -97,13 +104,13 @@ def build_board(
         events.append({
             "id": a.AssignmentID, "resource": a.ResourceID,
             "start": _local(a.StartAt, tz), "end": _local(a.EndAt, tz),
-            "text": f"{j.OrderNo} {t.TaskName}",
-            "taskId": t.TaskID, "orderId": j.OrderID, "orderNo": j.OrderNo, "taskName": t.TaskName,
+            "text": f"{j.WBSNumber} {t.TaskName}",
+            "taskId": t.TaskID, "orderId": j.OrderID, "wbsNumber": j.WBSNumber, "taskName": t.TaskName,
             "productName": product.ProductName if product else None,
             "quantity": coerce(j.Quantity),
-            "dueAt": _local(j.DueAt, tz) if j.DueAt else None,
+            "deadLine": _local(j.DeadLine, tz) if j.DeadLine else None,
             "isLocked": a.IsLocked, "source": a.Source, "setupMinutes": a.SetupMinutes,
-            "colorValue": attrs.get(color_by) if color_by else j.OrderNo,
+            "colorValue": attrs.get(color_by) if color_by else j.WBSNumber,
             "issue": worst.get(t.TaskID), "rowVer": a.RowVer,
         })
         if a.SetupMinutes:
@@ -126,12 +133,11 @@ def build_board(
                 non_working.append({"resource": rid, "start": _local(problem.to_dt(s), tz), "end": _local(problem.to_dt(e), tz)})
 
     # ---- 未割付タスク（ボードへドラッグして配置できる）
-    assigned = set(db.scalars(select(PlanAssignment.TaskID).where(PlanAssignment.PlanID == plan.PlanID)))
     unscheduled = [
         {
-            "taskId": t.id, "orderId": t.order_id, "orderNo": problem.orders[t.order_id].no, "name": t.name,
+            "taskId": t.id, "orderId": t.order_id, "wbsNumber": problem.orders[t.order_id].no, "name": t.name,
             "durations": {str(o.resource_id): o.duration for o in t.options},
-            "dueAt": _local(problem.to_dt(problem.orders[t.order_id].due), tz) if problem.orders[t.order_id].due is not None else None,
+            "deadLine": _local(problem.to_dt(problem.orders[t.order_id].due), tz) if problem.orders[t.order_id].due is not None else None,
             "colorValue": t.attrs.get(color_by) if color_by else None,
         }
         for t in problem.tasks.values() if t.id not in assigned
@@ -140,7 +146,7 @@ def build_board(
     kpis = {k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))}
     return {
         "plan": {
-            "planId": plan.PlanID, "planNo": plan.PlanNo, "planName": plan.PlanName, "status": plan.Status,
+            "planId": plan.PlanID, "planName": plan.PlanName, "status": plan.Status,
             "horizonStart": _local(plan.HorizonStart, tz), "horizonEnd": _local(plan.HorizonEnd, tz),
             "rowVer": plan.RowVer,
         },
@@ -155,7 +161,9 @@ def build_board(
         "nonWorking": non_working,
         "unscheduled": unscheduled,
         "issues": [
-            {"severity": v.Severity, "code": v.ViolationCode, "message": v.Message, "taskId": v.TaskID, "ruleId": v.RuleID}
+            # 実際の承認処理と同じ判定結果を画面へ返す。
+            {"severity": v.Severity, "message": v.Message, "taskId": v.TaskID, "ruleId": v.RuleID,
+             "blocksApproval": blocks_plan_approval(v, assigned)}
             for v in sorted(issues, key=lambda v: (SEVERITY_ORDER[v.Severity], v.ViolationID))
         ],
         "kpis": kpis,

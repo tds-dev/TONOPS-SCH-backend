@@ -14,10 +14,12 @@ class AuditMixin:
     UpdatedBy = Column(String(254), nullable=True)
 
 
+# 行を物理削除せず、一覧や計算の対象外にする削除フラグ。
 class SoftDeleteMixin:
     DeleteFlag = Column(Boolean, nullable=False, default=False)
 
 
+# APIの登録・更新入力から除外する、アプリが管理する履歴列。
 AUDIT_COLUMNS = {"CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy"}
 
 

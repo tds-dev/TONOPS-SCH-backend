@@ -14,6 +14,7 @@
 from sqlalchemy import false, or_, select, true
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.timeutil import utc_to_local
 from app.engine.problem import (
     PChangeover,
@@ -26,7 +27,7 @@ from app.engine.problem import (
     PRule,
     PTask,
 )
-from app.models.masters import ChangeoverMatrix, PlanProfile, Resource, Rule, Location
+from app.models.masters import ProductSwitchTime, CalculationSetting, Resource, Rule, Location
 from app.models.transactions import Order, Plan, PlanAssignment, Task, TaskDependency
 from app.services.calendar_service import working_time
 from app.services.worktime import Interval
@@ -48,13 +49,13 @@ def _windows(intervals: list[Interval], problem_start, horizon: int) -> list[tup
 def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
     location = db.get(Location, plan.LocationID)
-    profile = db.get(PlanProfile, plan.ProfileID)
-    tz = location.TimeZone
+    setting = db.get(CalculationSetting, plan.CalculationSettingID)
+    tz = get_settings().app_timezone
     start, end = plan.HorizonStart, plan.HorizonEnd
     horizon = int((end - start).total_seconds() // 60)
     to_min = lambda dt: int((dt - start).total_seconds() // 60)  # noqa: E731
 
-    weights = dict(profile.ObjectiveWeightsJSON or {}) if profile else {}
+    weights = dict(setting.ObjectiveWeightsJSON or {}) if setting else {}
     if scope == "REPAIR":
         weights.setdefault("stability", 20)
 
@@ -73,7 +74,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
                 calendar_cache[cal_id] = _windows(working_time(db, cal_id, start, end, tz), start, horizon)
             windows = calendar_cache[cal_id]
         resources[r.ResourceID] = PResource(
-            id=r.ResourceID, code=r.ResourceCode, name=r.ResourceName,
+            id=r.ResourceID, name=r.ResourceName,
             capacity=max(1, int(r.Capacity or 1)), windows=windows, group_id=r.ResourceGroupID,
         )
     members: dict[int, list[int]] = {}
@@ -91,7 +92,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     )
     orders_rows = db.scalars(select(Order).where(*order_filter)).all()
     orders = {
-        j.OrderID: POrder(id=j.OrderID, no=j.OrderNo, due=to_min(j.DueAt) if j.DueAt else None, priority=j.Priority)
+        j.OrderID: POrder(id=j.OrderID, no=j.WBSNumber, due=to_min(j.DeadLine) if j.DeadLine else None, priority=j.Priority)
         for j in orders_rows
     }
     order_release = {j.OrderID: max(0, to_min(j.ReleaseAt)) if j.ReleaseAt else 0 for j in orders_rows}
@@ -104,6 +105,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     task_rows = db.scalars(select(Task).where(*task_filter)).all()
 
     # ---- 前回の位置: この計画を優先し、なければ元計画
+    # 指定した計画の割付を、タスクの識別番号で引ける形にする。
     def assignments_of(plan_id: int | None) -> dict[int, PlanAssignment]:
         if plan_id is None:
             return {}
@@ -111,7 +113,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
 
     own = assignments_of(plan.PlanID)
     base = assignments_of(plan.BasePlanID)
-    frozen_end = (profile.FrozenWindowHours if profile else 0) * 60
+    frozen_end = (setting.FrozenWindowHours if setting else 0) * 60
 
     tasks: dict[int, PTask] = {}
     for t in task_rows:
@@ -149,13 +151,15 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
 
     # ---- 段取り替えとルール
     changeovers = []
-    for mx in db.scalars(
-        select(ChangeoverMatrix).where(ChangeoverMatrix.LocationID == location.LocationID, ChangeoverMatrix.IsActive == true())
+    for switch_time in db.scalars(
+        select(ProductSwitchTime).where(ProductSwitchTime.LocationID == location.LocationID, ProductSwitchTime.IsActive == true())
     ):
-        rids = set(members.get(mx.ResourceGroupID, [])) if mx.ResourceGroupID else set(resources)
+        rids = set(members.get(switch_time.ResourceGroupID, [])) if switch_time.ResourceGroupID else set(resources)
         changeovers.append(PChangeover(
-            id=mx.MatrixID, attribute=mx.AttributeKey, resource_ids=rids, default=int(mx.DefaultMinutes or 0),
-            entries={(e.FromValue, e.ToValue): (int(e.SetupMinutes or 0), bool(e.IsForbidden)) for e in mx.entries},
+            id=switch_time.ProductSwitchTimeID, attribute=switch_time.AttributeKey, resource_ids=rids,
+            default=int(switch_time.DefaultMinutes or 0),
+            entries={(rule.FromValue, rule.ToValue): (int(rule.SetupMinutes or 0), bool(rule.IsForbidden))
+                     for rule in switch_time.rules},
         ))
     plan_day = utc_to_local(start, tz).date()  # ルールの有効期間は現地の開始日で判定する
     rules = [
@@ -168,5 +172,5 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     return Problem(
         horizon_start=start, horizon=horizon, tz=tz, resources=resources, tasks=tasks, orders=orders,
         dependencies=deps, changeovers=changeovers, rules=rules, weights=weights,
-        time_limit_sec=profile.TimeLimitSec if profile else 60,
+        time_limit_sec=setting.TimeLimitSec if setting else 60,
     )

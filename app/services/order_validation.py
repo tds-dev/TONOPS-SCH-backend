@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.masters import Location, Product
 from app.models.transactions import (
-    ORDER_STATUSES, ORDER_TYPE, PLAN_OWNERS, Actual, Order, PlanAssignment, Task,
+    ORDER_STATUSES, ORDER_TYPE, PLAN_OWNERS, WorkActual, Order, PlanAssignment, Task,
 )
 
 
@@ -34,7 +34,7 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
 
     # 文字項目は前後の空白を除き、DBの最大文字数を超える入力を防ぐ。
     for key, label, maximum, required in (
-        ("OrderNo", "オーダー番号", 30, True), ("OrderName", "名称", 200, True),
+        ("WBSNumber", "WBS番号", 30, True), ("OrderName", "名称", 200, True),
         ("CustomerName", "顧客", 100, False), ("Remarks", "備考", 500, False),
     ):
         # 今回保存する文字列。
@@ -64,7 +64,8 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     priority = value("Priority")
     if priority is None or not 1 <= priority <= 2147483647:
         raise HTTPException(422, "優先度は1～2147483647の整数で入力してください。")
-    if value("ReleaseAt") is not None and value("DueAt") is not None and value("ReleaseAt") > value("DueAt"):
+    # 納期が開始可能日時より前になっていないか確認する。出荷日時は任意の情報として保持する。
+    if value("ReleaseAt") is not None and value("DeadLine") is not None and value("ReleaseAt") > value("DeadLine"):
         raise HTTPException(422, "納期は開始可能日時以降にしてください。")
     if value("AttributesJSON") is not None and not isinstance(value("AttributesJSON"), dict):
         raise HTTPException(422, "属性は項目名と値の組合せで入力してください。")
@@ -86,15 +87,15 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
         raise HTTPException(422, "同じ拠点の有効な製品を指定してください。")
 
     # 削除済みも同じ番号を保持するため、再利用せず別番号を案内する。
-    duplicate = db.scalar(select(Order.OrderID).where(Order.LocationID == location_id, Order.OrderNo == value("OrderNo")))
+    duplicate = db.scalar(select(Order.OrderID).where(Order.LocationID == location_id, Order.WBSNumber == value("WBSNumber")))
     if duplicate is not None and (original is None or duplicate != original.OrderID):
-        raise HTTPException(409, "同じ拠点でオーダー番号が登録済みです。削除済みも含め、別の番号を指定してください。")
+        raise HTTPException(409, "同じ拠点でWBS番号が登録済みです。削除済みも含め、別の番号を指定してください。")
 
     # 計画・実績があるタスクの内容とオーダーが食い違わないよう、生成元の変更を防ぐ。
     if original is not None and any(changed(key) for key in ("ProductID", "Quantity", "AttributesJSON")):
         # このオーダーに属するタスクの識別番号。
         task_ids = select(Task.TaskID).where(Task.OrderID == original.OrderID)
         if (db.scalar(select(PlanAssignment.AssignmentID).where(PlanAssignment.TaskID.in_(task_ids)).limit(1)) is not None
-                or db.scalar(select(Actual.ActualID).where(Actual.TaskID.in_(task_ids)).limit(1)) is not None
+                or db.scalar(select(WorkActual.WorkActualID).where(WorkActual.TaskID.in_(task_ids)).limit(1)) is not None
                 or db.scalar(select(Task.TaskID).where(Task.OrderID == original.OrderID, Task.Status != "NOT_STARTED").limit(1)) is not None):
             raise HTTPException(409, "計画に割付済み、または作業開始・実績登録済みのため、製品・数量・属性は変更できません。")

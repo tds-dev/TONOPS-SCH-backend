@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.timeutil import to_utc_naive
 from app.models import masters as m
 from app.models import transactions as t
@@ -16,8 +17,10 @@ from app.services.order_service import generate_tasks
 from app.services.plan_service import create_plan
 
 # パン工場の現地時刻と、初期データの登録者。
-TZ = "Asia/Tokyo"
+TZ = get_settings().app_timezone
 USER = "seed"
+# 初期設定の登録済み判定と、デモ作成で共通に使う組織名。
+DEMO_ORGANIZATION_NAME = "デモベーカリー"
 
 # 店舗向けの製造計画を想像できる名称。計画番号は名前に含めず、同じ拠点内で重複させない。
 DEMO_PLAN_NAMES = ("各店舗向けパン製造・通常計画", "各店舗向けパン製造・見直し計画")
@@ -33,20 +36,19 @@ def demo_start(now: datetime | None = None) -> datetime:
 
 # パン製品・製品工程・オーダー・下書き計画を含む新規デモデータを登録する。
 def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
-    # DEMOコードは登録済み判定に使うため維持し、表示名をパン製造の例へ変更する。
-    org = m.Organization(OrganizationCode="DEMO", OrganizationName="デモベーカリー", CreatedBy=USER)
+    # 廃止した組織コードを使わず、共通の組織名で初期データを識別する。
+    org = m.Organization(OrganizationName=DEMO_ORGANIZATION_NAME, CreatedBy=USER)
     db.add(org)
     db.flush()
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
     location = m.Location(
-        OrganizationID=org.OrganizationID, LocationCode="BAKERY-A", LocationName="パン工場",
-        TimeZone=TZ, CreatedBy=USER,
+        OrganizationID=org.OrganizationID, LocationName="パン工場", CreatedBy=USER,
     )
     db.add(location)
     db.flush()
 
     # パン工場のデモ稼働時間。月〜土06:00〜12:00・13:00〜18:00、日曜は休みとする。
-    cal = m.Calendar(LocationID=location.LocationID, CalendarCode="STD", CalendarName="パン工場標準カレンダー", CreatedBy=USER)
+    cal = m.Calendar(LocationID=location.LocationID, CalendarName="パン工場標準カレンダー", CreatedBy=USER)
     for dow in range(1, 7):
         cal.patterns.append(m.CalendarPattern(DayOfWeek=dow, StartTime=time(6), EndTime=time(12), ShiftName="午前"))
         cal.patterns.append(m.CalendarPattern(DayOfWeek=dow, StartTime=time(13), EndTime=time(18), ShiftName="午後"))
@@ -56,18 +58,19 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
 
     # 工程ごとに使える設備の集合。各工程には同じグループの設備を候補として紐付ける。
     groups = {}
-    for i, (code, name) in enumerate([("KNEAD", "こねる設備"), ("BAKE", "焼く設備"), ("PACK", "包装設備")]):
-        g = m.ResourceGroup(LocationID=location.LocationID, GroupCode=code, GroupName=name, SortOrder=i, CreatedBy=USER)
+    for i, (key, name) in enumerate([("KNEAD", "こねる設備"), ("BAKE", "焼く設備"), ("PACK", "包装設備")]):
+        # keyはデモ作成中だけ使う参照名。DBには名前と識別番号を保存する。
+        g = m.ResourceGroup(LocationID=location.LocationID, GroupName=name, SortOrder=i, CreatedBy=USER)
         db.add(g)
-        groups[code] = g
+        groups[key] = g
     db.flush()
-    for i, (code, name, grp) in enumerate([
-        ("KN-01", "ミキサー1号機", "KNEAD"), ("KN-02", "ミキサー2号機", "KNEAD"),
-        ("OV-01", "オーブン1号機", "BAKE"), ("OV-02", "オーブン2号機", "BAKE"),
-        ("PK-01", "包装機1号機", "PACK"), ("PK-02", "包装機2号機", "PACK"),
+    for i, (name, grp) in enumerate([
+        ("ミキサー1号機", "KNEAD"), ("ミキサー2号機", "KNEAD"),
+        ("オーブン1号機", "BAKE"), ("オーブン2号機", "BAKE"),
+        ("包装機1号機", "PACK"), ("包装機2号機", "PACK"),
     ]):
         db.add(m.Resource(
-            LocationID=location.LocationID, ResourceGroupID=groups[grp].ResourceGroupID, ResourceCode=code,
+            LocationID=location.LocationID, ResourceGroupID=groups[grp].ResourceGroupID,
             ResourceName=name, ResourceType="MACHINE", Capacity=1, CalendarID=cal.CalendarID,
             SortOrder=i, CreatedBy=USER,
         ))
@@ -78,8 +81,8 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ))
 
     # パン分類を切り替える際の準備時間を表すデモ。同じ分類同士では追加の段取りを不要とする。
-    matrix = m.ChangeoverMatrix(
-        LocationID=location.LocationID, MatrixName="ミキサーのパン分類切替", AttributeKey="family",
+    switch_time = m.ProductSwitchTime(
+        LocationID=location.LocationID, ProductSwitchTimeName="ミキサーのパン分類切替", AttributeKey="family",
         ResourceGroupID=groups["KNEAD"].ResourceGroupID, DefaultMinutes=0, CreatedBy=USER,
     )
     for frm, to, mins in [
@@ -87,16 +90,16 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         ("菓子パン", "食事パン", 10), ("菓子パン", "ナッツ入り", 15),
         ("ナッツ入り", "食事パン", 20), ("ナッツ入り", "菓子パン", 20),
     ]:
-        matrix.entries.append(m.ChangeoverEntry(FromValue=frm, ToValue=to, SetupMinutes=mins))
-    db.add(matrix)
+        switch_time.rules.append(m.ProductSwitchRule(FromValue=frm, ToValue=to, SetupMinutes=mins))
+    db.add(switch_time)
 
     db.add(m.Rule(
         LocationID=location.LocationID, RuleTypeKey="allowed_weekdays", RuleName="くるみパンは平日のみ製造（デモ）",
         SelectorJSON={"family": "ナッツ入り"}, ParamsJSON={"weekdays": [1, 2, 3, 4, 5]}, IsHard=True,
         CreatedBy=USER,
     ))
-    db.add(m.PlanProfile(
-        LocationID=location.LocationID, ProfileName="パン製造・納期優先", TimeUnit="MINUTE", IsDefault=True,
+    db.add(m.CalculationSetting(
+        LocationID=location.LocationID, CalculationSettingName="パン製造・納期優先", TimeUnit="MINUTE", IsDefault=True,
         ObjectiveWeightsJSON={"lateness": 1000, "setup": 10, "makespan": 1, "unscheduled": 100000},
         TimeLimitSec=30, CreatedBy=USER,
     ))
@@ -147,9 +150,9 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         # 数量の「個」はデモの表示名に含める。分類属性はオーダーからタスクへ引き継ぐ。
         product = products[name]
         order = t.Order(
-            LocationID=location.LocationID, OrderNo=no, OrderName=f"{product.ProductName} {qty}個（{customer}向け）", OrderType="ORDER",
+            LocationID=location.LocationID, WBSNumber=no, OrderName=f"{product.ProductName} {qty}個（{customer}向け）", OrderType="ORDER",
             ProductID=product.ProductID, Quantity=qty, CustomerName=customer, ReleaseAt=start,
-            DueAt=start + timedelta(hours=due_h), Priority=prio, Status="OPEN", CreatedBy=USER,
+            DeadLine=start + timedelta(hours=due_h), Priority=prio, Status="OPEN", CreatedBy=USER,
             AttributesJSON={"family": order_families[name]},
         )
         db.add(order)
@@ -164,7 +167,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         create_plan(
             db, location_id=location.LocationID, horizon_start=start, horizon_end=start + timedelta(days=3),
             user=USER, plan_name=plan_name, use_master_as_base=False,
-            memo="駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。",
+            remarks="駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。",
         )
     return {"organizationId": org.OrganizationID, "locationId": location.LocationID,
             "orders": len(orders), "plans": len(DEMO_PLAN_NAMES)}

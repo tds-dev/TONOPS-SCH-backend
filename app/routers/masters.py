@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.timeutil import to_utc_naive
 from app.models import masters as m
@@ -27,9 +28,9 @@ routers = [
     crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder"),
     crud_router(m.AttributeDefinition, "/attribute-definitions", "Configuration"),
     crud_router(m.Rule, "/rules", "Configuration"),
-    crud_router(m.ChangeoverMatrix, "/changeover-matrices", "Configuration"),
-    crud_router(m.ChangeoverEntry, "/changeover-entries", "Configuration"),
-    crud_router(m.PlanProfile, "/plan-profiles", "Configuration"),
+    crud_router(m.ProductSwitchTime, "/product-switch-times", "Configuration"),
+    crud_router(m.ProductSwitchRule, "/product-switch-rules", "Configuration"),
+    crud_router(m.CalculationSetting, "/calculation-settings", "Configuration"),
     crud_router(m.Product, "/products", "Products & processes", validate_write=validate_product_write),
     crud_router(m.ProductProcess, "/product-processes", "Products & processes", order_by="SequenceNumber",
                 write_handler=save_product_process, delete_handler=delete_product_process),
@@ -57,9 +58,8 @@ def get_working_time(
     cal = db.get(m.Calendar, calendar_id)
     if cal is None:
         raise HTTPException(404, f"Calendar {calendar_id} not found")
-    # 対象の拠点情報。現地時刻や既定設定の参照に使う。
-    location = db.get(m.Location, cal.LocationID)
-    tz = location.TimeZone if location else "UTC"
+    # 拠点の時差列を持たず、アプリ共通の日本時間で稼働枠を展開する。
+    tz = get_settings().app_timezone
     s, e = to_utc_naive(start), to_utc_naive(end)
     if e <= s:
         raise HTTPException(422, "'to' must be after 'from'")

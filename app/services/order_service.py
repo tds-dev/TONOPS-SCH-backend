@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.masters import Product, ProductProcess
-from app.models.transactions import Actual, Order, PlanAssignment, Task, TaskDependency, TaskResourceOption
+from app.models.transactions import WorkActual, Order, PlanAssignment, Task, TaskDependency, TaskResourceOption
 
 
 def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: float) -> int:
@@ -46,7 +46,7 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
         if not replace:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"Order {order.OrderNo} already has {len(existing)} tasks; pass replace=true to rebuild.",
+                f"Order {order.WBSNumber} already has {len(existing)} tasks; pass replace=true to rebuild.",
             )
         # 再生成対象のタスク番号と、既存計画からの参照。
         task_ids = [t.TaskID for t in existing]
@@ -56,10 +56,10 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
         if used is not None:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"Order {order.OrderNo} tasks are used in a plan; they cannot be rebuilt.",
+                f"Order {order.WBSNumber} tasks are used in a plan; they cannot be rebuilt.",
             )
         if (any(task.Status != "NOT_STARTED" for task in existing)
-                or db.scalar(select(Actual.ActualID).where(Actual.TaskID.in_(task_ids)).limit(1)) is not None):
+                or db.scalar(select(WorkActual.WorkActualID).where(WorkActual.TaskID.in_(task_ids)).limit(1)) is not None):
             raise HTTPException(status.HTTP_409_CONFLICT, "作業開始・実績登録済みのタスクは再生成できません。")
         db.execute(
             delete(TaskDependency).where(

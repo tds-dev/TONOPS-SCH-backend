@@ -32,7 +32,7 @@ class Organization(AuditMixin, SoftDeleteMixin, Base):
 
     __tablename__ = "M_Organizations"
     OrganizationID = Column(Integer, primary_key=True, autoincrement=True)
-    OrganizationCode = Column(String(30), nullable=False, unique=True)
+    # 組織の表示名。識別には自動採番のOrganizationIDを使う。
     OrganizationName = Column(String(100), nullable=False)
 
 
@@ -40,15 +40,12 @@ class Location(AuditMixin, SoftDeleteMixin, Base):
     """拠点マスタ"""
 
     __tablename__ = "M_Locations"
-    __table_args__ = (UniqueConstraint("OrganizationID", "LocationCode"),)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, primary_key=True, autoincrement=True)
     OrganizationID = Column(Integer, ForeignKey("M_Organizations.OrganizationID"), nullable=False)
-    # 組織内で拠点を区別するコード。
-    LocationCode = Column(String(30), nullable=False)
     # 画面の拠点選択欄に表示する名称。
     LocationName = Column(String(100), nullable=False)
-    TimeZone = Column(String(50), nullable=False, default="Asia/Tokyo")
+    # 拠点に属する設備で、個別指定がない場合に使うカレンダー。
     DefaultCalendarID = Column(
         Integer, ForeignKey("M_Calendars.CalendarID", use_alter=True), nullable=True
     )
@@ -59,11 +56,10 @@ class Calendar(AuditMixin, SoftDeleteMixin, Base):
     """カレンダーマスタ"""
 
     __tablename__ = "M_Calendars"
-    __table_args__ = (UniqueConstraint("LocationID", "CalendarCode"),)
     CalendarID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    CalendarCode = Column(String(30), nullable=False)
+    # カレンダーの表示名。識別にはCalendarIDを使う。
     CalendarName = Column(String(100), nullable=False)
     ParentCalendarID = Column(Integer, ForeignKey("M_Calendars.CalendarID"), nullable=True)
 
@@ -108,36 +104,32 @@ class ResourceGroup(AuditMixin, SoftDeleteMixin, Base):
     """リソースグループマスタ"""
 
     __tablename__ = "M_ResourceGroups"
-    __table_args__ = (UniqueConstraint("LocationID", "GroupCode"),)
     ResourceGroupID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    GroupCode = Column(String(30), nullable=False)
+    # 設備グループの表示名と画面での表示順。
     GroupName = Column(String(100), nullable=False)
     SortOrder = Column(Integer, nullable=False, default=0)
 
 
 class Resource(AuditMixin, SoftDeleteMixin, Base):
-    """リソースマスタ"""
+    """リソースマスタ。設備名・能力・稼働カレンダーを管理する。"""
 
     __tablename__ = "M_Resources"
     __table_args__ = (
-        UniqueConstraint("LocationID", "ResourceCode"),
         CheckConstraint(in_check("ResourceType", RESOURCE_TYPE), name="ResourceType"),
     )
     ResourceID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
-    ResourceCode = Column(String(30), nullable=False)
+    # 設備の表示名。関連付けにはResourceIDを使う。
     ResourceName = Column(String(100), nullable=False)
     # リソースの種別を、APIとDBで共通のType名として扱う。
     ResourceType = Column(String(20), nullable=False, default="MACHINE")
     Capacity = Column(Numeric(9, 2), nullable=False, default=1)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
     CalendarID = Column(Integer, ForeignKey("M_Calendars.CalendarID"), nullable=True)
-    CostPerHour = Column(Numeric(12, 2), nullable=True)
-    AttributesJSON = Column(JSON, nullable=True)
     SortOrder = Column(Integer, nullable=False, default=0)
 
 
@@ -181,30 +173,34 @@ class Rule(AuditMixin, Base):
     IsActive = Column(Boolean, nullable=False, default=True)
 
 
-class ChangeoverMatrix(AuditMixin, Base):
-    """段取り替えマトリクスマスタ"""
+class ProductSwitchTime(AuditMixin, Base):
+    """製品切替時間マスタ。属性と設備グループごとの切替条件をまとめる。"""
 
-    __tablename__ = "M_ChangeoverMatrices"
-    MatrixID = Column(Integer, primary_key=True, autoincrement=True)
+    __tablename__ = "M_ProductSwitchTimes"
+    # 切替時間設定の識別番号。明細からの参照にも使う。
+    ProductSwitchTimeID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    MatrixName = Column(String(100), nullable=False)
+    # 切替時間設定の表示名と、切替の判定に使う属性。
+    ProductSwitchTimeName = Column(String(100), nullable=False)
     AttributeKey = Column(String(50), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     DefaultMinutes = Column(Integer, nullable=False, default=0)
     IsActive = Column(Boolean, nullable=False, default=True)
 
-    entries = relationship("ChangeoverEntry", cascade="all, delete-orphan", lazy="selectin")
+    # この設定に属する切替ルール。親の削除時に明細も削除する。
+    rules = relationship("ProductSwitchRule", cascade="all, delete-orphan", lazy="selectin")
 
 
-class ChangeoverEntry(AuditMixin, Base):
-    """段取り替え明細マスタ — FromValue/ToValue の '*' は任意の値。"""
+class ProductSwitchRule(AuditMixin, Base):
+    """製品切替ルールマスタ。FromValue/ToValueの'*'は任意の値。"""
 
-    __tablename__ = "M_ChangeoverEntries"
-    __table_args__ = (UniqueConstraint("MatrixID", "FromValue", "ToValue"),)
-    EntryID = Column(Integer, primary_key=True, autoincrement=True)
-    MatrixID = Column(
-        Integer, ForeignKey("M_ChangeoverMatrices.MatrixID", ondelete="CASCADE"), nullable=False
+    __tablename__ = "M_ProductSwitchRules"
+    __table_args__ = (UniqueConstraint("ProductSwitchTimeID", "FromValue", "ToValue"),)
+    # 切替ルールの識別番号と、所属する切替時間設定。
+    ProductSwitchRuleID = Column(Integer, primary_key=True, autoincrement=True)
+    ProductSwitchTimeID = Column(
+        Integer, ForeignKey("M_ProductSwitchTimes.ProductSwitchTimeID", ondelete="CASCADE"), nullable=False
     )
     FromValue = Column(String(50), nullable=False)
     ToValue = Column(String(50), nullable=False)
@@ -213,15 +209,17 @@ class ChangeoverEntry(AuditMixin, Base):
     Cost = Column(Numeric(12, 2), nullable=True)
 
 
-class PlanProfile(AuditMixin, Base):
-    """計画プロファイルマスタ — 目的関数の重みとソルバーの上限。"""
+class CalculationSetting(AuditMixin, Base):
+    """計算設定マスタ。計算で優先する条件の重みと制限時間を保持する。"""
 
-    __tablename__ = "M_PlanProfiles"
+    __tablename__ = "M_CalculationSettings"
     __table_args__ = (CheckConstraint(in_check("TimeUnit", TIME_UNITS), name="TimeUnit"),)
-    ProfileID = Column(Integer, primary_key=True, autoincrement=True)
+    # 計算設定の識別番号。計画からの参照にも使う。
+    CalculationSettingID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    ProfileName = Column(String(100), nullable=False)
+    # 計算設定の表示名と、計算の時間単位。
+    CalculationSettingName = Column(String(100), nullable=False)
     TimeUnit = Column(String(10), nullable=False, default="MINUTE")
     ObjectiveWeightsJSON = Column(JSON, nullable=False, default=dict)
     TimeLimitSec = Column(Integer, nullable=False, default=60)

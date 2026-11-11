@@ -44,7 +44,7 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     # 実DBもT_OrdersとOrder系の列名へ変更されることを前提とする。
     __tablename__ = "T_Orders"
     __table_args__ = (
-        UniqueConstraint("LocationID", "OrderNo"),
+        UniqueConstraint("LocationID", "WBSNumber"),
         CheckConstraint(in_check("OrderType", ORDER_TYPE), name="OrderType"),
         CheckConstraint(in_check("Status", ORDER_STATUSES), name="Status"),
         CheckConstraint(in_check("PlanOwner", PLAN_OWNERS), name="PlanOwner"),
@@ -52,23 +52,26 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     OrderID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    OrderNo = Column(String(30), nullable=False)
+    # 同じ拠点内でオーダーを区別するWBS番号。
+    WBSNumber = Column(String(30), nullable=False)
     OrderName = Column(String(200), nullable=False)
     # 受注かプロジェクトかを表す種別。保存値と動作は維持する。
     OrderType = Column(String(20), nullable=False, default="ORDER")
-    ParentOrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=True)
     # オーダーの対象製品。ProductIDで製品マスタを参照する。
     ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
     CustomerName = Column(String(100), nullable=True)
     ReleaseAt = Column(DateTime, nullable=True)
-    DueAt = Column(DateTime, nullable=True)
+    # 計算で使う納期と、任意入力の出荷日時。日時はUTCで保存する。
+    DeadLine = Column(DateTime, nullable=True)
+    ShippingDate = Column(DateTime, nullable=True)
     Priority = Column(Integer, nullable=False, default=50)  # 1 = 最優先
     Status = Column(String(20), nullable=False, default="OPEN")
     PlanOwner = Column(String(20), nullable=False, default="SCHEDULER")
     AttributesJSON = Column(JSON, nullable=True)
     Remarks = Column(String(500), nullable=True)
 
+    # このオーダーに属するタスク。親子階層を持たず、工程順で取得する。
     tasks = relationship("Task", back_populates="order", order_by="Task.Sequence")
 
 
@@ -83,19 +86,17 @@ class Task(AuditMixin, Base):
     TaskID = Column(Integer, primary_key=True, autoincrement=True)
     # タスクの所属先は、変更後のオーダーテーブルを参照する。
     OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
-    ParentTaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     # タスク生成元の製品工程。生成済みのタスクと工程の対応を保持する。
     ProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
     TaskNo = Column(String(30), nullable=False)
     TaskName = Column(String(200), nullable=False)
     Sequence = Column(Integer, nullable=False, default=0)
     IsSummary = Column(Boolean, nullable=False, default=False)
-    IsMilestone = Column(Boolean, nullable=False, default=False)
-    EffortHours = Column(Numeric(9, 2), nullable=True)
     EarliestStartAt = Column(DateTime, nullable=True)
     DeadlineAt = Column(DateTime, nullable=True)
     Status = Column(String(20), nullable=False, default="NOT_STARTED")
     ProgressPct = Column(Numeric(5, 2), nullable=False, default=0)
+    # オーダーから引き継ぐ分類属性。ルールと製品切替時間の判定に使う。
     AttributesJSON = Column(JSON, nullable=True)
 
     order = relationship("Order", back_populates="tasks")
@@ -147,7 +148,6 @@ class Plan(AuditMixin, Base):
 
     __tablename__ = "T_Plans"
     __table_args__ = (
-        UniqueConstraint("LocationID", "PlanNo"),
         # 下書き・マスタ・破棄済みを含め、同じ拠点の計画名の重複を防ぐ。
         UniqueConstraint("LocationID", "PlanName"),
         CheckConstraint(in_check("Status", PLAN_STATUSES), name="Status"),
@@ -155,18 +155,19 @@ class Plan(AuditMixin, Base):
     PlanID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    PlanNo = Column(String(30), nullable=False)
     # 画面で計画を識別する名前。同じ拠点内で一意とする。
     PlanName = Column(String(100), nullable=False)
     Status = Column(String(20), nullable=False, default="DRAFT")
     HorizonStart = Column(DateTime, nullable=False)
     HorizonEnd = Column(DateTime, nullable=False)
-    ProfileID = Column(Integer, ForeignKey("M_PlanProfiles.ProfileID"), nullable=False)
+    # 計画の計算条件を参照する識別番号。
+    CalculationSettingID = Column(Integer, ForeignKey("M_CalculationSettings.CalculationSettingID"), nullable=False)
     BasePlanID = Column(Integer, ForeignKey("T_Plans.PlanID"), nullable=True)
     SupersededAt = Column(DateTime, nullable=True)
     ApprovedAt = Column(DateTime, nullable=True)
     ApprovedBy = Column(String(254), nullable=True)
-    Memo = Column(String(500), nullable=True)
+    # 計画に関する任意の補足情報。
+    Remarks = Column(String(500), nullable=True)
     # 楽観的排他制御。SQL Server の rowversion は SQLite に移植できないため、
     # SQLAlchemy が管理する整数のバージョンカウンタを使う。
     RowVer = Column(Integer, nullable=False, default=1)
@@ -253,22 +254,22 @@ class PlanViolation(AuditMixin, Base):
     RuleID = Column(Integer, ForeignKey("M_Rules.RuleID"), nullable=True)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     Severity = Column(String(10), nullable=False)
-    # 違反コードはLATE_ORDER等のプログラム上の名称をそのまま保存する。
-    ViolationCode = Column(String(30), nullable=False, default="OTHER")
+    # 違反は重大度・対象タスク・ルール・説明で保持する。
     Penalty = Column(Numeric(18, 2), nullable=True)
     Message = Column(String(500), nullable=False)
 
 
 # ---------------------------------------------------------------- 実行
-class Actual(AuditMixin, Base):
-    """実績"""
+class WorkActual(AuditMixin, Base):
+    """作業実績。タスクの実施日時・工数・数量を保持する。"""
 
-    __tablename__ = "T_Actuals"
+    __tablename__ = "T_WorkActuals"
     __table_args__ = (
         CheckConstraint(in_check("Status", ACTUAL_STATUSES), name="Status"),
         CheckConstraint(in_check("Source", ACTUAL_SOURCES), name="Source"),
     )
-    ActualID = Column(BigId, primary_key=True, autoincrement=True)
+    # 作業実績を識別する自動採番の番号。
+    WorkActualID = Column(BigId, primary_key=True, autoincrement=True)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
     StartAt = Column(DateTime, nullable=True)
