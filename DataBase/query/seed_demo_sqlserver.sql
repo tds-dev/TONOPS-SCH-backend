@@ -143,6 +143,125 @@ INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumb
 SET IDENTITY_INSERT [M_ProductProcesses] OFF;
 SET @IdentityTable = NULL;
 
+-- 作業者マスタの仮データ。今回は計画計算・CRUD API・画面には接続しない。
+-- M_Workers: 3件
+SET @IdentityTable = N'M_Workers';
+SET IDENTITY_INSERT [M_Workers] ON;
+INSERT INTO [M_Workers] ([WorkerID], [LocationID], [WorkerName], [Remarks], [DeleteFlag]) VALUES (1, 1, N'作業者A（こねる担当）', N'パン製造デモの作業者', 0);
+INSERT INTO [M_Workers] ([WorkerID], [LocationID], [WorkerName], [Remarks], [DeleteFlag]) VALUES (2, 1, N'作業者B（焼く担当）', N'パン製造デモの作業者', 0);
+INSERT INTO [M_Workers] ([WorkerID], [LocationID], [WorkerName], [Remarks], [DeleteFlag]) VALUES (3, 1, N'作業者C（包装担当）', N'パン製造デモの作業者', 0);
+SET IDENTITY_INSERT [M_Workers] OFF;
+SET @IdentityTable = NULL;
+
+-- M_WorkerProcessesLink: 54件。全工程分を登録し、可18件・不可36件を明示する。
+SET @IdentityTable = N'M_WorkerProcessesLink';
+SET IDENTITY_INSERT [M_WorkerProcessesLink] ON;
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (1, 1, 1, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (2, 2, 1, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (3, 3, 1, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (4, 1, 2, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (5, 2, 2, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (6, 3, 2, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (7, 1, 3, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (8, 2, 3, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (9, 3, 3, 1, 1200.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (10, 1, 4, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (11, 2, 4, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (12, 3, 4, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (13, 1, 5, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (14, 2, 5, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (15, 3, 5, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (16, 1, 6, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (17, 2, 6, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (18, 3, 6, 1, 1200.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (19, 1, 7, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (20, 2, 7, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (21, 3, 7, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (22, 1, 8, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (23, 2, 8, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (24, 3, 8, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (25, 1, 9, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (26, 2, 9, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (27, 3, 9, 1, 1200.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (28, 1, 10, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (29, 2, 10, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (30, 3, 10, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (31, 1, 11, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (32, 2, 11, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (33, 3, 11, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (34, 1, 12, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (35, 2, 12, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (36, 3, 12, 1, 1200.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (37, 1, 13, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (38, 2, 13, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (39, 3, 13, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (40, 1, 14, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (41, 2, 14, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (42, 3, 14, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (43, 1, 15, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (44, 2, 15, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (45, 3, 15, 1, 1200.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (46, 1, 16, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (47, 2, 16, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (48, 3, 16, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (49, 1, 17, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (50, 2, 17, 1, 600.000, NULL);
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (51, 3, 17, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (52, 1, 18, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (53, 2, 18, 0, NULL, N'担当外（デモ）');
+INSERT INTO [M_WorkerProcessesLink] ([WorkerProcessLinkID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (54, 3, 18, 1, 1200.000, NULL);
+SET IDENTITY_INSERT [M_WorkerProcessesLink] OFF;
+SET @IdentityTable = NULL;
+
+-- M_WorkerCalendars: 36件。月～土の06:00～12:00・13:00～18:00、日曜は休み。
+SET @IdentityTable = N'M_WorkerCalendars';
+SET IDENTITY_INSERT [M_WorkerCalendars] ON;
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, 1, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, 1, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, 2, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, 2, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, 3, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, 3, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 1, 4, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (8, 1, 4, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (9, 1, 5, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (10, 1, 5, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (11, 1, 6, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (12, 1, 6, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (13, 2, 1, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (14, 2, 1, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (15, 2, 2, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (16, 2, 2, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (17, 2, 3, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (18, 2, 3, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (19, 2, 4, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (20, 2, 4, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (21, 2, 5, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (22, 2, 5, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (23, 2, 6, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (24, 2, 6, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (25, 3, 1, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (26, 3, 1, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (27, 3, 2, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (28, 3, 2, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (29, 3, 3, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (30, 3, 3, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (31, 3, 4, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (32, 3, 4, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (33, 3, 5, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (34, 3, 5, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (35, 3, 6, '06:00:00', '12:00:00', N'午前', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (36, 3, 6, '13:00:00', '18:00:00', N'午後', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL, 0);
+SET IDENTITY_INSERT [M_WorkerCalendars] OFF;
+SET @IdentityTable = NULL;
+
+-- M_WorkerCalendarExceptions: 1件。作業者Aの不在を、同作業者の勤務行へ関連付ける。
+SET @IdentityTable = N'M_WorkerCalendarExceptions';
+SET IDENTITY_INSERT [M_WorkerCalendarExceptions] ON;
+INSERT INTO [M_WorkerCalendarExceptions] ([ExceptionID], [WorkerCalendarsID], [StartAt], [EndAt], [Remark], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, '2026-10-31T10:00:00', '2026-10-31T11:00:00', N'研修（デモ）', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
+SET IDENTITY_INSERT [M_WorkerCalendarExceptions] OFF;
+SET @IdentityTable = NULL;
+
 -- T_Orders: 7件
 SET @IdentityTable = N'T_Orders';
 SET IDENTITY_INSERT [T_Orders] ON;

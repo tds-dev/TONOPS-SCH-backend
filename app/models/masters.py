@@ -281,3 +281,76 @@ class ProductProcessResource(AuditMixin, Base):
     FixedMinutes = Column(Integer, nullable=False, default=0)
     MinutesPerUnit = Column(Numeric(12, 4), nullable=False, default=0)
     Priority = Column(Integer, nullable=False, default=1)
+
+
+# ---------------------------------------------------------------- 作業者
+class Worker(SoftDeleteMixin, Base):
+    """作業者本人の情報。指定された5列だけを保持する。"""
+
+    __tablename__ = "M_Workers"
+    # 作業者の識別番号と所属拠点。
+    WorkerID = Column(Integer, primary_key=True, autoincrement=True)
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
+    # 作業者名と、管理上の補足。
+    WorkerName = Column(String(100), nullable=False)
+    Remarks = Column(String(500), nullable=True)
+
+
+class WorkerProcessLink(Base):
+    """作業者と製品工程の担当可否・工程別日上限。全工程分の組合せを保存する。"""
+
+    __tablename__ = "M_WorkerProcessesLink"
+    # 同じ担当関係を重複させず、設定する日上限は正の数量に限定する。
+    __table_args__ = (
+        UniqueConstraint("WorkerID", "ProductProcessID"),
+        CheckConstraint("MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0", name="MaxDailyQuantity"),
+    )
+    # 担当関係の識別番号と、作業者・製品工程への参照。
+    WorkerProcessLinkID = Column(Integer, primary_key=True, autoincrement=True)
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
+    ProductProcessID = Column(
+        Integer, ForeignKey("M_ProductProcesses.ProductProcessID", ondelete="CASCADE"), nullable=False
+    )
+    # 新しい担当関係は不可から開始する。日上限のNULLは追加制限なし。
+    CanExecute = Column(Boolean, nullable=False, default=False)
+    MaxDailyQuantity = Column(Numeric(18, 3), nullable=True)
+    # 担当不可の理由などを記録する補足。
+    Remarks = Column(String(500), nullable=True)
+
+
+class WorkerCalendar(AuditMixin, SoftDeleteMixin, Base):
+    """作業者の週次勤務。1行で1曜日・同日内の1時間帯を表す。"""
+
+    __tablename__ = "M_WorkerCalendars"
+    # 既存カレンダーと同じ曜日番号と、同日内の勤務時刻だけを許可する。
+    __table_args__ = (
+        CheckConstraint("DayOfWeek BETWEEN 0 AND 6", name="DayOfWeek"),
+        CheckConstraint("EndTime > StartTime", name="EndAfterStart"),
+    )
+    # ユーザー指定の列名で勤務行を識別し、作業者へ関連付ける。
+    WorkerCalendarsID = Column(Integer, primary_key=True, autoincrement=True)
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
+    # 日曜0～土曜6の曜日と、日本時間の勤務開始・終了時刻。
+    DayOfWeek = Column(SmallInteger, nullable=False)
+    StartTime = Column(Time, nullable=False)
+    EndTime = Column(Time, nullable=False)
+    # 午前・午後などの勤務名。
+    WorkName = Column(String(50), nullable=True)
+
+
+class WorkerCalendarException(AuditMixin, Base):
+    """作業者の不在日時。勤務行を経由して対象作業者を特定する。"""
+
+    __tablename__ = "M_WorkerCalendarExceptions"
+    # 日付を含め、終了が開始より後になる不在だけを保存する。
+    __table_args__ = (CheckConstraint("EndAt > StartAt", name="EndAfterStart"),)
+    # 不在行の識別番号と、対象作業者に属する勤務行。
+    ExceptionID = Column(Integer, primary_key=True, autoincrement=True)
+    WorkerCalendarsID = Column(
+        Integer, ForeignKey("M_WorkerCalendars.WorkerCalendarsID", ondelete="CASCADE"), nullable=False
+    )
+    # 不在期間は日本時間の日時として保持し、複数日にまたがる不在も許可する。
+    StartAt = Column(DateTime, nullable=False)
+    EndAt = Column(DateTime, nullable=False)
+    # ユーザー指定の単数形Remarkで不在理由を記録する。
+    Remark = Column(String(500), nullable=True)

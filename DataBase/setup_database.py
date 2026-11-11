@@ -24,6 +24,7 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 新規テーブルには、同じ拠点内で計画名を重複させない現在のモデル定義を適用する。
 デモ拠点が登録済みの場合は、以前の内容も含めて既存データを保持する。
 勤務時間はM_Calendarsへ直接登録し、組織・カレンダーパターンは作成しない。
+作業者3人・全工程リンク54件・勤務36件・不在1件も作成する。作業者の画面・API・計算連携はまだ行わない。
 """
 import argparse
 
@@ -94,7 +95,9 @@ def setup_database() -> None:
         if demo_id is None:
             # 初期データの登録件数を受け取り、下書き計画も作成されたことを通知する。
             result = seed_demo(db)
-            print(f"パン工場の仮データを登録しました（オーダー{result['orders']}件・下書き計画{result['plans']}件）。")
+            print(f"パン工場の仮データを登録しました（オーダー{result['orders']}件・下書き計画{result['plans']}件・"
+                  f"作業者{result['workers']}人・工程リンク{result['workerProcessLinks']}件・"
+                  f"作業者勤務{result['workerCalendars']}件・不在{result['workerCalendarExceptions']}件）。")
         else:
             # 登録済みの内容を保持したことを明示し、新しいデモへ更新されたとの誤解を避ける。
             print("デモデータは登録済みのため、追加・変更を行いませんでした。")

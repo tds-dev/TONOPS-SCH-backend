@@ -825,3 +825,11 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 * 拠点・プラン計算設定など、今回の対象外マスタの画面対応
 * 認証（Firebase）と権限
 * Docker Compose による配備
+
+
+## 作業者関連マスタの追加（2026-11-11）
+
+M_Workers・M_WorkerProcessesLink・M_WorkerCalendars・M_WorkerCalendarExceptionsを追加する。
+製品別工程の担当可否・日上限・個人の週次勤務と不在を保存する。全工程分のリンクは既存の工程追加時に生成する。
+画面・作業者CRUD API・作業者を考慮した計画計算はまだ追加しない。
+列構成・初期データ・既存機能への影響は[作業者マスタ追加仕様](WORKER_MASTERS.md)を参照。

@@ -18,6 +18,7 @@ with patch("app.core.config.get_settings", return_value=Settings(
 )):
     from app.core.db import Base, get_db, make_engine
     from app.models.masters import Calendar, CalendarException, Location, Product, ProductProcess, ProductProcessResource, CalculationSetting, Resource, ResourceGroup
+    from app.models.masters import Worker, WorkerProcessLink
     from app.models.transactions import WorkActual, Order, Plan, PlanAssignment, Task
     from app.routers.orders import routers
     from app.routers.masters import routers as master_routers
@@ -259,6 +260,48 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.assertEqual(self.call("POST", "/product-processes", {**body, "productId": 2, "sequenceNumber": 1})[0], 201)
         self.assertEqual(self.call("PATCH", f'/product-processes/{process["productProcessId"]}', {"maxLagAfterMin": 4})[0], 422)
         self.assertEqual(self.call("PATCH", f'/product-processes/{process["productProcessId"]}', {"sequenceNumber": 0})[0], 422)
+
+    # 工程の追加だけで全有効作業者分を作り、更新・再生成で既存の担当値を保持する。
+    def test_new_process_adds_worker_links_and_preserves_existing_settings(self):
+        # 同じ拠点の2人、別拠点の1人、削除済み1人を用意する。
+        self.db.add_all([
+            Worker(WorkerID=1, LocationID=1, WorkerName="作業者A"),
+            Worker(WorkerID=2, LocationID=1, WorkerName="作業者B"),
+            Worker(WorkerID=3, LocationID=2, WorkerName="別拠点"),
+            Worker(WorkerID=4, LocationID=1, WorkerName="削除済み", DeleteFlag=True),
+        ])
+        self.db.commit()
+        # 既存の製品工程APIを使い、追加した工程だけに担当リンクが生成されることを確認する。
+        status, process = self.call("POST", "/product-processes", {
+            "productId": 1, "sequenceNumber": 2, "processName": "担当確認工程",
+        })
+        self.assertEqual(status, 201, process)
+        process_id = process["productProcessId"]
+        links = self.db.scalars(select(WorkerProcessLink).where(
+            WorkerProcessLink.ProductProcessID == process_id,
+        ).order_by(WorkerProcessLink.WorkerID)).all()
+        self.assertEqual([link.WorkerID for link in links], [1, 2])
+        self.assertTrue(all(not link.CanExecute and link.MaxDailyQuantity is None for link in links))
+        # 一度設定した担当可否と日上限は、同じ工程の更新でも変更しない。
+        links[0].CanExecute = True
+        links[0].MaxDailyQuantity = 25
+        self.db.commit()
+        self.assertEqual(self.call("PATCH", f"/product-processes/{process_id}", {"processName": "更新後"})[0], 200)
+        self.db.refresh(links[0])
+        self.assertTrue(links[0].CanExecute)
+        self.assertEqual(links[0].MaxDailyQuantity, 25)
+        # 不足リンクの作成を再実行しても、同じ組合せを重複登録しない。
+        from app.services.worker_process_service import add_worker_process_links
+        self.assertEqual(add_worker_process_links(self.db, self.db.get(ProductProcess, process_id)), [])
+        self.assertEqual(len(self.db.scalars(select(WorkerProcessLink).where(
+            WorkerProcessLink.ProductProcessID == process_id,
+        )).all()), 2)
+        # 未使用工程の削除では関連リンクも削除し、作業者本人は残す。
+        self.assertEqual(self.call("DELETE", f"/product-processes/{process_id}")[0], 204)
+        self.assertIsNone(self.db.scalar(select(WorkerProcessLink.WorkerProcessLinkID).where(
+            WorkerProcessLink.ProductProcessID == process_id,
+        )))
+        self.assertIsNotNone(self.db.get(Worker, 1))
 
     # 設備候補の所属拠点、片方指定、時間の範囲をサーバーでも確認する。
     def test_process_resource_api_checks_scope_and_duration(self):

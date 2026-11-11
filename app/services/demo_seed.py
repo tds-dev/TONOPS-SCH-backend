@@ -1,4 +1,4 @@
-"""パン製造を模したデモデータ: 製品・製品工程・店舗向けオーダー・下書き計画。
+"""パン製造を模したデモデータ: 製品・製品工程・作業者と勤務・オーダー・下書き計画。
 
 日付は「翌日 06:00（拠点時刻）」を基準にするため、デモは常に直近の将来を計画する。
 `DataBase/setup_database.py` から初期データ登録に使う。
@@ -15,6 +15,7 @@ from app.models import masters as m
 from app.models import transactions as t
 from app.services.order_service import generate_tasks
 from app.services.plan_service import create_plan
+from app.services.worker_process_service import add_worker_process_links
 
 # パン工場の現地時刻と、初期データの登録者。
 TZ = get_settings().app_timezone
@@ -134,8 +135,51 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         order_families[name] = family
     db.flush()
 
-    # オーダーは店舗からの製造依頼。製品・個数・納期を指定し、製品工程から個別のタスクを作る。
+    # 作業者と不在の基準日。既存オーダーと同じ翌日06:00を使用する。
     start = demo_start(now)
+    # デモ作業者ごとの担当工程番号と、その工程での1日生産上限。
+    worker_profiles = [("作業者A（こねる担当）", 1, 600),
+                       ("作業者B（焼く担当）", 2, 600),
+                       ("作業者C（包装担当）", 3, 1200)]
+    # 作業者本人と、初期の担当値を付けるためのID別設定。
+    workers = []
+    worker_settings = {}
+    for name, sequence, daily_limit in worker_profiles:
+        # 指定5列の作業者モデル。登録者・日時の列は持たせない。
+        worker = m.Worker(LocationID=location.LocationID, WorkerName=name, Remarks="パン製造デモの作業者")
+        db.add(worker)
+        db.flush()
+        workers.append(worker)
+        worker_settings[worker.WorkerID] = (sequence, daily_limit)
+    # 全作業者×全製品工程のリンク件数。担当不可の行も省略せず登録する。
+    worker_link_count = 0
+    for product in products.values():
+        for process in product.processes:
+            for link in add_worker_process_links(db, process):
+                # 工程番号が担当と一致する場合だけ、能力上限を付けて担当可能にする。
+                sequence, daily_limit = worker_settings[link.WorkerID]
+                link.CanExecute = process.SequenceNumber == sequence
+                link.MaxDailyQuantity = daily_limit if link.CanExecute else None
+                link.Remarks = None if link.CanExecute else "担当外（デモ）"
+                worker_link_count += 1
+    # 各作業者の月～土の午前・午後勤務。拠点の勤務とは独立した行として保持する。
+    worker_calendars = []
+    for worker in workers:
+        for dow in range(1, 7):
+            for start_hour, end_hour, work_name in [(6, 12, "午前"), (13, 18, "午後")]:
+                worker_calendars.append(m.WorkerCalendar(
+                    WorkerID=worker.WorkerID, DayOfWeek=dow, StartTime=time(start_hour),
+                    EndTime=time(end_hour), WorkName=work_name, CreatedBy=USER,
+                ))
+    db.add_all(worker_calendars)
+    db.flush()
+    # 作業者Aの不在1件。今回は保存の整備までで、計画計算への適用は行わない。
+    db.add(m.WorkerCalendarException(
+        WorkerCalendarsID=worker_calendars[0].WorkerCalendarsID,
+        StartAt=start.replace(hour=10), EndAt=start.replace(hour=11), Remark="研修（デモ）", CreatedBy=USER,
+    ))
+
+    # オーダーは店舗からの製造依頼。製品・個数・納期を指定し、製品工程から個別のタスクを作る。
     orders = []
     for no, name, qty, due_h, prio, customer in [
         ("ORD-1001", "食パン", 200, 8, 10, "駅前店"),
@@ -169,4 +213,6 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             remarks="駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。",
         )
     return {"locationId": location.LocationID,
-            "orders": len(orders), "plans": len(DEMO_PLAN_NAMES)}
+            "orders": len(orders), "plans": len(DEMO_PLAN_NAMES),
+            "workers": len(workers), "workerProcessLinks": worker_link_count,
+            "workerCalendars": len(worker_calendars), "workerCalendarExceptions": 1}

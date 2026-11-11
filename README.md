@@ -6,6 +6,8 @@
 
 # TONOPS-SCH-backend
 
+> 作業者4マスタを追加し、全27テーブル・313カラムへ更新。作業者3人・全工程リンク54件・勤務36件・不在1件を登録する。既存の工程新規追加時にも担当不可のリンクを生成する。作業者画面・CRUD API・計画計算への接続は今回追加しない。[仕様と作成手順](docs/WORKER_MASTERS.md)を参照。
+
 > 2026-11-11：`M_Organizations`と関連`OrganizationID`、`M_CalendarPatterns`を削除。`M_Calendars`に曜日・勤務開始終了・勤務名を持たせ、拠点の`DefaultCalendarID`を`CalendarID`へ変更。カレンダー例外は`StartTime`・`EndTime`へ改名し、`IsWorking`を削除。共通監査列`UpdatedAt`・`UpdatedBy`は継続する。[変更内容とDB作成手順](docs/DB_SCHEMA_UPDATE_20261111.md)を参照。
 
 > 2026-11-10：切替時間・切替ルール・計算設定・作業実績のテーブルと関連列を改名。各コード列・拠点TimeZone・計画番号・違反コードを廃止し、オーダーをWBSNumber・DeadLine・ShippingDate、計画の備考をRemarksへ変更。追加で設備の時間単価・属性、親オーダーID、親タスクID・節目指定・予定工数を廃止。作り直した空のDBを対象とする。[変更内容とDB作成手順](docs/DB_SCHEMA_UPDATE_20261110.md)を参照。

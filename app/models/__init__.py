@@ -13,6 +13,10 @@ from app.models.masters import (  # noqa: F401
     ProductProcessResource,
     Rule,
     Location,
+    Worker,
+    WorkerProcessLink,
+    WorkerCalendar,
+    WorkerCalendarException,
 )
 from app.models.transactions import (  # noqa: F401
     WorkActual,

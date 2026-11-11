@@ -488,3 +488,68 @@ GO
 -- 代表勤務行は同じ拠点の行だけを参照できる。循環参照のため両テーブル作成後に追加する。
 ALTER TABLE [M_Locations] ADD CONSTRAINT [FK_M_Locations_CalendarID_M_Calendars] FOREIGN KEY([CalendarID], [LocationID]) REFERENCES [M_Calendars] ([CalendarID], [LocationID]);
 GO
+
+-- 作業者本人。指定された5列だけを持ち、画面・CRUD APIはまだ追加しない。
+CREATE TABLE [M_Workers] (
+    [WorkerID] INTEGER NOT NULL IDENTITY,
+    [LocationID] INTEGER NOT NULL,
+    [WorkerName] NVARCHAR(100) NOT NULL,
+    [Remarks] NVARCHAR(500) NULL,
+    [DeleteFlag] BIT NOT NULL,
+    CONSTRAINT [PK_M_Workers] PRIMARY KEY ([WorkerID]),
+    CONSTRAINT [FK_M_Workers_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
+);
+GO
+
+-- 同じ拠点の全製品工程との担当関係。新規組合せは担当不可で作成する。
+CREATE TABLE [M_WorkerProcessesLink] (
+    [WorkerProcessLinkID] INTEGER NOT NULL IDENTITY,
+    [WorkerID] INTEGER NOT NULL,
+    [ProductProcessID] INTEGER NOT NULL,
+    [CanExecute] BIT NOT NULL,
+    [MaxDailyQuantity] NUMERIC(18, 3) NULL,
+    [Remarks] NVARCHAR(500) NULL,
+    CONSTRAINT [PK_M_WorkerProcessesLink] PRIMARY KEY ([WorkerProcessLinkID]),
+    CONSTRAINT [UQ_M_WorkerProcessesLink_WorkerID_ProductProcessID] UNIQUE ([WorkerID], [ProductProcessID]),
+    CONSTRAINT [CK_M_WorkerProcessesLink_MaxDailyQuantity] CHECK (MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0),
+    CONSTRAINT [FK_M_WorkerProcessesLink_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID]),
+    CONSTRAINT [FK_M_WorkerProcessesLink_ProductProcessID_M_ProductProcesses] FOREIGN KEY([ProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID]) ON DELETE CASCADE
+);
+GO
+
+-- 作業者の週次勤務。曜日は日曜0～土曜6、同日内の勤務だけを登録する。
+CREATE TABLE [M_WorkerCalendars] (
+    [WorkerCalendarsID] INTEGER NOT NULL IDENTITY,
+    [WorkerID] INTEGER NOT NULL,
+    [DayOfWeek] SMALLINT NOT NULL,
+    [StartTime] TIME NOT NULL,
+    [EndTime] TIME NOT NULL,
+    [WorkName] NVARCHAR(50) NULL,
+    [CreatedAt] DATETIME2(7) NOT NULL,
+    [CreatedBy] NVARCHAR(254) NULL,
+    [UpdatedAt] DATETIME2(7) NULL,
+    [UpdatedBy] NVARCHAR(254) NULL,
+    [DeleteFlag] BIT NOT NULL,
+    CONSTRAINT [PK_M_WorkerCalendars] PRIMARY KEY ([WorkerCalendarsID]),
+    CONSTRAINT [CK_M_WorkerCalendars_DayOfWeek] CHECK (DayOfWeek BETWEEN 0 AND 6),
+    CONSTRAINT [CK_M_WorkerCalendars_EndAfterStart] CHECK (EndTime > StartTime),
+    CONSTRAINT [FK_M_WorkerCalendars_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
+);
+GO
+
+-- 作業者の不在日時。StartAt・EndAtは日本時間の日時、Remarkは不在理由。
+CREATE TABLE [M_WorkerCalendarExceptions] (
+    [ExceptionID] INTEGER NOT NULL IDENTITY,
+    [WorkerCalendarsID] INTEGER NOT NULL,
+    [StartAt] DATETIME2(7) NOT NULL,
+    [EndAt] DATETIME2(7) NOT NULL,
+    [Remark] NVARCHAR(500) NULL,
+    [CreatedAt] DATETIME2(7) NOT NULL,
+    [CreatedBy] NVARCHAR(254) NULL,
+    [UpdatedAt] DATETIME2(7) NULL,
+    [UpdatedBy] NVARCHAR(254) NULL,
+    CONSTRAINT [PK_M_WorkerCalendarExceptions] PRIMARY KEY ([ExceptionID]),
+    CONSTRAINT [CK_M_WorkerCalendarExceptions_EndAfterStart] CHECK (EndAt > StartAt),
+    CONSTRAINT [FK_M_WorkerCalendarExceptions_WorkerCalendarsID_M_WorkerCalendars] FOREIGN KEY([WorkerCalendarsID]) REFERENCES [M_WorkerCalendars] ([WorkerCalendarsID]) ON DELETE CASCADE
+);
+GO
