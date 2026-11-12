@@ -19,12 +19,17 @@ DataBase配下のDB・テーブル作成とデモデータ登録を行う初期�
 query配下のSQLはSSMS用として保持し、この処理ではモデルから直接DBを操作する。
 拠点はLocationモデルを使い、M_LocationsとLocationID等の定義で作成・登録する。
 計算実行の保存先は、SolverRunモデルのT_SolverRunResultとして作成する。
+タスクの設備候補・前後関係の複製テーブルは作らず、製品工程から利用時に組み立てる。
+既存DBの旧2テーブルを削除する場合はquery/remove_task_condition_tables_sqlserver.sqlを別途適用する。
 デモはパン6製品、製品工程18件、実行候補18件、店舗向けオーダー7件、タスク21件、下書き計画2件を登録する。
 計画名は「各店舗向けパン製造・通常計画」「各店舗向けパン製造・見直し計画」とする。
 新規テーブルには、同じ拠点内で計画名を重複させない現在のモデル定義を適用する。
 デモ拠点が登録済みの場合は、以前の内容も含めて既存データを保持する。
 勤務時間はM_Calendarsへ直接登録し、組織・カレンダーパターンは作成しない。
 作業者3人・全工程リンク54件・勤務36件・不在1件も作成する。作業者の画面・API・計算連携はまだ行わない。
+2026-11-12: 全25テーブル・283列。担当工程はM_WorkerSkillMap・WorkerSkillMapIDで識別する。
+設備は所属拠点の勤務を共有し、計画・停止例外・計算実行の開始終了列をStartAt・EndAtへ統一する。
+計算時間上限は持たず、作業中の実績はEndAt・StatusともNULL、終了時はDONEまたはSUSPENDEDとする。
 """
 import argparse
 
@@ -85,7 +90,7 @@ def connection_help(url: URL, exc: DBAPIError) -> str:
 
 
 def setup_database() -> None:
-    """新しい3階層のDB・テーブル作成と、未登録デモデータの追加を順に行う。"""
+    """製品マスタからタスク条件を計算する構成でDBを作成し、未登録のデモを追加する。"""
     ensure_database()
     # 現在のモデルで未作成テーブルを追加する。既存DBの列削除・名称変更は行わないため、構成変更後は新規DBを使う。
     Base.metadata.create_all(engine)
@@ -96,7 +101,7 @@ def setup_database() -> None:
             # 初期データの登録件数を受け取り、下書き計画も作成されたことを通知する。
             result = seed_demo(db)
             print(f"パン工場の仮データを登録しました（オーダー{result['orders']}件・下書き計画{result['plans']}件・"
-                  f"作業者{result['workers']}人・工程リンク{result['workerProcessLinks']}件・"
+                  f"作業者{result['workers']}人・工程リンク{result['workerSkillMaps']}件・"
                   f"作業者勤務{result['workerCalendars']}件・不在{result['workerCalendarExceptions']}件）。")
         else:
             # 登録済みの内容を保持したことを明示し、新しいデモへ更新されたとの誤解を避ける。

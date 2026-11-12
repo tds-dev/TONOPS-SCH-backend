@@ -36,7 +36,7 @@ def claim_next(db) -> int | None:
     claimed = db.execute(
         update(SolverRun)
         .where(SolverRun.RunID == run_id, SolverRun.Status == "QUEUED")
-        .values(Status="RUNNING", StartedAt=jst_now())
+        .values(Status="RUNNING", StartAt=jst_now())
     )
     db.commit()
     return run_id if claimed.rowcount == 1 else None

@@ -104,7 +104,6 @@ class Problem:
     changeovers: list[PChangeover] = field(default_factory=list)
     rules: list[PRule] = field(default_factory=list)
     weights: dict[str, int] = field(default_factory=dict)
-    time_limit_sec: int = 60
 
     def to_dt(self, minute: int) -> datetime:
         return self.horizon_start + timedelta(minutes=minute)

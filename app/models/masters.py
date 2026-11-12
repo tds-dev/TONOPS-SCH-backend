@@ -19,8 +19,6 @@ from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
 from app.models.types import DateTime, String
 
-# リソース種別の許可値。名称のみをTYPEへ統一し、保存値は維持する。
-RESOURCE_TYPE = ["MACHINE", "PERSON", "TEAM", "ROOM", "OTHER"]
 # 属性定義の区分。製品の属性欄は廃止済みで、PRODUCTは既存の定義値として保持する。
 ENTITY_TYPES = ["PRODUCT", "RESOURCE", "ORDER", "TASK"]
 DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
@@ -75,15 +73,15 @@ class CalendarException(AuditMixin, Base):
 
     __tablename__ = "M_CalendarExceptions"
     # 終了が開始より後の停止時間のみ登録する。
-    __table_args__ = (CheckConstraint("EndTime > StartTime", name="EndAfterStart"),)
+    __table_args__ = (CheckConstraint("EndAt > StartAt", name="EndAfterStart"),)
     # 例外の識別番号と、その拠点の代表勤務行。
     ExceptionID = Column(Integer, primary_key=True, autoincrement=True)
     CalendarID = Column(
         Integer, ForeignKey("M_Calendars.CalendarID", ondelete="CASCADE"), nullable=False
     )
     # 時刻だけでなく日付も持つ日本時間の日時。API入出力では時差を変換する。
-    StartTime = Column(DateTime, nullable=False)
-    EndTime = Column(DateTime, nullable=False)
+    StartAt = Column(DateTime, nullable=False)
+    EndAt = Column(DateTime, nullable=False)
     # 休日・設備点検などの登録理由。
     Reason = Column(String(100), nullable=True)
 
@@ -102,23 +100,20 @@ class ResourceGroup(AuditMixin, SoftDeleteMixin, Base):
 
 
 class Resource(AuditMixin, SoftDeleteMixin, Base):
-    """リソースマスタ。設備名・能力・稼働カレンダーを管理する。"""
+    """リソースマスタ。設備名・能力・所属グループを管理し、拠点の勤務を使う。"""
 
     __tablename__ = "M_Resources"
-    __table_args__ = (
-        CheckConstraint(in_check("ResourceType", RESOURCE_TYPE), name="ResourceType"),
-    )
+    # 設備を識別する番号。稼働カレンダーはLocationIDから所属拠点を参照する。
     ResourceID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     # 設備の表示名。関連付けにはResourceIDを使う。
     ResourceName = Column(String(100), nullable=False)
-    # リソースの種別を、APIとDBで共通のType名として扱う。
-    ResourceType = Column(String(20), nullable=False, default="MACHINE")
+    # 同時処理できる数量と、日単位の能力上限。
     Capacity = Column(Numeric(9, 2), nullable=False, default=1)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
-    CalendarID = Column(Integer, ForeignKey("M_Calendars.CalendarID"), nullable=True)
+    # 画面・ボードでの表示順。
     SortOrder = Column(Integer, nullable=False, default=0)
 
 
@@ -198,7 +193,7 @@ class ProductSwitchRule(AuditMixin, Base):
 
 
 class CalculationSetting(AuditMixin, Base):
-    """計算設定マスタ。計算で優先する条件の重みと制限時間を保持する。"""
+    """計算設定マスタ。計算で優先する条件の重みと固定期間を保持する。"""
 
     __tablename__ = "M_CalculationSettings"
     __table_args__ = (CheckConstraint(in_check("TimeUnit", TIME_UNITS), name="TimeUnit"),)
@@ -209,8 +204,8 @@ class CalculationSetting(AuditMixin, Base):
     # 計算設定の表示名と、計算の時間単位。
     CalculationSettingName = Column(String(100), nullable=False)
     TimeUnit = Column(String(10), nullable=False, default="MINUTE")
+    # 納期・段取りなどの評価の重み。計算時間の上限は設けない。
     ObjectiveWeightsJSON = Column(JSON, nullable=False, default=dict)
-    TimeLimitSec = Column(Integer, nullable=False, default=60)
     FrozenWindowHours = Column(Integer, nullable=False, default=0)
     IsDefault = Column(Boolean, nullable=False, default=False)
 
@@ -296,17 +291,17 @@ class Worker(SoftDeleteMixin, Base):
     Remarks = Column(String(500), nullable=True)
 
 
-class WorkerProcessLink(Base):
+class WorkerSkillMap(Base):
     """作業者と製品工程の担当可否・工程別日上限。全工程分の組合せを保存する。"""
 
-    __tablename__ = "M_WorkerProcessesLink"
+    __tablename__ = "M_WorkerSkillMap"
     # 同じ担当関係を重複させず、設定する日上限は正の数量に限定する。
     __table_args__ = (
         UniqueConstraint("WorkerID", "ProductProcessID"),
         CheckConstraint("MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0", name="MaxDailyQuantity"),
     )
     # 担当関係の識別番号と、作業者・製品工程への参照。
-    WorkerProcessLinkID = Column(Integer, primary_key=True, autoincrement=True)
+    WorkerSkillMapID = Column(Integer, primary_key=True, autoincrement=True)
     WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
     ProductProcessID = Column(
         Integer, ForeignKey("M_ProductProcesses.ProductProcessID", ondelete="CASCADE"), nullable=False

@@ -66,7 +66,7 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
         raise HTTPException(422, "優先度は1～2147483647の整数で入力してください。")
     # 納期が開始可能日時より前になっていないか確認する。出荷日時は任意の情報として保持する。
     if value("ReleaseAt") is not None and value("DeadLine") is not None and value("ReleaseAt") > value("DeadLine"):
-        raise HTTPException(422, "納期は開始可能日時以降にしてください。")
+        raise HTTPException(422, "納期は製造開始可能日時以降に設定してください。")
     if value("AttributesJSON") is not None and not isinstance(value("AttributesJSON"), dict):
         raise HTTPException(422, "属性は項目名と値の組合せで入力してください。")
 

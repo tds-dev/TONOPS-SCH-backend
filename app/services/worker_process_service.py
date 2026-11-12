@@ -3,11 +3,11 @@ from fastapi import HTTPException
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Product, ProductProcess, Worker, WorkerProcessLink
+from app.models.masters import Product, ProductProcess, Worker, WorkerSkillMap
 
 
 # 既存の担当可否・日上限を保持し、足りない組合せだけを担当不可で追加する。
-def add_worker_process_links(db: Session, process: ProductProcess) -> list[WorkerProcessLink]:
+def add_worker_skill_maps(db: Session, process: ProductProcess) -> list[WorkerSkillMap]:
     # 自動採番された工程IDを、リンクの参照先として確定する。
     db.flush()
     # 工程の製品から、作業者を抽出する所属拠点を取得する。
@@ -16,7 +16,7 @@ def add_worker_process_links(db: Session, process: ProductProcess) -> list[Worke
         raise HTTPException(422, "作業者工程リンクには有効な製品の工程を指定してください。")
     # 登録済み作業者を把握し、再実行しても担当設定を上書きしない。
     existing_worker_ids = set(db.scalars(
-        select(WorkerProcessLink.WorkerID).where(WorkerProcessLink.ProductProcessID == process.ProductProcessID)
+        select(WorkerSkillMap.WorkerID).where(WorkerSkillMap.ProductProcessID == process.ProductProcessID)
     ))
     # 同じ拠点で削除されていない作業者だけを、新しい工程の候補として登録する。
     workers = db.scalars(
@@ -24,7 +24,7 @@ def add_worker_process_links(db: Session, process: ProductProcess) -> list[Worke
         .order_by(Worker.WorkerID)
     )
     # 今回追加したリンク。呼出し元の仮データ登録では、この戻り値へ担当値を設定する。
-    added = [WorkerProcessLink(WorkerID=worker.WorkerID, ProductProcessID=process.ProductProcessID,
+    added = [WorkerSkillMap(WorkerID=worker.WorkerID, ProductProcessID=process.ProductProcessID,
                                CanExecute=False, MaxDailyQuantity=None)
              for worker in workers if worker.WorkerID not in existing_worker_ids]
     db.add_all(added)

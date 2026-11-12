@@ -104,14 +104,14 @@ def execute_run(db: Session, run_id: int, session_factory: sessionmaker | None =
     factory = session_factory or sessionmaker(bind=db.get_bind(), expire_on_commit=False)
     run = db.get(SolverRun, run_id)
     plan = db.get(Plan, run.PlanID)
-    run.Status, run.StartedAt = "RUNNING", run.StartedAt or jst_now()
+    run.Status, run.StartAt = "RUNNING", run.StartAt or jst_now()
     db.commit()
     try:
         problem = build_problem(db, plan, run.Scope)
         run.TaskCount = len(problem.tasks)
         db.commit()
         result = solve_problem(
-            problem, run.TimeLimitSec,
+            problem,
             on_progress=_progress_writer(factory, run_id),
             should_stop=_cancel_checker(factory, run_id),
         )
@@ -134,6 +134,6 @@ def execute_run(db: Session, run_id: int, session_factory: sessionmaker | None =
         run = db.get(SolverRun, run_id)
         run.Status = "FAILED"
         run.ErrorMessage = traceback.format_exc()[-4000:]
-    run.FinishedAt = jst_now()
+    run.EndAt = jst_now()
     db.commit()
     return run

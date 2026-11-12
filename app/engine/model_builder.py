@@ -15,10 +15,12 @@
 """
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from threading import Event, Thread
 from typing import Any
 
 from ortools.sat.python import cp_model
 
+from app.engine.cancellation import watch_cancellation
 from app.engine.problem import PChangeover, Problem, PTask
 from app.engine.result import SAssignment
 from app.engine.rules import get_plugin
@@ -269,11 +271,14 @@ class SolveResult:
     notes: list[str]
 
 
+# 新しい解が見つかったときだけ、件数・評価値・経過時間を通知する。
 class _Progress(cp_model.CpSolverSolutionCallback):
-    def __init__(self, on_progress: Callable[[dict], None] | None, should_stop: Callable[[], bool] | None):
+    # 通知先と、これまでに見つかった解の件数を保持する。
+    def __init__(self, on_progress: Callable[[dict], None] | None):
         super().__init__()
-        self.on_progress, self.should_stop, self.count = on_progress, should_stop, 0
+        self.on_progress, self.count = on_progress, 0
 
+    # 解の更新内容を保存する。中止の確認は別の監視処理で行う。
     def on_solution_callback(self) -> None:
         self.count += 1
         if self.on_progress:
@@ -286,22 +291,35 @@ class _Progress(cp_model.CpSolverSolutionCallback):
                 })
             except Exception:  # 進捗報告の失敗で計算を止めてはならない
                 pass
-        if self.should_stop and self.should_stop():
-            self.StopSearch()
 
 
+# 時間上限を設定せず求解する。中止時は、その時点までの最良解を返す。
 def solve_problem(
     problem: Problem,
-    time_limit_sec: float | None = None,
     workers: int = 8,
     on_progress: Callable[[dict], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> SolveResult:
+    # 設備・工程順・評価条件を計算モデルへ変換する。
     ctx = build_model(problem)
+    # 計算器。時間上限を設定せず、最適性の判定または中止まで探索する。
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = float(time_limit_sec or problem.time_limit_sec)
     solver.parameters.num_workers = workers
-    status = solver.Solve(ctx.model, _Progress(on_progress, should_stop))
+    # 中止済みの依頼を計算開始前に受け取った場合は探索しない。
+    if should_stop and should_stop():
+        return SolveResult("UNKNOWN", None, None, 0.0, [], ctx.notes)
+    # 計算完了を監視側へ伝える合図と、解の更新に依存しない中止監視。
+    finished = Event()
+    watcher = Thread(target=watch_cancellation, args=(solver.StopSearch, finished, should_stop), daemon=True) if should_stop else None
+    if watcher:
+        watcher.start()
+    try:
+        # 通常の進捗通知を維持し、中止要求は監視側からStopSearchで反映する。
+        status = solver.Solve(ctx.model, _Progress(on_progress))
+    finally:
+        finished.set()
+        if watcher:
+            watcher.join()
     name = solver.StatusName(status)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return SolveResult(name, None, None, solver.WallTime(), [], ctx.notes)

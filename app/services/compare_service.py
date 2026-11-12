@@ -70,7 +70,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     # 比較対象の計画名・状態・期間を表示用にまとめる。
     def summary(p: Plan):
         return {"planId": p.PlanID, "planName": p.PlanName, "status": p.Status,
-                "horizonStart": _hhmm(p.HorizonStart, tz), "horizonEnd": _hhmm(p.HorizonEnd, tz)}
+                "startAt": _hhmm(p.StartAt, tz), "endAt": _hhmm(p.EndAt, tz)}
 
     return {
         "a": summary(plan_a),

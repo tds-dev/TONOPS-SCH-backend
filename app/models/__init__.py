@@ -14,7 +14,7 @@ from app.models.masters import (  # noqa: F401
     Rule,
     Location,
     Worker,
-    WorkerProcessLink,
+    WorkerSkillMap,
     WorkerCalendar,
     WorkerCalendarException,
 )
@@ -27,6 +27,4 @@ from app.models.transactions import (  # noqa: F401
     PlanViolation,
     SolverRun,
     Task,
-    TaskDependency,
-    TaskResourceOption,
 )

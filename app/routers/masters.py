@@ -17,7 +17,7 @@ from app.services.calendar_service import (
     save_calendar,
     validate_calendar_exception_write,
     validate_location_write,
-    validate_resource_calendar_write,
+    validate_resource_location_write,
     working_time,
 )
 from app.services.product_process_service import delete_product_process, save_product_process
@@ -30,10 +30,10 @@ routers = [
     crud_router(m.Location, "/locations", "Locations", validate_write=validate_location_write),
     crud_router(m.Calendar, "/calendars", "Calendars", order_by="DayOfWeek",
                 write_handler=save_calendar, delete_handler=delete_calendar),
-    crud_router(m.CalendarException, "/calendar-exceptions", "Calendars", order_by="StartTime",
+    crud_router(m.CalendarException, "/calendar-exceptions", "Calendars", order_by="StartAt",
                 validate_write=validate_calendar_exception_write, filter_list=filter_calendar_exceptions),
     crud_router(m.ResourceGroup, "/resource-groups", "Resources", order_by="SortOrder"),
-    crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder", validate_write=validate_resource_calendar_write),
+    crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder", validate_write=validate_resource_location_write),
     crud_router(m.AttributeDefinition, "/attribute-definitions", "Configuration"),
     crud_router(m.Rule, "/rules", "Configuration"),
     crud_router(m.ProductSwitchTime, "/product-switch-times", "Configuration"),

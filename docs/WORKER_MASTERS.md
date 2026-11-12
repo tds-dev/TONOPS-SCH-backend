@@ -1,7 +1,7 @@
 <!-- 作業者4マスタの列構成、全工程リンク生成、仮データ、実装範囲を定義する資料。 -->
-# 作業者マスタの追加（2026-11-11）
+# 作業者マスタの追加（2026-11-11、名称更新2026-11-12）
 
-作業者本人・担当工程・週次勤務・不在日時の4テーブルを追加する。全27テーブル・313カラム。
+作業者本人・担当工程・週次勤務・不在日時の4テーブルを追加する。全25テーブル・283カラム。
 追加部分はJSONを使わず、数値・文字列・時刻・日時の通常列で保存する。
 今回のプログラム変更はモデル登録・Python仮データ・既存の工程追加に連動した担当リンク生成までとする。
 作業者画面・4表のCRUD API・作業者制約の計画計算への反映は今回の対象に含めない。既存の設備計算は継続する。
@@ -11,11 +11,11 @@
 | テーブル | 列数 | 保存する列 |
 |---|---:|---|
 | M_Workers | 5 | WorkerID、LocationID、WorkerName、Remarks、DeleteFlag |
-| M_WorkerProcessesLink | 6 | WorkerProcessLinkID、WorkerID、ProductProcessID、CanExecute、MaxDailyQuantity、Remarks |
+| M_WorkerSkillMap | 6 | WorkerSkillMapID、WorkerID、ProductProcessID、CanExecute、MaxDailyQuantity、Remarks |
 | M_WorkerCalendars | 11 | WorkerCalendarsID、WorkerID、DayOfWeek、StartTime、EndTime、WorkName、CreatedAt、CreatedBy、UpdatedAt、UpdatedBy、DeleteFlag |
 | M_WorkerCalendarExceptions | 9 | ExceptionID、WorkerCalendarsID、StartAt、EndAt、Remark、CreatedAt、CreatedBy、UpdatedAt、UpdatedBy |
 
-テーブル名M_WorkerProcessesLink、列名WorkerCalendarsID、例外の単数形Remarkはユーザー指定を維持する。
+テーブル名M_WorkerSkillMap、列名WorkerCalendarsID、例外の単数形Remarkはユーザー指定を維持する。
 WokerIDは、参照先と同じWorkerIDへ表記を修正する。
 WorkerID等の主キーはINT・自動採番。WorkerNameはNVARCHAR(100)、WorkNameはNVARCHAR(50)、Remarks・RemarkはNVARCHAR(500)。
 作業者本人と工程リンクには指定されていない監査列を追加しない。監査4列は勤務・不在だけに持たせる。
@@ -37,7 +37,7 @@ DayOfWeekは既存と同じ日曜0～土曜6。勤務のStartTime・EndTimeはTI
 
 ## 全工程分のリンク生成
 
-画面で製品工程を新規追加した場合、既存の工程保存処理からadd_worker_process_linksを呼ぶ。
+画面で製品工程を新規追加した場合、既存の工程保存処理からadd_worker_skill_mapsを呼ぶ。
 その工程と同じ拠点に属する未削除作業者を抽出し、まだ存在しない組合せだけをCanExecute=0、MaxDailyQuantity=NULLで追加する。
 既存の担当可否・数量上限・備考を上書きしない。工程の名称変更・並べ替えではリンクを作り直さない。
 処理は工程の保存と同じトランザクションに含め、途中で失敗した場合は工程とリンクの両方を取り消す。

@@ -33,8 +33,8 @@ router = APIRouter(tags=["Plans"])
 class PlanCreateBody(ApiModel):
     # 取得・作成の対象となる拠点の識別番号。
     location_id: int
-    horizon_start: datetime  # オフセットなしは拠点の現地時刻、ありは日本時間へ変換
-    horizon_end: datetime
+    start_at: datetime  # オフセットなしは拠点の現地時刻、ありは日本時間へ変換
+    end_at: datetime
     # 画面で識別するための必須名。空欄・文字数・拠点内の重複はサービスで確認する。
     plan_name: str
     # 未指定時は拠点の既定の計算設定を選ぶ。
@@ -45,10 +45,9 @@ class PlanCreateBody(ApiModel):
     remarks: str | None = None
 
 
-# 計算対象の範囲・制限時間・完了待機の指定。
+# 計算対象の範囲と完了待機の指定。時間上限は設けない。
 class SolveBody(ApiModel):
     scope: str = "FULL"  # FULL または REPAIR
-    time_limit_sec: int | None = None
     wait: bool = False  # 同期計算を指定した場合はリクエスト内で実行する。通常はワーカーが実行する
 
 
@@ -95,7 +94,7 @@ def list_plans(
     db: Session = Depends(get_db),
 ):
     """?locationId=1&status=DRAFT,MASTER で絞り込む。"""
-    stmt = select(Plan).order_by(Plan.HorizonStart.desc(), Plan.PlanID.desc())
+    stmt = select(Plan).order_by(Plan.StartAt.desc(), Plan.PlanID.desc())
     if location_id is not None:
         stmt = stmt.where(Plan.LocationID == location_id)
     if plan_status:
@@ -111,8 +110,8 @@ def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = D
     if location is None:
         raise HTTPException(404, f"拠点 {body.location_id} が見つかりません")
     data = body.model_dump()
-    data["horizon_start"] = to_jst_naive(body.horizon_start)
-    data["horizon_end"] = to_jst_naive(body.horizon_end)
+    data["start_at"] = to_jst_naive(body.start_at)
+    data["end_at"] = to_jst_naive(body.end_at)
     return create_plan(db, user=user, **data)
 
 
@@ -130,7 +129,7 @@ def post_solve(
     """計算をキューに登録する。`wait: true` の場合はリクエスト内で計算する。"""
     if body.scope not in ("FULL", "REPAIR"):
         raise HTTPException(422, "scope must be FULL or REPAIR")
-    run = queue_run(db, _plan_or_404(db, plan_id), user, body.scope, body.time_limit_sec)
+    run = queue_run(db, _plan_or_404(db, plan_id), user, body.scope)
     if body.wait:
         run = execute_run(db, run.RunID)
         response.status_code = status.HTTP_200_OK

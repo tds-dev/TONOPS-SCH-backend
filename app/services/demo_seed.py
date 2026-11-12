@@ -3,6 +3,7 @@
 日付は「翌日 06:00（拠点時刻）」を基準にするため、デモは常に直近の将来を計画する。
 `DataBase/setup_database.py` から初期データ登録に使う。
 製造時間、発酵・冷却の待ち時間、段取り替えは仕組みを理解するための仮設定とする。
+設備候補と工程間の待ち時間は製品マスタにだけ保存し、タスク生成時には複製しない。
 """
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -15,7 +16,7 @@ from app.models import masters as m
 from app.models import transactions as t
 from app.services.order_service import generate_tasks
 from app.services.plan_service import create_plan
-from app.services.worker_process_service import add_worker_process_links
+from app.services.worker_process_service import add_worker_skill_maps
 
 # パン工場の現地時刻と、初期データの登録者。
 TZ = get_settings().app_timezone
@@ -71,7 +72,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ]):
         db.add(m.Resource(
             LocationID=location.LocationID, ResourceGroupID=groups[grp].ResourceGroupID,
-            ResourceName=name, ResourceType="MACHINE", Capacity=1, CalendarID=location.CalendarID,
+            ResourceName=name, Capacity=1,
             SortOrder=i, CreatedBy=USER,
         ))
 
@@ -101,7 +102,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     db.add(m.CalculationSetting(
         LocationID=location.LocationID, CalculationSettingName="パン製造・納期優先", TimeUnit="MINUTE", IsDefault=True,
         ObjectiveWeightsJSON={"lateness": 1000, "setup": 10, "makespan": 1, "unscheduled": 100000},
-        TimeLimitSec=30, CreatedBy=USER,
+        CreatedBy=USER,
     ))
 
     # 製品は名称だけを管理し、工程を直接紐づける。
@@ -155,7 +156,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     worker_link_count = 0
     for product in products.values():
         for process in product.processes:
-            for link in add_worker_process_links(db, process):
+            for link in add_worker_skill_maps(db, process):
                 # 工程番号が担当と一致する場合だけ、能力上限を付けて担当可能にする。
                 sequence, daily_limit = worker_settings[link.WorkerID]
                 link.CanExecute = process.SequenceNumber == sequence
@@ -208,11 +209,11 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     # 両方とも同じ計算条件で開始し、割付・評価値は画面で計算してから確認する。
     for plan_name in DEMO_PLAN_NAMES:
         create_plan(
-            db, location_id=location.LocationID, horizon_start=start, horizon_end=start + timedelta(days=3),
+            db, location_id=location.LocationID, start_at=start, end_at=start + timedelta(days=3),
             user=USER, plan_name=plan_name, use_master_as_base=False,
             remarks="駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。",
         )
     return {"locationId": location.LocationID,
             "orders": len(orders), "plans": len(DEMO_PLAN_NAMES),
-            "workers": len(workers), "workerProcessLinks": worker_link_count,
+            "workers": len(workers), "workerSkillMaps": worker_link_count,
             "workerCalendars": len(worker_calendars), "workerCalendarExceptions": 1}

@@ -47,8 +47,8 @@ def build_board(
     # 対象の拠点と、アプリ共通の時刻設定。
     location = db.get(Location, plan.LocationID)
     tz = get_settings().app_timezone
-    start = to_jst_naive(start) if start else plan.HorizonStart
-    end = to_jst_naive(end) if end else plan.HorizonEnd
+    start = to_jst_naive(start) if start else plan.StartAt
+    end = to_jst_naive(end) if end else plan.EndAt
     color_by = color_by or default_color_attribute(db, location.LocationID)
     problem = build_problem(db, plan)
 
@@ -65,7 +65,7 @@ def build_board(
     resource_ids = {r.ResourceID for r in res_rows}
     resources = [
         {
-            "id": r.ResourceID, "name": r.ResourceName, "type": r.ResourceType,
+            "id": r.ResourceID, "name": r.ResourceName,
             "capacity": coerce(r.Capacity), "groupId": r.ResourceGroupID,
             "groupName": groups[r.ResourceGroupID].GroupName if r.ResourceGroupID in groups else None,
         }
@@ -147,7 +147,7 @@ def build_board(
     return {
         "plan": {
             "planId": plan.PlanID, "planName": plan.PlanName, "status": plan.Status,
-            "horizonStart": _local(plan.HorizonStart, tz), "horizonEnd": _local(plan.HorizonEnd, tz),
+            "startAt": _local(plan.StartAt, tz), "endAt": _local(plan.EndAt, tz),
             "rowVer": plan.RowVer,
         },
         "timeZone": tz,

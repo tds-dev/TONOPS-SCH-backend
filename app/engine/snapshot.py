@@ -5,12 +5,13 @@
     カレンダー）から求めた稼働枠
   * 拠点のオーダーのうち DONE / CANCELLED 以外、生産スケジューラ管理、計画期間終了前に
     着手可能なもの。その非集約・未完了タスク
-  * リソース候補（グループ指定は所属リソースごとに展開）
-  * 対象タスク間の依存関係
+  * 製品工程と数量から組み立てるリソース候補（グループ指定は所属リソースごとに展開）
+  * 製品工程順と待ち時間から組み立てる対象タスク間の依存関係
   * ロック: この計画と元計画のロック済み割付、および確定期間内に始まる元計画のタスク
   * ヒント: それ以外のこの計画（または元計画）の割付。初期解として使う
   * 拠点の有効な段取り替えマトリクスとルール
 """
+from fastapi import HTTPException
 from sqlalchemy import false, or_, select, true
 from sqlalchemy.orm import Session
 
@@ -28,8 +29,9 @@ from app.engine.problem import (
     PTask,
 )
 from app.models.masters import ProductSwitchTime, CalculationSetting, Resource, Rule, Location
-from app.models.transactions import Order, Plan, PlanAssignment, Task, TaskDependency
+from app.models.transactions import Order, Plan, PlanAssignment, Task
 from app.services.calendar_service import working_time
+from app.services.task_conditions import build_task_conditions
 from app.services.worktime import Interval
 
 
@@ -51,7 +53,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     location = db.get(Location, plan.LocationID)
     setting = db.get(CalculationSetting, plan.CalculationSettingID)
     tz = get_settings().app_timezone
-    start, end = plan.HorizonStart, plan.HorizonEnd
+    start, end = plan.StartAt, plan.EndAt
     horizon = int((end - start).total_seconds() // 60)
     to_min = lambda dt: int((dt - start).total_seconds() // 60)  # noqa: E731
 
@@ -67,7 +69,8 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # 勤務行IDが異なっても拠点共通の稼働枠になるため、展開結果を設備間で共有する。
     calendar_windows: list[tuple[int, int]] | None = None
     for r in rows:
-        cal_id = r.CalendarID or location.CalendarID
+        # 全設備で所属拠点のカレンダーを共有し、個別の勤務行参照は持たない。
+        cal_id = location.CalendarID
         if cal_id is None:
             windows = [(0, horizon)]  # カレンダーなし: 常に稼働
         else:
@@ -104,6 +107,11 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         Task.Status.notin_(["DONE", "CANCELLED"]),
     )
     task_rows = db.scalars(select(Task).where(*task_filter)).all()
+    # 画面表示・自動計算・手動編集の検証で、同じ最新マスタの条件を利用する。
+    conditions = build_task_conditions(db, task_rows)
+    if conditions.errors:
+        # 工程の抜けた不完全な作業一覧から、実行可能に見える計画を作らない。
+        raise HTTPException(422, " ".join(conditions.errors))
 
     # ---- 前回の位置: この計画を優先し、なければ元計画
     # 指定した計画の割付を、タスクの識別番号で引ける形にする。
@@ -119,9 +127,9 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     tasks: dict[int, PTask] = {}
     for t in task_rows:
         options: list[POption] = []
-        for o in t.options:
-            targets = [o.ResourceID] if o.ResourceID else members.get(o.ResourceGroupID, [])
-            options.extend(POption(rid, int(o.DurationMin), int(o.Priority or 1)) for rid in targets if rid in resources)
+        for o in conditions.options[t.TaskID]:
+            targets = [o.resource_id] if o.resource_id else members.get(o.resource_group_id, [])
+            options.extend(POption(rid, o.duration_min, o.priority or 1) for rid in targets if rid in resources)
         release = order_release.get(t.OrderID, 0)
         if t.EarliestStartAt:
             release = max(release, to_min(t.EarliestStartAt))
@@ -141,13 +149,10 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
                 task.hint = pos
         tasks[t.TaskID] = task
 
+    # 計算対象として残っている、隣接する製品工程のFS関係を使う。
     deps = [
-        PDependency(d.PredecessorTaskID, d.SuccessorTaskID, d.DependencyType, int(d.LagMin or 0),
-                    int(d.MaxLagMin) if d.MaxLagMin is not None else None)
-        for d in db.scalars(
-            select(TaskDependency).where(TaskDependency.SuccessorTaskID.in_(select(Task.TaskID).where(*task_filter)))
-        )
-        if d.PredecessorTaskID in tasks
+        PDependency(d.predecessor_task_id, d.successor_task_id, d.dependency_type, d.lag_min, d.max_lag_min)
+        for d in conditions.dependencies
     ]
 
     # ---- 段取り替えとルール
@@ -173,5 +178,4 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     return Problem(
         horizon_start=start, horizon=horizon, tz=tz, resources=resources, tasks=tasks, orders=orders,
         dependencies=deps, changeovers=changeovers, rules=rules, weights=weights,
-        time_limit_sec=setting.TimeLimitSec if setting else 60,
     )

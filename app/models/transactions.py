@@ -5,7 +5,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
-    Date,
     Float,
     ForeignKey,
     Index,
@@ -27,14 +26,13 @@ ORDER_TYPE = ["ORDER", "PROJECT"]
 ORDER_STATUSES = ["OPEN", "PLANNED", "IN_PROGRESS", "DONE", "CANCELLED"]
 PLAN_OWNERS = ["SCHEDULER", "EXTERNAL"]
 TASK_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "DONE", "CANCELLED"]
-DEP_TYPES = ["FS", "SS", "FF", "SF"]
 PLAN_STATUSES = ["DRAFT", "MASTER", "SUPERSEDED", "DISCARDED", "ARCHIVED"]
 ASSIGNMENT_SOURCES = ["SOLVER", "MANUAL", "IMPORT"]
 RUN_STATUSES = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"]
 RUN_SCOPES = ["FULL", "REPAIR"]
 SEVERITIES = ["HARD", "SOFT", "INFO"]
-ACTUAL_STATUSES = ["IN_PROGRESS", "DONE", "SUSPENDED"]
-ACTUAL_SOURCES = ["MANUAL", "PMS", "IMPORT"]
+# 作業終了時だけ完了・中断を記録する。作業中はStatusとEndAtをNULLにする。
+ACTUAL_STATUSES = ["DONE", "SUSPENDED"]
 
 
 # ---------------------------------------------------------------- 需要
@@ -76,70 +74,35 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
 
 
 class Task(AuditMixin, Base):
-    """タスク — エンジンがスケジュールする単位（IsSummary の場合を除く）。"""
+    """オーダーごとの作業。設備候補・前後関係は製品工程から計算時に組み立てる。"""
 
     __tablename__ = "T_Tasks"
     __table_args__ = (
         UniqueConstraint("OrderID", "TaskNo"),
         CheckConstraint(in_check("Status", TASK_STATUSES), name="Status"),
     )
+    # 計画・違反・実績から同じ作業を参照する識別番号。
     TaskID = Column(Integer, primary_key=True, autoincrement=True)
     # タスクの所属先は、変更後のオーダーテーブルを参照する。
     OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
     # タスク生成元の製品工程。生成済みのタスクと工程の対応を保持する。
     ProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
+    # 生成時点の作業番号・名称・並び順。計算上の工程順序は製品マスタを参照する。
     TaskNo = Column(String(30), nullable=False)
     TaskName = Column(String(200), nullable=False)
     Sequence = Column(Integer, nullable=False, default=0)
+    # 集約タスクを計算対象から外す区分と、作業固有の開始可能日時・期限。
     IsSummary = Column(Boolean, nullable=False, default=False)
     EarliestStartAt = Column(DateTime, nullable=True)
     DeadlineAt = Column(DateTime, nullable=True)
+    # 全計画で共有する作業状態と進捗率。
     Status = Column(String(20), nullable=False, default="NOT_STARTED")
     ProgressPct = Column(Numeric(5, 2), nullable=False, default=0)
     # オーダーから引き継ぐ分類属性。ルールと製品切替時間の判定に使う。
     AttributesJSON = Column(JSON, nullable=True)
 
+    # この作業が所属するオーダー。
     order = relationship("Order", back_populates="tasks")
-    options = relationship(
-        "TaskResourceOption", cascade="all, delete-orphan", lazy="selectin"
-    )
-
-
-class TaskResourceOption(AuditMixin, Base):
-    """タスクリソース候補"""
-
-    __tablename__ = "T_TaskResourceOptions"
-    __table_args__ = (
-        CheckConstraint(
-            "(ResourceID IS NULL AND ResourceGroupID IS NOT NULL) OR "
-            "(ResourceID IS NOT NULL AND ResourceGroupID IS NULL)",
-            name="ResourceOrGroup",
-        ),
-    )
-    OptionID = Column(Integer, primary_key=True, autoincrement=True)
-    TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID", ondelete="CASCADE"), nullable=False)
-    ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
-    ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
-    DurationMin = Column(Integer, nullable=False)
-    SetupMinutes = Column(Integer, nullable=False, default=0)
-    Units = Column(Numeric(5, 2), nullable=False, default=1)
-    Priority = Column(Integer, nullable=False, default=1)
-
-
-class TaskDependency(AuditMixin, Base):
-    """タスク依存関係"""
-
-    __tablename__ = "T_TaskDependencies"
-    __table_args__ = (
-        UniqueConstraint("PredecessorTaskID", "SuccessorTaskID"),
-        CheckConstraint(in_check("DependencyType", DEP_TYPES), name="DependencyType"),
-    )
-    DependencyID = Column(Integer, primary_key=True, autoincrement=True)
-    PredecessorTaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
-    SuccessorTaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
-    DependencyType = Column(String(2), nullable=False, default="FS")
-    LagMin = Column(Integer, nullable=False, default=0)
-    MaxLagMin = Column(Integer, nullable=True)
 
 
 # ---------------------------------------------------------------- 計画
@@ -158,8 +121,8 @@ class Plan(AuditMixin, Base):
     # 画面で計画を識別する名前。同じ拠点内で一意とする。
     PlanName = Column(String(100), nullable=False)
     Status = Column(String(20), nullable=False, default="DRAFT")
-    HorizonStart = Column(DateTime, nullable=False)
-    HorizonEnd = Column(DateTime, nullable=False)
+    StartAt = Column(DateTime, nullable=False)
+    EndAt = Column(DateTime, nullable=False)
     # 計画の計算条件を参照する識別番号。
     CalculationSettingID = Column(Integer, ForeignKey("M_CalculationSettings.CalculationSettingID"), nullable=False)
     BasePlanID = Column(Integer, ForeignKey("T_Plans.PlanID"), nullable=True)
@@ -220,10 +183,9 @@ class SolverRun(AuditMixin, Base):
     # 依頼者と、受付・開始・終了の時刻。
     RequestedBy = Column(String(254), nullable=False)
     RequestedAt = Column(DateTime, nullable=False)
-    StartedAt = Column(DateTime, nullable=True)
-    FinishedAt = Column(DateTime, nullable=True)
-    # 計算の制限秒数と、計算エンジンが返す終了状態。
-    TimeLimitSec = Column(Integer, nullable=False, default=60)
+    StartAt = Column(DateTime, nullable=True)
+    EndAt = Column(DateTime, nullable=True)
+    # 時間で打ち切らず、計算エンジンが返す終了状態を保存する。
     SolverStatus = Column(String(20), nullable=True)
     # 得られた計画の評価値と、計算中に求めた評価値の境界。
     ObjectiveValue = Column(Float, nullable=True)
@@ -261,23 +223,27 @@ class PlanViolation(AuditMixin, Base):
 
 # ---------------------------------------------------------------- 実行
 class WorkActual(AuditMixin, Base):
-    """作業実績。タスクの実施日時・工数・数量を保持する。"""
+    """作業実績。タスクの開始・終了日時、完了・中断、数量を保持する。"""
 
     __tablename__ = "T_WorkActuals"
     __table_args__ = (
         CheckConstraint(in_check("Status", ACTUAL_STATUSES), name="Status"),
-        CheckConstraint(in_check("Source", ACTUAL_SOURCES), name="Source"),
+        # 作業中は両方NULL、終了後は日時と完了・中断を必ず組にする。
+        CheckConstraint(
+            "(EndAt IS NULL AND Status IS NULL) OR "
+            "(EndAt IS NOT NULL AND Status IS NOT NULL)", name="EndStatus",
+        ),
+        CheckConstraint("EndAt IS NULL OR (StartAt IS NOT NULL AND EndAt >= StartAt)", name="EndAfterStart"),
     )
     # 作業実績を識別する自動採番の番号。
     WorkActualID = Column(BigId, primary_key=True, autoincrement=True)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
+    # 開始・終了は日本時間。作業日と工数はこの日時から求める。
     StartAt = Column(DateTime, nullable=True)
     EndAt = Column(DateTime, nullable=True)
-    WorkDate = Column(Date, nullable=True)
-    WorkHours = Column(Numeric(9, 2), nullable=True)
+    # 実際に完了した数量。画面からの実績CRUDは追加しない。
     Quantity = Column(Numeric(18, 3), nullable=True)
-    Status = Column(String(20), nullable=False, default="DONE")
-    Source = Column(String(10), nullable=False, default="MANUAL")
-    ExternalKey = Column(String(100), nullable=True)
+    # NULLは作業中、DONEは完了、SUSPENDEDは中断。
+    Status = Column(String(20), nullable=True)
     Remarks = Column(String(500), nullable=True)

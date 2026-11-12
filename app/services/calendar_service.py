@@ -55,13 +55,10 @@ def validate_location_write(db: Session, original: Location | None, values: dict
             raise HTTPException(422, "勤務行がある拠点のCalendarIDは解除できません。")
 
 
-# 設備に指定する勤務行を、設備と同じ拠点に限定する。
-def validate_resource_calendar_write(db: Session, original: Resource | None, values: dict[str, Any]) -> None:
+# 設備の所属拠点が有効かを確認する。勤務は所属拠点から共通で参照する。
+def validate_resource_location_write(db: Session, original: Resource | None, values: dict[str, Any]) -> None:
     location_id = _value(original, values, "LocationID")
     _location(db, location_id)
-    calendar_id = _value(original, values, "CalendarID")
-    if calendar_id is not None:
-        _calendar(db, calendar_id, location_id)
 
 
 # 保存・計算読込で同じ時刻確認を使い、同日内の勤務だけを受け付ける。
@@ -113,7 +110,7 @@ def save_calendar(db: Session, original: Calendar | None, values: dict[str, Any]
     return row
 
 
-# 勤務行を削除し、残る行へ拠点・設備・停止例外の参照を付け替える。
+# 勤務行を削除し、残る行へ拠点・停止例外の参照を付け替える。
 def delete_calendar(db: Session, row: Calendar, user: str) -> None:
     location = _location(db, row.LocationID)
     db.refresh(row)
@@ -133,10 +130,6 @@ def delete_calendar(db: Session, row: Calendar, user: str) -> None:
     if location.CalendarID == row.CalendarID:
         location.CalendarID = replacement_id
         location.UpdatedBy = user
-    # 削除済み設備も含めて参照を更新し、旧勤務行を参照したままにしない。
-    for resource in db.scalars(select(Resource).where(Resource.CalendarID == row.CalendarID)):
-        resource.CalendarID = replacement_id
-        resource.UpdatedBy = user
     for exception in db.scalars(select(CalendarException).where(CalendarException.CalendarID == row.CalendarID)):
         exception.CalendarID = replacement_id
         exception.UpdatedBy = user
@@ -157,8 +150,8 @@ def validate_calendar_exception_write(db: Session, original: CalendarException |
         previous = db.get(Calendar, original.CalendarID)
         if previous.LocationID != calendar.LocationID:
             raise HTTPException(422, "登録済み停止例外の拠点は変更できません。")
-    start = _value(original, values, "StartTime")
-    end = _value(original, values, "EndTime")
+    start = _value(original, values, "StartAt")
+    end = _value(original, values, "EndAt")
     if not isinstance(start, datetime) or not isinstance(end, datetime) or end <= start:
         raise HTTPException(422, "終了日時は開始日時より後にしてください。")
 
@@ -194,7 +187,7 @@ def calendar_specs(db: Session, calendar_id: int) -> tuple[list[WorkSpec], list[
     ).where(Calendar.LocationID == calendar.LocationID)).all()
     return (
         [WorkSpec(row.DayOfWeek, row.StartTime, row.EndTime) for row in rows],
-        [ExceptionSpec(row.StartTime, row.EndTime) for row in exceptions],
+        [ExceptionSpec(row.StartAt, row.EndAt) for row in exceptions],
     )
 
 

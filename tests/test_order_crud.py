@@ -18,7 +18,7 @@ with patch("app.core.config.get_settings", return_value=Settings(
 )):
     from app.core.db import Base, get_db, make_engine
     from app.models.masters import Calendar, CalendarException, Location, Product, ProductProcess, ProductProcessResource, CalculationSetting, Resource, ResourceGroup
-    from app.models.masters import Worker, WorkerProcessLink
+    from app.models.masters import Worker, WorkerSkillMap
     from app.models.transactions import WorkActual, Order, Plan, PlanAssignment, Task
     from app.routers.orders import routers
     from app.routers.masters import routers as master_routers
@@ -165,10 +165,10 @@ class OrderCrudTest(InMemoryApiTestCase):
         status, tasks = self.call("POST", f"/orders/{order_id}/generate-tasks")
         self.assertEqual(status, 200, tasks)
         self.db.add_all([CalculationSetting(CalculationSettingID=1, LocationID=1, CalculationSettingName="標準"),
-                         Resource(ResourceID=1, LocationID=1, ResourceName="設備", ResourceType="MACHINE")])
+                         Resource(ResourceID=1, LocationID=1, ResourceName="設備")])
         self.db.flush()
         self.db.add(Plan(PlanID=1, LocationID=1, PlanName="計画", CalculationSettingID=1,
-                         HorizonStart=datetime(2026, 10, 30), HorizonEnd=datetime(2026, 10, 31)))
+                         StartAt=datetime(2026, 10, 30), EndAt=datetime(2026, 10, 31)))
         self.db.flush()
         self.db.add(PlanAssignment(PlanID=1, TaskID=tasks[0]["taskId"], ResourceID=1,
                                    StartAt=datetime(2026, 10, 30, 9), EndAt=datetime(2026, 10, 30, 10)))
@@ -195,7 +195,7 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.db.commit()
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"quantity": 20})[0], 409)
         self.db.get(Task, 1).Status = "NOT_STARTED"
-        self.db.add(WorkActual(TaskID=1, Status="DONE"))
+        self.db.add(WorkActual(TaskID=1, Status="DONE", StartAt=datetime(2026, 10, 30, 6), EndAt=datetime(2026, 10, 30, 7)))
         self.db.commit()
         self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"attributesJSON": {"family": "B"}})[0], 409)
         self.assertEqual(self.call("DELETE", f"/orders/{order_id}")[0], 204)
@@ -277,9 +277,9 @@ class OrderCrudTest(InMemoryApiTestCase):
         })
         self.assertEqual(status, 201, process)
         process_id = process["productProcessId"]
-        links = self.db.scalars(select(WorkerProcessLink).where(
-            WorkerProcessLink.ProductProcessID == process_id,
-        ).order_by(WorkerProcessLink.WorkerID)).all()
+        links = self.db.scalars(select(WorkerSkillMap).where(
+            WorkerSkillMap.ProductProcessID == process_id,
+        ).order_by(WorkerSkillMap.WorkerID)).all()
         self.assertEqual([link.WorkerID for link in links], [1, 2])
         self.assertTrue(all(not link.CanExecute and link.MaxDailyQuantity is None for link in links))
         # 一度設定した担当可否と日上限は、同じ工程の更新でも変更しない。
@@ -291,15 +291,15 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.assertTrue(links[0].CanExecute)
         self.assertEqual(links[0].MaxDailyQuantity, 25)
         # 不足リンクの作成を再実行しても、同じ組合せを重複登録しない。
-        from app.services.worker_process_service import add_worker_process_links
-        self.assertEqual(add_worker_process_links(self.db, self.db.get(ProductProcess, process_id)), [])
-        self.assertEqual(len(self.db.scalars(select(WorkerProcessLink).where(
-            WorkerProcessLink.ProductProcessID == process_id,
+        from app.services.worker_process_service import add_worker_skill_maps
+        self.assertEqual(add_worker_skill_maps(self.db, self.db.get(ProductProcess, process_id)), [])
+        self.assertEqual(len(self.db.scalars(select(WorkerSkillMap).where(
+            WorkerSkillMap.ProductProcessID == process_id,
         )).all()), 2)
         # 未使用工程の削除では関連リンクも削除し、作業者本人は残す。
         self.assertEqual(self.call("DELETE", f"/product-processes/{process_id}")[0], 204)
-        self.assertIsNone(self.db.scalar(select(WorkerProcessLink.WorkerProcessLinkID).where(
-            WorkerProcessLink.ProductProcessID == process_id,
+        self.assertIsNone(self.db.scalar(select(WorkerSkillMap.WorkerSkillMapID).where(
+            WorkerSkillMap.ProductProcessID == process_id,
         )))
         self.assertIsNotNone(self.db.get(Worker, 1))
 
@@ -437,7 +437,7 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.db.commit()
         self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 409)
         task.Status = "NOT_STARTED"
-        self.db.add(WorkActual(TaskID=task.TaskID, Status="DONE"))
+        self.db.add(WorkActual(TaskID=task.TaskID, Status="DONE", StartAt=datetime(2026, 10, 30, 6), EndAt=datetime(2026, 10, 30, 7)))
         self.db.commit()
         self.assertEqual(self.call("POST", f'/orders/{order["orderId"]}/generate-tasks?replace=true')[0], 409)
         self.assertIsNotNone(self.db.get(Task, task.TaskID))
@@ -457,8 +457,8 @@ class CalendarCrudTest(InMemoryApiTestCase):
     # 指定勤務行へ月曜の停止例外を登録し、拠点共通への適用を確認する。
     def create_stop(self, calendar_id, **values):
         # 時差付きの日本時間を入力し、日本時間保存・出力を確認できる停止内容。
-        body = {"calendarId": calendar_id, "startTime": "2026-11-09T10:00:00+09:00",
-                "endTime": "2026-11-09T11:00:00+09:00", "reason": "設備点検", **values}
+        body = {"calendarId": calendar_id, "startAt": "2026-11-09T10:00:00+09:00",
+                 "endAt": "2026-11-09T11:00:00+09:00", "reason": "設備点検", **values}
         status, stop = self.call("POST", "/calendar-exceptions", body)
         self.assertEqual(status, 201, stop)
         return stop
@@ -530,13 +530,13 @@ class CalendarCrudTest(InMemoryApiTestCase):
         other = self.create_work(locationId=2)
         # 午後行へ登録した午前停止も、午前行へ登録した午後停止も拠点全体へ適用する。
         first = self.create_stop(afternoon["calendarId"])
-        second = self.create_stop(morning["calendarId"], startTime="2026-11-09T14:00:00+09:00", endTime="2026-11-09T15:00:00+09:00")
-        outside = self.create_stop(morning["calendarId"], startTime="2026-11-08T20:00:00+09:00", endTime="2026-11-08T21:00:00+09:00")
-        self.create_stop(other["calendarId"], startTime="2026-11-09T09:00:00+09:00", endTime="2026-11-09T18:00:00+09:00")
-        self.assertEqual(first["startTime"], "2026-11-09T10:00:00+09:00")
-        self.assertEqual(first["endTime"], "2026-11-09T11:00:00+09:00")
-        self.assertEqual(self.db.get(CalendarException, first["exceptionId"]).StartTime, datetime(2026, 11, 9, 10))
-        for key in ("startAt", "endAt", "isWorking"):
+        second = self.create_stop(morning["calendarId"], startAt="2026-11-09T14:00:00+09:00", endAt="2026-11-09T15:00:00+09:00")
+        outside = self.create_stop(morning["calendarId"], startAt="2026-11-08T20:00:00+09:00", endAt="2026-11-08T21:00:00+09:00")
+        self.create_stop(other["calendarId"], startAt="2026-11-09T09:00:00+09:00", endAt="2026-11-09T18:00:00+09:00")
+        self.assertEqual(first["startAt"], "2026-11-09T10:00:00+09:00")
+        self.assertEqual(first["endAt"], "2026-11-09T11:00:00+09:00")
+        self.assertEqual(self.db.get(CalendarException, first["exceptionId"]).StartAt, datetime(2026, 11, 9, 10))
+        for key in ("startTime", "endTime", "isWorking"):
             self.assertNotIn(key, first)
         status, stops = self.call("GET", "/calendar-exceptions?locationId=1")
         self.assertEqual(status, 200, stops)
@@ -553,26 +553,26 @@ class CalendarCrudTest(InMemoryApiTestCase):
         self.assertEqual(self.working(morning["calendarId"]), expected)
         self.assertEqual(self.working(afternoon["calendarId"]), expected)
 
-    # 代表勤務行の削除時に、拠点・削除済みを含む設備・停止例外の参照を残行へ引き継ぐ。
+    # 代表勤務行を削除しても、設備の所属を維持し、拠点・停止例外は残行へ引き継ぐ。
     def test_deleting_representative_reassigns_all_references(self):
         first = self.create_work()
         replacement = self.create_work(startTime="13:00:00", endTime="18:00:00", workName="午後")
         other = self.create_work(locationId=2)
-        # 有効な設備と、履歴のために残る削除済み設備が同じ代表行を参照する。
+        # 有効な設備と、履歴のために残る削除済み設備は拠点だけを参照する。
         self.db.add_all([
-            Resource(ResourceID=1, LocationID=1, ResourceName="設備", CalendarID=first["calendarId"]),
-            Resource(ResourceID=2, LocationID=1, ResourceName="削除済み設備", CalendarID=first["calendarId"], DeleteFlag=True),
+            Resource(ResourceID=1, LocationID=1, ResourceName="設備"),
+            Resource(ResourceID=2, LocationID=1, ResourceName="削除済み設備", DeleteFlag=True),
         ])
         self.db.commit()
         stop = self.create_stop(first["calendarId"])
         self.assertEqual(self.call("DELETE", f'/calendars/{first["calendarId"]}')[0], 204)
         self.assertEqual(self.db.get(Location, 1).CalendarID, replacement["calendarId"])
         for resource_id in (1, 2):
-            self.assertEqual(self.db.get(Resource, resource_id).CalendarID, replacement["calendarId"])
+            self.assertEqual(self.db.get(Resource, resource_id).LocationID, 1)
         status, saved_stop = self.call("GET", f'/calendar-exceptions/{stop["exceptionId"]}')
         self.assertEqual(status, 200, saved_stop)
         self.assertEqual(saved_stop["calendarId"], replacement["calendarId"])
-        for key in ("reason", "startTime", "endTime", "createdAt"):
+        for key in ("reason", "startAt", "endAt", "createdAt"):
             self.assertEqual(saved_stop[key], stop[key])
         self.assertTrue(self.db.get(Calendar, first["calendarId"]).DeleteFlag)
         self.assertEqual(self.call("GET", f'/calendars/{first["calendarId"]}')[0], 404)
@@ -582,18 +582,18 @@ class CalendarCrudTest(InMemoryApiTestCase):
     # 最終行に停止例外がある間は変更を取り消し、例外削除後は参照をnullに戻す。
     def test_last_row_requires_stops_removed_and_clears_references(self):
         work = self.create_work()
-        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceName="設備", CalendarID=work["calendarId"]))
+        self.db.add(Resource(ResourceID=1, LocationID=1, ResourceName="設備"))
         self.db.commit()
         stop = self.create_stop(work["calendarId"])
         self.assertEqual(self.call("DELETE", f'/calendars/{work["calendarId"]}')[0], 409)
         self.assertFalse(self.db.get(Calendar, work["calendarId"]).DeleteFlag)
         self.assertEqual(self.db.get(Location, 1).CalendarID, work["calendarId"])
-        self.assertEqual(self.db.get(Resource, 1).CalendarID, work["calendarId"])
+        self.assertEqual(self.db.get(Resource, 1).LocationID, 1)
         self.assertEqual(self.call("GET", f'/calendar-exceptions/{stop["exceptionId"]}')[0], 200)
         self.assertEqual(self.call("DELETE", f'/calendar-exceptions/{stop["exceptionId"]}')[0], 204)
         self.assertEqual(self.call("DELETE", f'/calendars/{work["calendarId"]}')[0], 204)
         self.assertIsNone(self.db.get(Location, 1).CalendarID)
-        self.assertIsNone(self.db.get(Resource, 1).CalendarID)
+        self.assertEqual(self.db.get(Resource, 1).LocationID, 1)
         self.assertTrue(self.db.get(Calendar, work["calendarId"]).DeleteFlag)
         self.assertEqual(self.call("GET", "/calendars?locationId=1")[1], [])
 
@@ -648,8 +648,8 @@ class CalendarCrudTest(InMemoryApiTestCase):
         work = self.create_work()
         stop = self.create_stop(work["calendarId"])
         # 部分更新でも、送信されない開始日時を既存値で補って順序を確認する。
-        for values in ({"endTime": "2026-11-09T09:59:00+09:00"}, {"endTime": "2026-11-09T10:00:00+09:00"},
-                       {"startTime": None}, {"calendarId": 999}):
+        for values in ({"endAt": "2026-11-09T09:59:00+09:00"}, {"endAt": "2026-11-09T10:00:00+09:00"},
+                       {"startAt": None}, {"calendarId": 999}):
             with self.subTest(values=values):
                 self.assertEqual(self.call("PATCH", f'/calendar-exceptions/{stop["exceptionId"]}', values)[0], 422)
                 self.assertEqual(self.call("GET", f'/calendar-exceptions/{stop["exceptionId"]}')[1], stop)
@@ -680,11 +680,14 @@ class CalendarCrudTest(InMemoryApiTestCase):
                              (f'/calendar-exceptions/{stop["exceptionId"]}', {"calendarId": other["calendarId"]})):
             with self.subTest(path=path, values=values):
                 self.assertEqual(self.call("PATCH", path, values)[0], 422)
-        self.assertEqual(self.call("POST", "/resources", {"locationId": 1, "resourceName": "混在不可", "calendarId": other["calendarId"]})[0], 422)
-        status, resource = self.call("POST", "/resources", {"locationId": 1, "resourceName": "設備", "calendarId": first["calendarId"]})
+        # 設備は有効な所属拠点を要求し、個別のカレンダー項目を持たない。
+        self.assertEqual(self.call("POST", "/resources", {"locationId": 999, "resourceName": "無効拠点"})[0], 422)
+        status, resource = self.call("POST", "/resources", {"locationId": 1, "resourceName": "設備"})
         self.assertEqual(status, 201, resource)
-        self.assertEqual(self.call("PATCH", f'/resources/{resource["resourceId"]}', {"calendarId": other["calendarId"]})[0], 422)
-        self.assertEqual(self.call("GET", f'/resources/{resource["resourceId"]}')[1]["calendarId"], first["calendarId"])
+        self.assertEqual(self.call("PATCH", f'/resources/{resource["resourceId"]}', {"locationId": 999})[0], 422)
+        self.assertEqual(self.call("GET", f'/resources/{resource["resourceId"]}')[1]["locationId"], 1)
+        self.assertNotIn("calendarId", resource)
+        self.assertNotIn("resourceType", resource)
 
     # 廃止したルートと組織・親カレンダー等の項目を公開しない。
     def test_removed_routes_and_columns_are_absent(self):
@@ -727,11 +730,11 @@ class JapaneseTimeTest(InMemoryApiTestCase):
             "locationId": 1, "dayOfWeek": 1, "startTime": "09:00:00", "endTime": "18:00:00"})
         self.assertEqual(status, 201)
         status, stop = self.call("POST", "/calendar-exceptions", {
-            "calendarId": work["calendarId"], "startTime": "2026-11-09T00:00:00Z",
-            "endTime": "2026-11-09T01:00:00Z"})
+            "calendarId": work["calendarId"], "startAt": "2026-11-09T00:00:00Z",
+            "endAt": "2026-11-09T01:00:00Z"})
         self.assertEqual(status, 201)
-        self.assertEqual(stop["startTime"], "2026-11-09T09:00:00+09:00")
-        self.assertEqual(self.db.get(CalendarException, stop["exceptionId"]).StartTime, datetime(2026, 11, 9, 9))
+        self.assertEqual(stop["startAt"], "2026-11-09T09:00:00+09:00")
+        self.assertEqual(self.db.get(CalendarException, stop["exceptionId"]).StartAt, datetime(2026, 11, 9, 9))
         # 登録履歴も日本時間を明示して返す。
         self.assertTrue(stop["createdAt"].endswith("+09:00"))
 

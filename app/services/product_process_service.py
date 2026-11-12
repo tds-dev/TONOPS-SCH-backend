@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.masters import Product, ProductProcess
 from app.models.transactions import Task
 from app.services.product_validation import validate_product_process_write
-from app.services.worker_process_service import add_worker_process_links
+from app.services.worker_process_service import add_worker_skill_maps
 
 
 # 同じ製品の並べ替えを直列化し、保存済み工程を現在の番号順で取得する。
@@ -58,7 +58,7 @@ def save_product_process(db: Session, original: ProductProcess | None, values: d
         original = ProductProcess(**{**values, "SequenceNumber": target}, CreatedBy=user)
         db.add(original)
         # 同じ拠点の全作業者との担当関係を作り、初期値は担当不可とする。
-        add_worker_process_links(db, original)
+        add_worker_skill_maps(db, original)
     else:
         # 変更した工程を指定番号へ移し、その位置の工程を元の位置へ戻す。
         processes[current - 1], processes[target - 1] = processes[target - 1], processes[current - 1]

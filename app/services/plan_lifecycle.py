@@ -78,13 +78,13 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
             Plan.LocationID == plan.LocationID,
             Plan.PlanID != plan.PlanID,
             Plan.Status == "MASTER",
-            Plan.HorizonStart < plan.HorizonEnd,
-            Plan.HorizonEnd > plan.HorizonStart,
+            Plan.StartAt < plan.EndAt,
+            Plan.EndAt > plan.StartAt,
         )
     ).all()
     for other in overlapping:
-        if other.HorizonStart < plan.HorizonStart:
-            other.Status, other.SupersededAt = "SUPERSEDED", plan.HorizonStart
+        if other.StartAt < plan.StartAt:
+            other.Status, other.SupersededAt = "SUPERSEDED", plan.StartAt
         else:
             other.Status = "DISCARDED"
         other.UpdatedBy = user
@@ -92,10 +92,10 @@ def approve_plan(db: Session, plan: Plan, user: str, force: bool = False) -> Pla
     for old in db.scalars(
         select(Plan).where(
             Plan.LocationID == plan.LocationID, Plan.Status == "SUPERSEDED",
-            Plan.SupersededAt > plan.HorizonStart, Plan.HorizonStart < plan.HorizonStart,
+            Plan.SupersededAt > plan.StartAt, Plan.StartAt < plan.StartAt,
         )
     ):
-        old.SupersededAt = plan.HorizonStart
+        old.SupersededAt = plan.StartAt
 
     plan.Status, plan.ApprovedAt, plan.ApprovedBy, plan.UpdatedBy = "MASTER", jst_now(), user, user
     order_ids = select(Task.OrderID).join(PlanAssignment, PlanAssignment.TaskID == Task.TaskID).where(
@@ -129,7 +129,7 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
     new = Plan(
         LocationID=plan.LocationID,
         PlanName=plan_name, Status="DRAFT",
-        HorizonStart=plan.HorizonStart, HorizonEnd=plan.HorizonEnd, CalculationSettingID=plan.CalculationSettingID,
+        StartAt=plan.StartAt, EndAt=plan.EndAt, CalculationSettingID=plan.CalculationSettingID,
         BasePlanID=plan.BasePlanID, Remarks=plan.Remarks, CreatedBy=user,
     )
     db.add(new)
@@ -160,7 +160,7 @@ def master_assignments(db: Session, location_id: int, start: datetime, end: date
     plans = db.scalars(
         select(Plan).where(
             Plan.LocationID == location_id, Plan.Status.in_(["MASTER", "SUPERSEDED"]),
-            Plan.HorizonStart < end, Plan.HorizonEnd > start,
+            Plan.StartAt < end, Plan.EndAt > start,
         )
     ).all()
     chosen: dict[int, tuple[bool, PlanAssignment]] = {}

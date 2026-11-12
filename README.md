@@ -6,7 +6,9 @@
 
 # TONOPS-SCH-backend
 
-> 作業者4マスタを追加し、全27テーブル・313カラムへ更新。作業者3人・全工程リンク54件・勤務36件・不在1件を登録する。既存の工程新規追加時にも担当不可のリンクを生成する。作業者画面・CRUD API・計画計算への接続は今回追加しない。[仕様と作成手順](docs/WORKER_MASTERS.md)を参照。
+> 2026-11-12：設備の種別・個別カレンダーと計算時間上限を廃止。計画・停止例外・計算実行の開始終了はStartAt・EndAt、担当工程はM_WorkerSkillMap・WorkerSkillMapIDに統一。作業中実績はEndAt・StatusをNULLで保存する。[変更一覧・DB作成・確認手順](docs/DB_SCHEMA_UPDATE_20261112.md)を参照。
+
+> 作業者4マスタを追加し、全25テーブル・283カラムへ更新。作業者3人・全工程リンク54件・勤務36件・不在1件を登録する。既存の工程新規追加時にも担当不可のリンクを生成する。作業者画面・CRUD API・計画計算への接続は今回追加しない。[仕様と作成手順](docs/WORKER_MASTERS.md)を参照。
 
 > 2026-11-11：`M_Organizations`と関連`OrganizationID`、`M_CalendarPatterns`を削除。`M_Calendars`に曜日・勤務開始終了・勤務名を持たせ、拠点の`DefaultCalendarID`を`CalendarID`へ変更。カレンダー例外は`StartTime`・`EndTime`へ改名し、`IsWorking`を削除。共通監査列`UpdatedAt`・`UpdatedBy`は継続する。[変更内容とDB作成手順](docs/DB_SCHEMA_UPDATE_20261111.md)を参照。
 
@@ -136,6 +138,7 @@ python -m DataBase.setup_database
 
 製品は作るパンそのもの、製品工程は「こねる → 焼く → 包装する」の順に実行する各作業、タスクはオーダーごとの実行対象です。
 製品は`M_Product`、製品に直接紐づく工程は`M_ProductProcesses`、工程の実行候補は`M_ProductProcessResources`、オーダーごとのタスクは`T_Tasks`に保存します。
+タスク用の設備候補・前後関係は保存せず、計算・検証・詳細取得のたびに製品工程とオーダー数量から組み立てます。設備候補・所要時間・工程順・待ち時間のマスタ編集は、タスク再生成なしで次回の計算・検証に反映します。
 製品コード・単位・製品と工程の属性、および工程ルートの名称・版・既定指定は持ちません。パンの分類属性はオーダーに設定し、タスクへ引き継ぎます。
 所要時間は準備＋固定時間＋個数×単位当たり時間で計算し、発酵60分・冷却30分は工程間の待ち時間として表現します。
 食パン200個の場合、作業時間はこねる40分、焼く55分、包装する35分です。時間はデモ用の仮設定です。
@@ -145,6 +148,7 @@ python -m DataBase.setup_database
 
 今回の構成は新規DB用です。この初期設定は既存テーブル・カラムを削除・変換しないため、旧構成のDBは作り直してから実行してください。
 SSMSで手動作成する場合は、`DataBase/query/create_database_sqlserver.sql` → `schema_sqlserver.sql` → `seed_demo_sqlserver.sql`の順に実行します。Pythonの初期設定と手動SQLのデータ登録は、どちらか一方を使ってください。
+現在の製品工程構成を持つ既存DBで旧タスク条件2テーブルだけを削除する場合は、`DataBase/query/remove_task_condition_tables_sqlserver.sql`を更新後のアプリと併せて適用します。初期設定の再実行だけでは既存テーブルを削除しません。変更内容と確認手順は[タスク条件の組み立て](docs/TASK_CONDITIONS.md)を参照してください。
 SQLファイルや実行結果のファイル出力は行いません。既存の手動実行用SQLは`DataBase/query`フォルダにあります。
 
 ---
@@ -194,7 +198,7 @@ python -m app.worker
 ### 4.2 Swagger UI から（画面なし）
 
 1. `POST /api/v1/plans`:
-   `{"locationId": 1, "horizonStart": "2026-10-28T06:00:00", "horizonEnd": "2026-10-31T06:00:00", "planName": "第44週・計画A"}`
+   `{"locationId": 1, "startAt": "2026-10-28T06:00:00", "endAt": "2026-10-31T06:00:00", "planName": "第44週・計画A"}`
    （オフセットなしの日時は拠点の現地時刻。日付は翌日にしてください）
 2. `POST /api/v1/plans/{planId}/solve` に `{"timeLimitSec": 20}`
    （ワーカーなしで試す場合は `{"wait": true}` を付けるとリクエスト内で計算します）
