@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.models.masters import Location, Product
 from app.models.transactions import (
-    ORDER_STATUSES, ORDER_TYPE, PLAN_OWNERS, WorkActual, Order, PlanAssignment, Task,
+    ORDER_STATUSES, WorkActual, Order, PlanAssignment, Task,
 )
 
 
 # 新規登録時にDBが補う値。明示的なnullと未送信を区別する。
-ORDER_DEFAULTS = {"OrderType": "ORDER", "Status": "OPEN", "Priority": 50, "PlanOwner": "SCHEDULER"}
+ORDER_DEFAULTS = {"Status": "OPEN", "Priority": 50}
 
 
 # 送信された値と既存値を組み合わせ、保存してよい入力か確認する。
@@ -35,7 +35,7 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     # 文字項目は前後の空白を除き、DBの最大文字数を超える入力を防ぐ。
     for key, label, maximum, required in (
         ("WBSNumber", "WBS番号", 30, True), ("OrderName", "名称", 200, True),
-        ("CustomerName", "顧客", 100, False), ("Remarks", "備考", 500, False),
+        ("CustomerName", "納品先", 100, False), ("Remarks", "備考", 500, False),
     ):
         # 今回保存する文字列。
         text = value(key)
@@ -47,11 +47,9 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
         if text is not None and len(text) > maximum:
             raise HTTPException(422, f"{label}は{maximum}文字以内にしてください。")
 
-    for key, allowed, label in (
-        ("OrderType", ORDER_TYPE, "種別"), ("Status", ORDER_STATUSES, "状態"), ("PlanOwner", PLAN_OWNERS, "計画の管理元"),
-    ):
-        if value(key) not in allowed:
-            raise HTTPException(422, f"{label}を選び直してください。")
+    # 状態の保存値が、オーダーで使用できる選択肢に含まれるか確認する。
+    if value("Status") not in ORDER_STATUSES:
+        raise HTTPException(422, "状態を選び直してください。")
 
     # 数量はDBのNUMERIC(18,3)に収まる、0以上の数値に制限する。
     quantity = value("Quantity")
@@ -67,8 +65,6 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     # 納期が開始可能日時より前になっていないか確認する。出荷日時は任意の情報として保持する。
     if value("ReleaseAt") is not None and value("DeadLine") is not None and value("ReleaseAt") > value("DeadLine"):
         raise HTTPException(422, "納期は製造開始可能日時以降に設定してください。")
-    if value("AttributesJSON") is not None and not isinstance(value("AttributesJSON"), dict):
-        raise HTTPException(422, "属性は項目名と値の組合せで入力してください。")
 
     # 更新操作で所属拠点を変え、タスクと設備の所属が食い違うことを防ぐ。
     location_id = value("LocationID")
@@ -92,10 +88,10 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
         raise HTTPException(409, "同じ拠点でWBS番号が登録済みです。削除済みも含め、別の番号を指定してください。")
 
     # 計画・実績があるタスクの内容とオーダーが食い違わないよう、生成元の変更を防ぐ。
-    if original is not None and any(changed(key) for key in ("ProductID", "Quantity", "AttributesJSON")):
+    if original is not None and any(changed(key) for key in ("ProductID", "Quantity")):
         # このオーダーに属するタスクの識別番号。
         task_ids = select(Task.TaskID).where(Task.OrderID == original.OrderID)
         if (db.scalar(select(PlanAssignment.AssignmentID).where(PlanAssignment.TaskID.in_(task_ids)).limit(1)) is not None
                 or db.scalar(select(WorkActual.WorkActualID).where(WorkActual.TaskID.in_(task_ids)).limit(1)) is not None
                 or db.scalar(select(Task.TaskID).where(Task.OrderID == original.OrderID, Task.Status != "NOT_STARTED").limit(1)) is not None):
-            raise HTTPException(409, "計画に割付済み、または作業開始・実績登録済みのため、製品・数量・属性は変更できません。")
+            raise HTTPException(409, "計画に割付済み、または作業開始・実績登録済みのため、製品・数量は変更できません。")

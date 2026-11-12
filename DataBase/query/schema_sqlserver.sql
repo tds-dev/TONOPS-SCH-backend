@@ -1,5 +1,6 @@
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
 -- 改名したID・名称と外部キーを統一し、出荷日時は任意入力として保持する。
+-- オーダーは種別・計画の管理元・属性の列を持たず、タスク固有の属性は保持する。
 -- 設備の費用・属性、オーダーとタスクの親ID、節目指定・予定工数の6列は持たない。
 -- 組織と勤務パターンは廃止し、拠点ごとの曜日・時間帯をM_Calendarsへ直接保存する。
 -- 曜日勤務の時刻はTIME、休日・停止の例外日時は日本時間のDATETIME2とする。
@@ -239,7 +240,6 @@ CREATE TABLE [T_Orders] (
 	[LocationID] INTEGER NOT NULL, 
 	[WBSNumber] NVARCHAR(30) NOT NULL, 
 	[OrderName] NVARCHAR(200) NOT NULL, 
-	[OrderType] NVARCHAR(20) NOT NULL, 
 	[ProductID] INTEGER NULL, 
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[CustomerName] NVARCHAR(100) NULL, 
@@ -248,8 +248,6 @@ CREATE TABLE [T_Orders] (
 	[ShippingDate] DATETIME2(7) NULL, 
 	[Priority] INTEGER NOT NULL, 
 	[Status] NVARCHAR(20) NOT NULL, 
-	[PlanOwner] NVARCHAR(20) NOT NULL, 
-	[AttributesJSON] NVARCHAR(max) NULL, 
 	[Remarks] NVARCHAR(500) NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
@@ -258,9 +256,7 @@ CREATE TABLE [T_Orders] (
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_T_Orders] PRIMARY KEY ([OrderID]), 
 	CONSTRAINT [UQ_T_Orders_LocationID_WBSNumber] UNIQUE ([LocationID], [WBSNumber]), 
-	CONSTRAINT [CK_T_Orders_OrderType] CHECK (OrderType IN ('ORDER','PROJECT')), 
 	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
-	CONSTRAINT [CK_T_Orders_PlanOwner] CHECK (PlanOwner IN ('SCHEDULER','EXTERNAL')), 
 	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
 );

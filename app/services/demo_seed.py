@@ -76,8 +76,9 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             SortOrder=i, CreatedBy=USER,
         ))
 
+    # 分類属性の保存先はタスク。オーダーには属性を登録しない。
     db.add(m.AttributeDefinition(
-        EntityType="ORDER", AttributeKey="family",
+        EntityType="TASK", AttributeKey="family",
         Label="パンの分類", DataType="ENUM", EnumValuesJSON=["食事パン", "菓子パン", "ナッツ入り"], CreatedBy=USER,
     ))
 
@@ -107,8 +108,8 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
 
     # 製品は名称だけを管理し、工程を直接紐づける。
     products = {}
-    # 分類は製品マスタには保存せず、後でデモオーダーの属性へ設定する。
-    order_families = {}
+    # 分類は製品マスタには保存せず、後でデモタスクの属性へ直接設定する。
+    task_families = {}
     for name, family in [
         ("食パン", "食事パン"), ("バターロール", "食事パン"),
         ("フランスパン", "食事パン"), ("あんパン", "菓子パン"),
@@ -133,7 +134,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             ))
             product.processes.append(process)
         products[name] = product
-        order_families[name] = family
+        task_families[product.ProductID] = family
     db.flush()
 
     # 作業者と不在の基準日。既存オーダーと同じ翌日06:00を使用する。
@@ -191,19 +192,21 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         ("ORD-1006", "くるみパン", 160, 58, 40, "北口店"),
         ("ORD-1007", "食パン", 100, 32, 50, "中央店"),
     ]:
-        # 数量の「個」はデモの表示名に含める。分類属性はオーダーからタスクへ引き継ぐ。
+        # 数量の「個」はデモの表示名に含める。分類属性はオーダーへ保存しない。
         product = products[name]
         order = t.Order(
-            LocationID=location.LocationID, WBSNumber=no, OrderName=f"{product.ProductName} {qty}個（{customer}向け）", OrderType="ORDER",
+            LocationID=location.LocationID, WBSNumber=no, OrderName=f"{product.ProductName} {qty}個（{customer}向け）",
             ProductID=product.ProductID, Quantity=qty, CustomerName=customer, ReleaseAt=start,
             DeadLine=start + timedelta(hours=due_h), Priority=prio, Status="OPEN", CreatedBy=USER,
-            AttributesJSON={"family": order_families[name]},
         )
         db.add(order)
         orders.append(order)
     db.commit()
     for order in orders:
-        generate_tasks(db, order, USER)
+        # デモの段取り替え・曜日ルール・色分けを維持するため、生成後のタスクへ分類を直接登録する。
+        for task in generate_tasks(db, order, USER):
+            task.AttributesJSON = {"family": task_families[order.ProductID]}
+    db.commit()
 
     # 既存オーダーと同じ翌日06:00から3日間の下書きを、通常の名前検証を通して登録する。
     # 両方とも同じ計算条件で開始し、割付・評価値は画面で計算してから確認する。

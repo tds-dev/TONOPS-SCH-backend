@@ -3,7 +3,7 @@
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 # TONOPS-SCH システム概要
 
-> 現行DBの変更（2026-11-12）：25テーブル・283カラム。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
+> 現行DBの変更（2026-11-12）：25テーブル・280カラム。オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
 
 
 2026-11-12：[タスク条件の組み立て](TASK_CONDITIONS.md)に対応。設備候補・前後関係の複製保存を廃止し、製品工程から利用時に計算する。
@@ -158,7 +158,7 @@ flowchart TD
 |---|---|---|
 | リソース | M_Resources（論理削除を除く） | 能力（Capacity）、稼働枠 |
 | 稼働枠 | M_Calendars / M_CalendarExceptions | リソースのLocationIDから所属拠点を求め、拠点のCalendarIDを入口に同じLocationIDの全有効勤務行を計画期間に展開。拠点内の例外を休日・停止として除外。カレンダー指定がなければ常時稼働 |
-| オーダー | T_Orders | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、`PlanOwner = SCHEDULER`、着手可能日時が期間終了より前 |
+| オーダー | T_Orders | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、着手可能日時が未指定または期間終了より前 |
 | 作業 | T_Tasks | 上記オーダーの作業のうち、サマリーでなく `DONE`/`CANCELLED` 以外 |
 | 候補 | M_ProductProcessResources + T_Orders.Quantity | 所要時間をその都度計算。グループ指定はグループ内の有効リソースに展開 |
 | 依存関係 | M_ProductProcesses + T_Tasks.ProductProcessID | 同一オーダーの隣接工程をFSで結び、前工程の待ち時間を使う |
@@ -374,7 +374,7 @@ erDiagram
 | DeleteFlag | BIT | |
 
 #### M_AttributeDefinitions（属性定義）
-オーダー・タスクの `AttributesJSON` に入れる項目の定義。区分の保存値にはPRODUCT・RESOURCEも残すが、製品・リソースは属性保存列を持たない。
+タスクの `AttributesJSON` に入れる項目の定義。区分の保存値にはPRODUCT・RESOURCE・ORDERも残すが、製品・リソース・オーダーは属性保存列を持たない。
 
 | 列 | 型 | 説明 |
 |---|---|---|
@@ -472,7 +472,6 @@ erDiagram
 | LocationID | INT FK | |
 | WBSNumber | NVARCHAR(30) | 拠点内で一意（受注番号・プロジェクト番号） |
 | OrderName | NVARCHAR(200) | |
-| OrderType | NVARCHAR(20) | 値: `ORDER`（受注）`PROJECT`（プロジェクト） |
 | ProductID | INT FK NULL | 製品。タスク生成時は指定が必要で、この製品の工程番号順に展開する |
 | Quantity | DECIMAL(18,3) NULL | 数量 |
 | CustomerName | NVARCHAR(100) | |
@@ -481,8 +480,6 @@ erDiagram
 | ShippingDate | DATETIME2(7) NULL | 任意の出荷日時（日本時間）。自動計算の納期条件には使用しない |
 | Priority | INT | 1 = 最優先 … 100（既定 50） |
 | Status | NVARCHAR(20) | 値: `OPEN`（未計画）`PLANNED`（計画済）`IN_PROGRESS` `DONE` `CANCELLED` |
-| PlanOwner | NVARCHAR(20) | 値: `SCHEDULER`（このシステムで計画）`EXTERNAL`（SynViz など外部で計画、計算対象外） |
-| AttributesJSON | NVARCHAR(MAX) | オーダー固有の属性。タスク生成時にタスクへ引き継ぐ |
 | Remarks | NVARCHAR(500) | |
 | DeleteFlag | BIT | |
 
@@ -500,7 +497,7 @@ erDiagram
 | DeadlineAt | DATETIME2(7) NULL | 作業単位の期限 |
 | Status | NVARCHAR(20) | 値: `NOT_STARTED` `IN_PROGRESS` `DONE` `CANCELLED`（配台表の開始・完了で更新） |
 | ProgressPct | DECIMAL(5,2) | 予約 |
-| AttributesJSON | NVARCHAR(MAX) | オーダーから引き継いだタスク属性。ルール・段取り・色分けはこの値を使う |
+| AttributesJSON | NVARCHAR(MAX) | タスク固有の属性。新規生成時は未指定。ルール・段取り・色分けは既存値を使い、デモではタスクへ直接設定する |
 
 設備候補・前後関係の専用テーブルは廃止した。詳細は[タスク条件の組み立て](TASK_CONDITIONS.md)を参照。
 
@@ -752,10 +749,10 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 ### 11.1 属性で業種固有の情報を表す
 
 食品のアレルゲン、塗装の色、プロジェクトのスキルなど、業種固有の情報は **AttributesJSON** に入れます。
-タスク生成時にオーダーの属性を引き継ぎ、ルールのセレクター・段取り替えの基準・ボードの色分けに使います。製品・工程のマスタに属性列はありません。
+タスクに保存された属性を、ルールのセレクター・段取り替えの基準・ボードの色分けに使います。製品・工程・オーダーには属性列がなく、新規生成タスクの属性は未指定です。
 
 例: アレルゲンの切り替えに洗浄 120 分が必要
-1. オーダーの `AttributesJSON` に `{"allergen": "milk"}` などを設定し、生成したタスクへ引き継ぐ
+1. タスクの `AttributesJSON` に `{"allergen": "milk"}` などを設定する（既存のタスク更新APIを使用）
 2. `M_ProductSwitchTimes` に `AttributeKey = "allergen"` のマトリクスを作り、`M_ProductSwitchRules` に `milk → none: 120 分` などを登録
 3. 戻れない順序は `IsForbidden = 1`
 
@@ -777,7 +774,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | システム | 連携方法（設計） |
 |---|---|
 | **作業実績** | SCHからの入力のみを想定。実績CRUDは追加せず、T_WorkActualsは開始・終了と完了・中断を保存する定義までを整備 |
-| **SynViz S2（プロジェクト計画）** | SynViz で計画したプロジェクトは `T_Orders.OrderType = PROJECT`、`PlanOwner = EXTERNAL` として取り込み、作業の日程は外部の値を尊重（このシステムでは計算しない）。リソースの負荷・配台表には含める |
+| **SynViz S2（プロジェクト計画）** | 連携方法は未実装。オーダーの種別・管理元を廃止したため、外部予定の識別方法と計算対象の扱いは連携実装時に設計する |
 | CSV 取込 | オーダー・マスタの一括登録（フェーズ 5） |
 
 ---

@@ -69,7 +69,7 @@ class Calendar(AuditMixin, SoftDeleteMixin, Base):
 
 
 class CalendarException(AuditMixin, Base):
-    """拠点共通の休日・停止時間。週次勤務から指定日時を差し引く。"""
+    """非稼働日。週次勤務から指定日時を差し引く。"""
 
     __tablename__ = "M_CalendarExceptions"
     # 終了が開始より後の停止時間のみ登録する。
@@ -128,7 +128,7 @@ class AttributeDefinition(AuditMixin, Base):
         CheckConstraint(in_check("DataType", DATA_TYPES), name="DataType"),
     )
     AttributeDefID = Column(Integer, primary_key=True, autoincrement=True)
-    # オーダーの属性はORDER区分として保存・検索する。
+    # 属性の対象区分。旧区分も保存値として許可し、現在のタスク属性にはTASKを使う。
     EntityType = Column(String(20), nullable=False)
     AttributeKey = Column(String(50), nullable=False)
     Label = Column(String(100), nullable=False)

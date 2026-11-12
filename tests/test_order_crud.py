@@ -105,8 +105,9 @@ class OrderCrudTest(InMemoryApiTestCase):
         order_id = order["orderId"]
         self.assertEqual(order["releaseAt"], "2026-10-30T09:00:00+09:00")
         self.assertEqual(order["shippingDate"], "2026-10-30T15:00:00+09:00")
-        # 廃止した親オーダーIDをAPIへ返さない。
-        self.assertNotIn("parentOrderId", order)
+        # 廃止した親オーダーID・種別・計画の管理元・属性をAPIへ返さない。
+        for key in ("parentOrderId", "orderType", "planOwner", "attributesJSON"):
+            self.assertNotIn(key, order)
         self.assertEqual(order["priority"], 50)
         self.assertEqual(order["createdBy"], "order-test")
         self.assertEqual(self.call("GET", f"/orders/{order_id}")[0], 200)
@@ -129,12 +130,32 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.assertEqual(len(self.call("GET", "/orders?locationId=1")[1]), 1)
         self.assertEqual(len(self.call("GET", "/orders?locationId=1&includeDeleted=true")[1]), 2)
 
+    # 削除した列がDBとAPIの登録・更新・応答の定義に残らないことを確認する。
+    def test_removed_order_columns_are_absent_from_database_and_api(self):
+        # APIが公開するオーダーの3種類の項目定義。
+        schemas = self.app.openapi()["components"]["schemas"]
+        for column, field in (("OrderType", "orderType"), ("PlanOwner", "planOwner"), ("AttributesJSON", "attributesJSON")):
+            with self.subTest(column=column):
+                self.assertNotIn(column, Order.__table__.columns)
+                for name in ("OrderCreate", "OrderUpdate", "OrderRead"):
+                    self.assertNotIn(field, schemas[name]["properties"])
+
+    # オーダーを編集しても、タスクへ直接登録した既存属性を保持する。
+    def test_order_edit_preserves_existing_task_attributes(self):
+        # 属性を持たないオーダーから生成したタスクへ、作業固有の分類を設定する。
+        order = self.create()
+        status, tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')
+        self.assertEqual(status, 200, tasks)
+        task_id = tasks[0]["taskId"]
+        self.assertEqual(self.call("PATCH", f"/tasks/{task_id}", {"attributesJSON": {"family": "A"}})[0], 200)
+        self.assertEqual(self.call("PATCH", f'/orders/{order["orderId"]}', {"orderName": "変更後"})[0], 200)
+        self.assertEqual(self.call("GET", f'/orders/{order["orderId"]}/tasks')[1][0]["attributesJSON"], {"family": "A"})
+
     # 無効な値を保存せず、必須・範囲・所属・日時・選択値を確認する。
     def test_rejects_invalid_create(self):
         for values in ({"wbsNumber": "  "}, {"orderName": "x" * 201}, {"quantity": -1}, {"quantity": 0.0001},
                        {"quantity": 1e15}, {"priority": 0}, {"priority": None}, {"status": "UNKNOWN"},
-                       {"orderType": None}, {"planOwner": "UNKNOWN"}, {"productId": 2},
-                       {"locationId": 999}, {"attributesJSON": []},
+                       {"productId": 2}, {"locationId": 999},
                        {"releaseAt": "2026-10-30T21:00:00+09:00", "deadLine": "2026-10-30T20:00:00+09:00"}):
             with self.subTest(values=values):
                 status, result = self.call("POST", "/orders", {"locationId": 1, "wbsNumber": "INVALID", "orderName": "依頼", **values})
@@ -197,7 +218,7 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.db.get(Task, 1).Status = "NOT_STARTED"
         self.db.add(WorkActual(TaskID=1, Status="DONE", StartAt=datetime(2026, 10, 30, 6), EndAt=datetime(2026, 10, 30, 7)))
         self.db.commit()
-        self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"attributesJSON": {"family": "B"}})[0], 409)
+        self.assertEqual(self.call("PATCH", f"/orders/{order_id}", {"quantity": 20})[0], 409)
         self.assertEqual(self.call("DELETE", f"/orders/{order_id}")[0], 204)
         self.assertIsNotNone(self.db.scalar(select(WorkActual.WorkActualID)))
         self.assertIsNotNone(self.db.get(Task, 1))
@@ -322,7 +343,7 @@ class OrderCrudTest(InMemoryApiTestCase):
             with self.subTest(invalid=invalid):
                 self.assertEqual(self.call("POST", "/product-process-resources", {**body, **invalid})[0], 422)
 
-    # 登録順と異なる工程番号順で生成し、候補・時間・待ち時間・オーダー属性を保持する。
+    # 登録順と異なる工程番号順で生成し、候補・時間・待ち時間を維持して属性なしにする。
     def test_product_process_generation_preserves_execution_data(self):
         # 既存の工程を後続にし、後から登録する工程を先行にする。
         self.db.get(ProductProcess, 1).SequenceNumber = 2
@@ -335,8 +356,8 @@ class OrderCrudTest(InMemoryApiTestCase):
             ProductProcessResource(ProductProcessID=1, ResourceGroupID=1, FixedMinutes=7),
         ])
         self.db.commit()
-        # 属性はオーダーから各タスクへ引き継ぐ。
-        order = self.create(quantity=3, attributesJSON={"family": "A"})
+        # オーダー属性の保存列がなくても、数量を用いたタスク生成を行う。
+        order = self.create(quantity=3)
         status, tasks = self.call("POST", f'/orders/{order["orderId"]}/generate-tasks')
         self.assertEqual(status, 200, tasks)
         self.assertEqual([task["productProcessId"] for task in tasks], [2, 1])
@@ -346,7 +367,7 @@ class OrderCrudTest(InMemoryApiTestCase):
         self.assertEqual(tasks[0]["options"][0]["priority"], 2)
         self.assertEqual(tasks[1]["options"][0]["resourceGroupId"], 1)
         self.assertEqual(tasks[1]["options"][0]["durationMin"], 7)
-        self.assertTrue(all(task["attributesJSON"] == {"family": "A"} for task in tasks))
+        self.assertTrue(all(task["attributesJSON"] is None for task in tasks))
         # 先行工程に指定した待ち時間が、生成された前後関係へ移る。
         status, dependencies = self.call("GET", f'/orders/{order["orderId"]}/dependencies')
         self.assertEqual(status, 200, dependencies)

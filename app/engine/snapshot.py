@@ -86,12 +86,11 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         if r.ResourceGroupID:
             members.setdefault(r.ResourceGroupID, []).append(r.ResourceID)
 
-    # ---- オーダーとタスク
+    # ---- オーダーとタスク。所属拠点・状態・開始可能日時で計算対象を選ぶ。
     order_filter = (
         Order.LocationID == location.LocationID,
         Order.DeleteFlag == false(),
         Order.Status.notin_(["DONE", "CANCELLED"]),
-        Order.PlanOwner == "SCHEDULER",
         or_(Order.ReleaseAt.is_(None), Order.ReleaseAt < end),
     )
     orders_rows = db.scalars(select(Order).where(*order_filter)).all()

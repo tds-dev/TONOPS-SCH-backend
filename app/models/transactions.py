@@ -21,10 +21,8 @@ from app.models.types import DateTime, String, Text
 # SQLite は INTEGER PRIMARY KEY のみ自動採番するため、BIGINT は SQL Server でのみ使う。
 BigId = BigInteger().with_variant(Integer, "sqlite")
 
-# オーダーの種別と状態は、改称前と同じ保存値を使用する。
-ORDER_TYPE = ["ORDER", "PROJECT"]
+# オーダーの進捗状態。完了・取消は計算対象から除外する。
 ORDER_STATUSES = ["OPEN", "PLANNED", "IN_PROGRESS", "DONE", "CANCELLED"]
-PLAN_OWNERS = ["SCHEDULER", "EXTERNAL"]
 TASK_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "DONE", "CANCELLED"]
 PLAN_STATUSES = ["DRAFT", "MASTER", "SUPERSEDED", "DISCARDED", "ARCHIVED"]
 ASSIGNMENT_SOURCES = ["SOLVER", "MANUAL", "IMPORT"]
@@ -37,15 +35,13 @@ ACTUAL_STATUSES = ["DONE", "SUSPENDED"]
 
 # ---------------------------------------------------------------- 需要
 class Order(AuditMixin, SoftDeleteMixin, Base):
-    """オーダー（受注・プロジェクト）。変更後のDB名称を直接使用する。"""
+    """製品・数量・納期を持つオーダー。種別・管理元・属性は保持しない。"""
 
     # 実DBもT_OrdersとOrder系の列名へ変更されることを前提とする。
     __tablename__ = "T_Orders"
     __table_args__ = (
         UniqueConstraint("LocationID", "WBSNumber"),
-        CheckConstraint(in_check("OrderType", ORDER_TYPE), name="OrderType"),
         CheckConstraint(in_check("Status", ORDER_STATUSES), name="Status"),
-        CheckConstraint(in_check("PlanOwner", PLAN_OWNERS), name="PlanOwner"),
     )
     OrderID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
@@ -53,8 +49,6 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     # 同じ拠点内でオーダーを区別するWBS番号。
     WBSNumber = Column(String(30), nullable=False)
     OrderName = Column(String(200), nullable=False)
-    # 受注かプロジェクトかを表す種別。保存値と動作は維持する。
-    OrderType = Column(String(20), nullable=False, default="ORDER")
     # オーダーの対象製品。ProductIDで製品マスタを参照する。
     ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
@@ -65,8 +59,6 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     ShippingDate = Column(DateTime, nullable=True)
     Priority = Column(Integer, nullable=False, default=50)  # 1 = 最優先
     Status = Column(String(20), nullable=False, default="OPEN")
-    PlanOwner = Column(String(20), nullable=False, default="SCHEDULER")
-    AttributesJSON = Column(JSON, nullable=True)
     Remarks = Column(String(500), nullable=True)
 
     # このオーダーに属するタスク。親子階層を持たず、工程順で取得する。
@@ -98,7 +90,7 @@ class Task(AuditMixin, Base):
     # 全計画で共有する作業状態と進捗率。
     Status = Column(String(20), nullable=False, default="NOT_STARTED")
     ProgressPct = Column(Numeric(5, 2), nullable=False, default=0)
-    # オーダーから引き継ぐ分類属性。ルールと製品切替時間の判定に使う。
+    # タスク固有の分類属性。ルールと製品切替時間の判定に使う。
     AttributesJSON = Column(JSON, nullable=True)
 
     # この作業が所属するオーダー。

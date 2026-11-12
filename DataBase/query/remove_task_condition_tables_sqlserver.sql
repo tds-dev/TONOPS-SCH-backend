@@ -14,7 +14,6 @@ BEGIN TRY
         LEFT JOIN [M_ProductProcesses] AS p ON p.[ProductProcessID] = t.[ProductProcessID]
         WHERE t.[IsSummary] = 0 AND t.[Status] NOT IN ('DONE', 'CANCELLED')
           AND o.[DeleteFlag] = 0 AND o.[Status] NOT IN ('DONE', 'CANCELLED')
-          AND o.[PlanOwner] = 'SCHEDULER'
           AND (p.[ProductProcessID] IS NULL OR p.[ProductID] <> o.[ProductID] OR o.[ProductID] IS NULL)
     )
         THROW 50001, N'計算対象のタスクを、所属オーダーの製品工程へ紐づけてから移行してください。', 1;

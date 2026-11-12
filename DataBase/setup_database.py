@@ -13,7 +13,8 @@ python -m DataBase.setup_database
 DataBase配下のDB・テーブル作成とデモデータ登録を行う初期設定用プログラム。
 製品・工程・実行候補をM_Product・M_ProductProcesses・M_ProductProcessResourcesへ登録する。
 工程ルートの選択・版管理は行わず、工程はProductIDで製品に直接紐づける。
-製品コード・単位・製品と工程の属性は持たず、分類属性はオーダーに登録する。
+製品コード・単位・製品と工程の属性は持たず、デモの分類属性はタスクへ直接登録する。
+オーダーは種別・計画の管理元・属性の列を持たない。
 
 バックエンドのルートで python -m DataBase.setup_database を実行する。
 query配下のSQLはSSMS用として保持し、この処理ではモデルから直接DBを操作する。
@@ -27,7 +28,7 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 デモ拠点が登録済みの場合は、以前の内容も含めて既存データを保持する。
 勤務時間はM_Calendarsへ直接登録し、組織・カレンダーパターンは作成しない。
 作業者3人・全工程リンク54件・勤務36件・不在1件も作成する。作業者の画面・API・計算連携はまだ行わない。
-2026-11-12: 全25テーブル・283列。担当工程はM_WorkerSkillMap・WorkerSkillMapIDで識別する。
+2026-11-12: 全25テーブル・280列。担当工程はM_WorkerSkillMap・WorkerSkillMapIDで識別する。
 設備は所属拠点の勤務を共有し、計画・停止例外・計算実行の開始終了列をStartAt・EndAtへ統一する。
 計算時間上限は持たず、作業中の実績はEndAt・StatusともNULL、終了時はDONEまたはSUSPENDEDとする。
 """

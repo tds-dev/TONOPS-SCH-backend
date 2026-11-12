@@ -1,8 +1,49 @@
 <!-- 2026-11-12のDB・API・画面・Excelの変更内容、初期設定と確認手順を記録する資料。 -->
 # DB定義の更新（2026-11-12）
 
-新規DB用のSQL、Python初期設定、バックエンド、Angular画面、フロントエンドの`docs/Book1.xlsx`を25テーブル・283カラムに揃えた。
+新規DB用のSQL、Python初期設定、バックエンド、Angular画面は25テーブル・280カラム。追加更新でオーダーの3列を廃止した。Excelの今回分はユーザーが更新する。
 以下はコードとメモリDBで確認した仕様。実SQL Serverへの接続・作成とブラウザー操作は行っていない。
+
+## オーダー3列の追加廃止
+
+- 実装上のテーブル名は`T_Orders`。`OrderType`・`PlanOwner`・`AttributesJSON`と、種別・管理元のCHECK制約を削除した。
+- APIはモデルから項目定義を作る既存方式を継続し、登録・更新・応答から3項目を除いた。画面の種別と、非表示で保持していた管理元・属性も送信しない。
+- 計算対象は所属拠点・削除状態・進捗状態・開始可能日時で選ぶ。管理元による除外は行わない。
+- 新規生成・再生成タスクの属性は未指定。再生成しない既存タスクの`T_Tasks.AttributesJSON`と、その属性を使うルール・段取り替え・色分けは維持する。
+- デモ分類はPython版・SQL版ともタスクへ直接登録し、属性定義の対象区分もTASKにする。オーダー7件・タスク21件・下書き計画2件などの件数は維持する。
+- 既存DBの3列削除は本スクリプトの再実行では行わない。ユーザーによる列削除または新規DB作成後に、更新したアプリを使用する。
+- 今回はExcelを読み取り・変更していない。以下のExcel更新と283列の照合記録は、この追加廃止より前の作業記録。
+
+今回の変更ファイル（各プロジェクトのルートからの相対パス）：
+
+```text
+フロントエンド
+src/app/interfaces/order.interface.ts
+src/app/components/main/orders/forms/order-form.component.ts
+src/app/components/main/orders/orders.component.ts
+docs/PRODUCT_PROCESSES.md
+
+バックエンド
+app/models/transactions.py
+app/models/masters.py（属性対象区分の説明コメントのみ）
+app/services/order_validation.py
+app/services/order_service.py
+app/services/demo_seed.py
+app/engine/snapshot.py
+DataBase/setup_database.py
+DataBase/query/schema_sqlserver.sql
+DataBase/query/seed_demo_sqlserver.sql
+DataBase/query/remove_task_condition_tables_sqlserver.sql
+tests/test_order_crud.py
+tests/test_schema_updates.py
+docs/SYSTEM_OVERVIEW.md
+docs/TASK_CONDITIONS.md
+docs/DB_SCHEMA_UPDATE_20261112.md
+```
+
+追加更新の確認結果：`test_order_crud`・`test_schema_updates`の43件がメモリDBで成功。削除3列がDBモデルと登録・更新・応答のAPI定義に含まれないこと、オーダー編集時に既存タスク属性を保持すること、Python／SQLの仮データで分類属性と21件の計算対象タスクを保持することを確認した。
+環境に`pydantic-settings`がないため、設定読込部分だけをテスト実行中のメモリ上で`pydantic.BaseModel`へ置き換え、実設定を読まずに実行した。`OR-Tools`も未導入のため、最適化計算の実行は行っていない。
+モデルと作成SQLは25テーブル・280列の列名・列順・NULL可否が一致し、全テーブルのSQL Server向け作成文を生成できることを確認した。SQL Serverへの適用とブラウザー操作は未実施。
 
 ## 変更前後
 

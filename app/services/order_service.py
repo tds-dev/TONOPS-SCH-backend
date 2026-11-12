@@ -2,8 +2,7 @@
 
 `generate_tasks` はオーダーの製品に直接登録された工程をT_Tasksへ展開する。
 設備候補・所要時間・工程間の待ち時間は、保存せず利用時に製品マスタから組み立てる。
-タスク属性はオーダー属性を引き継ぐ。製品・工程には属性を持たせない。
-これにより {"family": "A"} のようなルールのセレクターがタスクに効く。
+新規タスクは属性なしで生成する。既存タスクの属性を使うルール・段取り替えは維持する。
 """
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -57,7 +56,7 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
             db.delete(t)
         db.flush()
 
-    # 工程番号順に作るタスク。属性はオーダーから複製する。
+    # 工程番号順に作るタスク。新規タスクの属性は未指定にする。
     tasks: list[Task] = []
     for seq, process in enumerate(processes, start=1):
         # この工程に対応するオーダー固有のタスク。
@@ -68,7 +67,6 @@ def generate_tasks(db: Session, order: Order, user: str, replace: bool = False) 
             TaskName=process.ProcessName,
             Sequence=seq,
             Status="NOT_STARTED",
-            AttributesJSON=dict(order.AttributesJSON or {}),
             CreatedBy=user,
         )
         db.add(task)

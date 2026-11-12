@@ -56,7 +56,11 @@ class SchemaUpdateTest(InMemoryApiTestCase):
                                     db.execute(text(re.sub(r"\bN'", "'", line)))
                             db.commit()
                         # 製品工程とスキル設定を失わず、計算対象も21件のままになる。
-                        self.assertEqual(len(list(db.scalars(select(Task)))), 21)
+                        # オーダー属性を使わず、Python版・SQL版ともタスクにデモ分類を持たせる。
+                        tasks = list(db.scalars(select(Task)))
+                        self.assertEqual(len(tasks), 21)
+                        self.assertTrue(all(task.AttributesJSON and task.AttributesJSON.get("family") for task in tasks))
+                        self.assertEqual({task.AttributesJSON["family"] for task in tasks}, {"食事パン", "菓子パン", "ナッツ入り"})
                         self.assertEqual(len(list(db.scalars(select(WorkerSkillMap)))), 54)
                         plans = list(db.scalars(select(Plan)))
                         self.assertEqual(len(plans), 2)
