@@ -105,7 +105,7 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
 
 # ---------------------------------------------------------------- 設定
 class ProductSwitchTime(AuditMixin, Base):
-    """製品切替時間マスタ。設備グループごとの製品工程切替条件をまとめる。"""
+    """製品切替時間マスタ。設備グループごとの製品工程切替条件条件をまとめる。"""
 
     __tablename__ = "M_ProductSwitchTimes"
     # 切替時間設定の識別番号。明細からの参照にも使う。

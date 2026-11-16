@@ -78,7 +78,7 @@ SET @IdentityTable = NULL;
 -- M_ProductSwitchTimes: 1件
 SET @IdentityTable = N'M_ProductSwitchTimes';
 SET IDENTITY_INSERT [M_ProductSwitchTimes] ON;
-INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'ミキサーの製品工程切替', 1, 0, 1, '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
+INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'ミキサーの製品工程切替条件', 1, 0, 1, '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_ProductSwitchTimes] OFF;
 SET @IdentityTable = NULL;
 

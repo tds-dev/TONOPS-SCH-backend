@@ -76,7 +76,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
 
     # 設備グループごとの段取り替え設定。明細は工程IDの確定後に追加する。
     switch_time = m.ProductSwitchTime(
-        LocationID=location.LocationID, ProductSwitchTimeName="ミキサーの製品工程切替",
+        LocationID=location.LocationID, ProductSwitchTimeName="ミキサーの製品工程切替条件",
         ResourceGroupID=groups["KNEAD"].ResourceGroupID, DefaultMinutes=0, CreatedBy=USER,
     )
     db.add(switch_time)

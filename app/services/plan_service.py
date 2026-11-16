@@ -51,6 +51,10 @@ def create_plan(
         if setting is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "この拠点の計算設定がありません")
         calculation_setting_id = setting.CalculationSettingID
+    # 明示選択した計算設定も所属拠点を確認し、別拠点の条件で計算することを防ぐ。
+    setting = db.get(CalculationSetting, calculation_setting_id)
+    if setting is None or setting.LocationID != location_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ拠点の計算設定を指定してください。")
     if base_plan_id is None and use_master_as_base:
         master = current_master(db, location_id, start_at)
         base_plan_id = master.PlanID if master else None

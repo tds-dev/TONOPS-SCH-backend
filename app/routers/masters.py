@@ -10,6 +10,7 @@ from app.core.db import get_db
 from app.core.timeutil import to_jst_naive
 from app.models import masters as m
 from app.routers.crud import crud_router
+from app.services.calculation_settings_service import save_calculation_setting
 from app.schemas.base import ApiModel, JstDatetime
 from app.services.calendar_service import (
     delete_calendar,
@@ -57,7 +58,8 @@ routers = [
                 filter_list=filter_worker_skill_maps),
     crud_router(m.ProductSwitchTime, "/product-switch-times", "Configuration", validate_write=validate_switch_time),
     crud_router(m.ProductSwitchRule, "/product-switch-rules", "Configuration", validate_write=validate_switch_rule),
-    crud_router(m.CalculationSetting, "/calculation-settings", "Configuration"),
+    crud_router(m.CalculationSetting, "/calculation-settings", "Configuration",
+                write_handler=save_calculation_setting),
     crud_router(m.Product, "/products", "Products & processes", validate_write=validate_product_write),
     crud_router(m.ProductProcess, "/product-processes", "Products & processes", order_by="SequenceNumber",
                 write_handler=save_product_process, delete_handler=delete_product_process, filter_list=filter_product_process_list),
