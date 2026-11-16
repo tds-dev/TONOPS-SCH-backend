@@ -1,4 +1,4 @@
-<!-- 製品マスタから計算時にタスク条件を作る構成と、DB移行・動作確認の手順。 -->
+<!-- 製品マスタから計算時にタスク条件を作る構成と、DB再作成・動作確認の手順。 -->
 # タスクの設備候補・前後関係を製品マスタから組み立てる
 
 2026-11-12更新。
@@ -34,12 +34,12 @@
 
 オーダー詳細の所要時間は固定準備を含む合計で、「準備○分を含む」と表示する。設備削除前の参照確認も、工程設備候補と既存割付を確認する方式に揃える。
 
-## DB作成・移行
+## DB再作成
 
 新規DBは`python -m DataBase.setup_database`、または`create_database_sqlserver.sql`→`schema_sqlserver.sql`→`seed_demo_sqlserver.sql`で作成する。どちらも旧2テーブルを作らず、製品工程の候補・時間・待ち時間だけを登録する。
 モデルと新規作成SQLのテーブル名・列名・列順は25テーブル・280カラムで一致を確認した。オーダーの種別・計画の管理元・属性は廃止し、新規生成・再生成するタスクは属性未指定とする。再生成しない既存タスクの属性を使うルール・段取り替え・色分けは維持する。
 
-現在の製品工程構成を持つ既存DBには、`DataBase/query/remove_task_condition_tables_sqlserver.sql`を更新後のアプリと併せて適用する。計算対象のタスクが所属オーダーの製品工程へ紐づいているか確認してから、旧2テーブルだけを削除する。旧テーブルの個別変更は移行しない。タスク本体・計画・割付・違反・実績・製品マスタは保持する。初期設定の`create_all`だけでは既存テーブルを削除しない。
+DB構成を変更した場合は、DBを削除してから上記のPython初期設定または手動SQLでDB・テーブル・仮データを再作成する。
 
 ## 確認する操作
 
@@ -49,7 +49,6 @@
 4. 固定・解除、割付解除、課題表示、計画比較、承認、配台表の開始・完了を確認すること。
 5. 既存タスクのID・状態・実績が保持され、旧2テーブルなしでPython仮データとSQL仮データを登録できること。
 
-メモリDBによる40件のテストで、既存CRUD、マスタ編集の反映、自動計算、手動配置・検証、タスク・割付・実績の保持、未生成工程の検出、両方式の仮データ登録を確認した。SQL仮データはINSERT文をSQLiteで実行して登録内容を確認したもので、SQL Server固有の作成・移行SQLの実行確認は別途必要。
 
 ## 変更ファイル
 
@@ -61,10 +60,8 @@
 - `app/engine/snapshot.py`：最新条件を計算へ渡し、未生成工程を検出。
 - `app/routers/orders.py`：読取応答を組み立て、旧2テーブルの汎用APIを削除。
 - `DataBase/query/create_database_sqlserver.sql`、`DataBase/query/schema_sqlserver.sql`、`DataBase/query/seed_demo_sqlserver.sql`：新規作成・仮データを新構成へ変更。
-- `DataBase/query/remove_task_condition_tables_sqlserver.sql`：既存DB用の移行SQLを追加。
 - `DataBase/setup_database.py`、`app/services/demo_seed.py`：新構成の説明・初期登録を整合。
-- `tests/test_task_conditions.py`：最新条件の反映と既存機能の保持を検証。
-- `README.md`、`docs/SYSTEM_OVERVIEW.md`、`docs/TASK_CONDITIONS.md`：保存先・API・移行・確認手順を更新。
+- `README.md`、`docs/SYSTEM_OVERVIEW.md`、`docs/TASK_CONDITIONS.md`：保存先・API・DB再作成・確認手順を更新。
 
 フロントエンドルートからの相対パス。
 
@@ -74,4 +71,4 @@
 - `src/app/services/api.service.ts`：条件の取得方法の説明を更新。
 - `src/app/components/main/orders/orders.component.ts`：準備時間を含む所要時間の表示を修正。
 - `src/app/components/main/orders/forms/order-form.component.ts`：数量変更後に再生成不要となった案内を修正。
-- `docs/PRODUCT_PROCESSES.md`：現在の条件参照とDB移行の説明を更新。
+- `docs/PRODUCT_PROCESSES.md`：現在の条件参照とDB再作成の説明を更新。

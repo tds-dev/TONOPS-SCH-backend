@@ -158,7 +158,7 @@ class PlanAssignment(AuditMixin, Base):
 class SolverRun(AuditMixin, Base):
     """ソルバー実行 — ワーカーがポーリングする作業キューも兼ねる。"""
 
-    # 計算依頼・進捗・結果の保存先。手動で改称したDBテーブルを参照する。
+    # 計算依頼・進捗・結果をT_SolverRunResultへ保存する。
     __tablename__ = "T_SolverRunResult"
     __table_args__ = (
         CheckConstraint(in_check("Status", RUN_STATUSES), name="Status"),

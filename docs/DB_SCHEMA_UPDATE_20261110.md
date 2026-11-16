@@ -46,7 +46,6 @@ T_Orders.ShippingDateはDATETIME2(7)、NULL可として追加し、デモではN
 変更後は、作成SQL・仮データSQL・モデル・自動生成されるAPI項目・設計Excelから対象6列を削除し、親IDの参照制約も削除する。全体は308 → 302カラムとなる。
 
 設備属性の入力欄を削除すると専用のattributesField関数の呼出し先がなくなるため、その関数とimportも取り除く。モデルを基にAPI項目を生成する既存方式を使い、定義の重複は追加しない。
-既存テストの親オーダー指定は独立した別オーダーへ変更し、対象外データ・数量・日時・タスクの保持確認を維持する。削除項目がAPI応答に含まれない確認を既存テストへ加える。
 
 オーダーとタスクのAttributesJSON、集約指定IsSummaryは維持する。ルールと段取り替えはタスク属性を使い、所要時間は工程候補の準備時間・固定時間・数量当たり時間から求めるため、これらの計算処理は変更しない。
 設備の名称・グループ・稼働カレンダー・同時作業数・表示順、およびWBS番号・納期・出荷日時も維持する。
@@ -59,7 +58,6 @@ DataBase/query/schema_sqlserver.sql
 DataBase/query/seed_demo_sqlserver.sql
 app/models/masters.py
 app/models/transactions.py
-tests/test_order_crud.py
 README.md
 docs/SYSTEM_OVERVIEW.md
 docs/DB_SCHEMA_UPDATE_20261110.md
@@ -73,7 +71,7 @@ docs/SCH_DB_設計.xlsx
 ```
 
 画面では設備の登録・編集、オーダーの保存と出荷日時、タスク生成、属性による切替・曜日ルール、計画ボードの表示を確認する。
-既存DBへの列削除は実行しない。新規DBを作る場合は下記のSQL実行順を使う。すでに旧構成で作成済みのDBへは、この新規作成SQLによる既存テーブルの列削除は行われない。
+DB構成を変更した場合は、DBを削除してから下記の手順で再作成する。
 
 ## DBの新規作成手順
 
@@ -88,7 +86,6 @@ Pythonで作成する場合はバックエンドのルートで `python -m DataB
 手動SQLとPythonは、どちらか一方を使う。Pythonは登録済みデモを追加・変更しない。
 
 手動SQLのデモ予定日は2026-10-30を基準とする既存の固定日付を維持。Pythonのデモは実行日の翌日を基準とする。
-`add_plan_name_unique_sqlserver.sql` は既存DB用の補助SQLで、新規作成時には不要。
 
 ## 画面で確認する項目
 
@@ -145,7 +142,6 @@ app/engine/model_builder.py
 app/engine/problem.py
 app/engine/snapshot.py
 app/engine/solve.py
-tests/test_order_crud.py
 ```
 
 フロントエンド（TONOPS-SCH-frontendからの相対パス）：

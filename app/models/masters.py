@@ -295,17 +295,16 @@ class WorkerCalendar(AuditMixin, SoftDeleteMixin, Base):
     WorkName = Column(String(50), nullable=True)
 
 
+# 作業者へ直接関連付けた例外休日を保持し、通常稼働時間の追加・削除から独立させる。
 class WorkerCalendarException(AuditMixin, Base):
-    """作業者の不在日時。勤務行を経由して対象作業者を特定する。"""
+    """作業者の例外休日・不在日時。本人のWorkerIDを直接参照する。"""
 
     __tablename__ = "M_WorkerCalendarExceptions"
     # 日付を含め、終了が開始より後になる不在だけを保存する。
     __table_args__ = (CheckConstraint("EndAt > StartAt", name="EndAfterStart"),)
-    # 不在行の識別番号と、対象作業者に属する勤務行。
+    # 例外休日の識別番号と、直接の適用先となる作業者。
     ExceptionID = Column(Integer, primary_key=True, autoincrement=True)
-    WorkerCalendarsID = Column(
-        Integer, ForeignKey("M_WorkerCalendars.WorkerCalendarsID", ondelete="CASCADE"), nullable=False
-    )
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
     # 不在期間は日本時間の日時として保持し、複数日にまたがる不在も許可する。
     StartAt = Column(DateTime, nullable=False)
     EndAt = Column(DateTime, nullable=False)

@@ -2,7 +2,7 @@
 # DB定義の更新（2026-11-12）
 
 新規DB用のSQL、Python初期設定、バックエンド、Angular画面は25テーブル・280カラム。追加更新でオーダーの3列を廃止した。Excelの今回分はユーザーが更新する。
-以下はコードとメモリDBで確認した仕様。実SQL Serverへの接続・作成とブラウザー操作は行っていない。
+以下はDB・API・画面の変更仕様。実SQL Serverへの接続・作成とブラウザー操作は行っていない。
 
 ## オーダー3列の追加廃止
 
@@ -11,7 +11,7 @@
 - 計算対象は所属拠点・削除状態・進捗状態・開始可能日時で選ぶ。管理元による除外は行わない。
 - 新規生成・再生成タスクの属性は未指定。再生成しない既存タスクの`T_Tasks.AttributesJSON`と、その属性を使うルール・段取り替え・色分けは維持する。
 - デモ分類はPython版・SQL版ともタスクへ直接登録し、属性定義の対象区分もTASKにする。オーダー7件・タスク21件・下書き計画2件などの件数は維持する。
-- 既存DBの3列削除は本スクリプトの再実行では行わない。ユーザーによる列削除または新規DB作成後に、更新したアプリを使用する。
+- DBを削除し、新しい定義でDB・テーブル・仮データを再作成してから、更新したアプリを使用する。
 - 今回はExcelを読み取り・変更していない。以下のExcel更新と283列の照合記録は、この追加廃止より前の作業記録。
 
 今回の変更ファイル（各プロジェクトのルートからの相対パス）：
@@ -33,16 +33,11 @@ app/engine/snapshot.py
 DataBase/setup_database.py
 DataBase/query/schema_sqlserver.sql
 DataBase/query/seed_demo_sqlserver.sql
-DataBase/query/remove_task_condition_tables_sqlserver.sql
-tests/test_order_crud.py
-tests/test_schema_updates.py
 docs/SYSTEM_OVERVIEW.md
 docs/TASK_CONDITIONS.md
 docs/DB_SCHEMA_UPDATE_20261112.md
 ```
 
-追加更新の確認結果：`test_order_crud`・`test_schema_updates`の43件がメモリDBで成功。削除3列がDBモデルと登録・更新・応答のAPI定義に含まれないこと、オーダー編集時に既存タスク属性を保持すること、Python／SQLの仮データで分類属性と21件の計算対象タスクを保持することを確認した。
-環境に`pydantic-settings`がないため、設定読込部分だけをテスト実行中のメモリ上で`pydantic.BaseModel`へ置き換え、実設定を読まずに実行した。`OR-Tools`も未導入のため、最適化計算の実行は行っていない。
 モデルと作成SQLは25テーブル・280列の列名・列順・NULL可否が一致し、全テーブルのSQL Server向け作成文を生成できることを確認した。SQL Serverへの適用とブラウザー操作は未実施。
 
 ## 変更前後
@@ -102,7 +97,7 @@ python -m DataBase.setup_database
 ```
 
 DBがなければ作成し、現在のモデルでテーブルを作り、仮データを投入する。デモ登録済みの場合は既存データを保持し、重複投入しない。
-今回のようにDBを削除した状態なら、新しい定義で作成できる。既存DBの列を改名・削除する機能は持たない。
+DBを削除した後、新しい定義でDB・テーブル・仮データを再作成する。
 
 SSMSで作成する場合は、次の順に実行する。Python版とSQL版は代替手段なので、初期データの投入はどちらか一方で行う。
 
@@ -140,9 +135,6 @@ app/services/plan_service.py
 app/services/plan_lifecycle.py
 app/services/product_process_service.py
 app/services/worker_process_service.py
-tests/test_order_crud.py
-tests/test_task_conditions.py
-tests/test_schema_updates.py（追加）
 docs/WORKER_MASTERS.md
 docs/SYSTEM_OVERVIEW.md
 docs/DB_SCHEMA_UPDATE_20261112.md（追加）
@@ -170,7 +162,6 @@ README.md
 
 ## 確認結果と確認する操作
 
-メモリDBで41件のテストが成功した。設定ライブラリ`pydantic-settings`が検証用Pythonにないため、テスト実行中だけ設定の基底クラスを代替し、実際の設定ファイル・実DB・外部通信を使わずに確認した。アプリ本体の設定処理は変更していない。
 
 - Python版とSQL版の仮データ投入、作業者スキル54件・タスク21件・計算用工程条件の読込み。
 - オーダーの登録・編集・削除、実績・既存割付がある場合の編集・再生成保護。

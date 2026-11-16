@@ -1,4 +1,5 @@
 -- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
+-- 作業者の例外休日はWorkerIDで本人へ直接関連付け、通常稼働時間とは独立して保持する。
 -- 2026-11-16: 拠点のCalendarIDを廃止し、週間勤務・停止予定をLocationIDで直接関連付ける。
 -- 2026-11-13: 旧属性定義・ルールを廃止。曜日制限は製品工程へ保存。全23テーブル・255列。
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
@@ -10,7 +11,7 @@
 -- 工程番号はアプリの保存処理で製品ごとに1からの連番へ整え、重複指定時は順番を交換する。
 -- タスクの設備候補・前後関係は製品工程から利用時に組み立て、専用の複製テーブルは作成しない。
 
--- 既存DBを作り直した後、create_database_sqlserver.sql、このSQL、seed_demo_sqlserver.sqlの順で実行する。
+-- DBを削除した後、create_database_sqlserver.sql、このSQL、seed_demo_sqlserver.sqlの順で再作成する。
 
 -- 2026-11-12: 設備は所属拠点の勤務を共有し、計算時間上限を廃止。作業中実績はEndAt・StatusともNULL。
 USE [TONOPS-SCH];
@@ -311,7 +312,7 @@ GO
 
 CREATE TABLE [M_WorkerCalendarExceptions] (
 	[ExceptionID] INTEGER NOT NULL IDENTITY, 
-	[WorkerCalendarsID] INTEGER NOT NULL, 
+	[WorkerID] INTEGER NOT NULL, 
 	[StartAt] DATETIME2(7) NOT NULL, 
 	[EndAt] DATETIME2(7) NOT NULL, 
 	[Remark] NVARCHAR(500) NULL, 
@@ -321,7 +322,7 @@ CREATE TABLE [M_WorkerCalendarExceptions] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_WorkerCalendarExceptions] PRIMARY KEY ([ExceptionID]), 
 	CONSTRAINT [CK_M_WorkerCalendarExceptions_EndAfterStart] CHECK (EndAt > StartAt), 
-	CONSTRAINT [FK_M_WorkerCalendarExceptions_WorkerCalendarsID_M_WorkerCalendars] FOREIGN KEY([WorkerCalendarsID]) REFERENCES [M_WorkerCalendars] ([WorkerCalendarsID]) ON DELETE CASCADE
+	CONSTRAINT [FK_M_WorkerCalendarExceptions_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
 );
 GO
 

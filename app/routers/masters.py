@@ -19,6 +19,16 @@ from app.services.calendar_service import (
     working_time,
 )
 from app.services.product_process_service import delete_product_process, save_product_process
+from app.services.worker_service import delete_worker, save_worker
+from app.services.worker_settings_service import (
+    delete_worker_calendar,
+    filter_worker_skill_maps,
+    prevent_worker_skill_map_deletion,
+    save_worker_calendar,
+    save_worker_skill_map,
+    validate_worker_exception,
+    worker_working_time,
+)
 from app.services.product_switch_service import filter_product_process_list, validate_switch_rule, validate_switch_time
 from app.services.product_validation import (
     validate_product_process_resource_write,
@@ -34,6 +44,17 @@ routers = [
                 validate_write=validate_calendar_exception_write),
     crud_router(m.ResourceGroup, "/resource-groups", "Resources", order_by="SortOrder"),
     crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder", validate_write=validate_resource_location_write),
+    # 作業者は監査列を持たないため、既存の5列に合わせた専用保存・論理削除を使う。
+    crud_router(m.Worker, "/workers", "Workers", order_by="WorkerID",
+                write_handler=save_worker, delete_handler=delete_worker),
+    # 通常稼働時間と担当工程は、作業者ごとの設定として保存する。
+    crud_router(m.WorkerCalendar, "/worker-calendars", "Workers", order_by="DayOfWeek",
+                write_handler=save_worker_calendar, delete_handler=delete_worker_calendar),
+    crud_router(m.WorkerCalendarException, "/worker-calendar-exceptions", "Workers", order_by="StartAt",
+                validate_write=validate_worker_exception),
+    crud_router(m.WorkerSkillMap, "/worker-skill-maps", "Workers", order_by="ProductProcessID",
+                write_handler=save_worker_skill_map, delete_handler=prevent_worker_skill_map_deletion,
+                filter_list=filter_worker_skill_maps),
     crud_router(m.ProductSwitchTime, "/product-switch-times", "Configuration", validate_write=validate_switch_time),
     crud_router(m.ProductSwitchRule, "/product-switch-rules", "Configuration", validate_write=validate_switch_rule),
     crud_router(m.CalculationSetting, "/calculation-settings", "Configuration"),
@@ -76,3 +97,30 @@ def get_working_time(
 
 
 routers.append(calendar_extra)
+
+
+# 作業者単位の週間稼働表示を、拠点の稼働時間APIと同じ日時形式で返す。
+worker_extra = APIRouter(prefix="/workers", tags=["Workers"])
+
+
+# 作業者本人の通常稼働時間と例外休日を、日本時間の指定期間へ展開する。
+@worker_extra.get("/{worker_id}/working-time", response_model=list[WorkingInterval])
+def get_worker_working_time(
+    worker_id: int,
+    start: datetime = Query(..., alias="from"),
+    end: datetime = Query(..., alias="to"),
+    db: Session = Depends(get_db),
+):
+    # 削除済みや存在しない本人を、通常勤務がない作業者として表示しない。
+    worker = db.get(m.Worker, worker_id)
+    if worker is None or worker.DeleteFlag:
+        raise HTTPException(404, f"Worker {worker_id} not found")
+    # 拠点カレンダーと同じ日本時間・終了日時を含まない期間指定を使う。
+    tz = get_settings().app_timezone
+    s, e = to_jst_naive(start), to_jst_naive(end)
+    if e <= s:
+        raise HTTPException(422, "'to' must be after 'from'")
+    return [WorkingInterval(start=a, end=b) for a, b in worker_working_time(db, worker_id, s, e, tz)]
+
+
+routers.append(worker_extra)

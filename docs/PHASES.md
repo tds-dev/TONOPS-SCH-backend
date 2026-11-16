@@ -75,7 +75,7 @@
 * `GET /dispatch?locationId=&date=`: マスタ計画の配台表（リソース別、開始順）。
 * `GET /solver-runs/{id}/events`: 進捗の Server-Sent Events。
 * `T_PlanViolations` に `ViolationCode` 列を追加（承認・編集で未割付を区別するため）。
-  既存DBの定義変更は別途実施する。新規DBの初期設定は`python -m DataBase.setup_database`で行う。
+  DB構成を変更した場合は、DBを削除してから`python -m DataBase.setup_database`でDB・テーブル・仮データを再作成する。
 
 ## フェーズ4 — Angular フロントエンド ✅
 

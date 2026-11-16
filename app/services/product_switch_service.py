@@ -57,6 +57,12 @@ def validate_switch_time(db: Session, original: ProductSwitchTime | None, values
             raise HTTPException(409, "対象設備に有効な段取り替え設定が重複します。既存設定を無効にするか、対象グループを変更してください。")
 
 
+# 前後とも工程を限定しない禁止設定を、保存時と計算条件の読込時に共通で拒否する。
+def validate_switch_rule_scope(before_id: int | None, after_id: int | None, forbidden: bool) -> None:
+    if forbidden and before_id is None and after_id is None:
+        raise HTTPException(422, "すべての工程どうしの順序は禁止できません。切替前または切替後の工程を指定してください。")
+
+
 # 前後工程を同じ拠点へ限定し、任意指定を含む重複条件も保存前に検出する。
 def validate_switch_rule(db: Session, original: ProductSwitchRule | None, values: dict[str, Any]) -> None:
     # 明細の親は変更せず、別の設定への移動は新規登録で行う。
@@ -77,8 +83,11 @@ def validate_switch_rule(db: Session, original: ProductSwitchRule | None, values
         if product is None or product.DeleteFlag or product.LocationID != setting.LocationID:
             raise HTTPException(422, "切替前後の工程は同じ拠点の有効な製品工程を指定してください。")
     _integer(_value(original, values, "SetupMinutes", 0), "切替時間")
-    if not isinstance(_value(original, values, "IsForbidden", False), bool):
+    # 部分更新では元の保存値も含めた最終状態で、禁止範囲を確認する。
+    forbidden = _value(original, values, "IsForbidden", False)
+    if not isinstance(forbidden, bool):
         raise HTTPException(422, "禁止状態はtrueまたはfalseで指定してください。")
+    validate_switch_rule_scope(before_id, after_id, forbidden)
     # SQL Serverの一意制約に加え、NULL同士も同じ条件としてAPIで確認する。
     duplicate = db.scalar(select(ProductSwitchRule.ProductSwitchRuleID).where(
         ProductSwitchRule.ProductSwitchTimeID == setting_id,

@@ -29,6 +29,7 @@ from app.engine.problem import (
 from app.models.masters import ProductSwitchTime, CalculationSetting, Resource, Location
 from app.models.transactions import Order, Plan, PlanAssignment, Task
 from app.services.calendar_service import working_time
+from app.services.product_switch_service import validate_switch_rule_scope
 from app.services.task_conditions import build_task_conditions
 from app.services.worktime import Interval
 
@@ -155,6 +156,9 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     for switch_time in db.scalars(
         select(ProductSwitchTime).where(ProductSwitchTime.LocationID == location.LocationID, ProductSwitchTime.IsActive == true())
     ):
+        # 旧データやDB直接登録の全工程禁止も、計算開始前に修正箇所を案内する。
+        for rule in switch_time.rules:
+            validate_switch_rule_scope(rule.FromProductProcessID, rule.ToProductProcessID, rule.IsForbidden)
         rids = set(members.get(switch_time.ResourceGroupID, [])) if switch_time.ResourceGroupID else set(resources)
         changeovers.append(PChangeover(
             id=switch_time.ProductSwitchTimeID, resource_ids=rids,

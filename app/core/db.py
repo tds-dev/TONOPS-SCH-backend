@@ -1,7 +1,7 @@
 """データベースエンジン、セッションファクトリ、宣言的ベースクラス。
 
 SQL Server（mssql+pyodbc、DB 名 TONOPS-SCH）で動作し、SQLite接続にも対応する。
-SQL Server のマイグレーションが安定するよう、制約名は固定の命名規則に従う。
+テーブル間の関連や入力条件を識別できるよう、制約名は固定の命名規則に従う。
 """
 from collections.abc import Iterator
 

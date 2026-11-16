@@ -3,7 +3,7 @@ r"""
 
 DB新規作成・テーブル作成・デモデータ登録実行方法
 
-1.ルートフォルダに移行。
+1.ルートフォルダに移動。
 Set-Location -LiteralPath 'C:\Users\taisei_fujita\Desktop\TONOPS-SCH-backend\TONOPS-SCH-backend'
 
 2.初期設定スクリプトを実行。
@@ -21,19 +21,19 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 拠点はLocationモデルを使い、M_LocationsとLocationID等の定義で作成・登録する。
 計算実行の保存先は、SolverRunモデルのT_SolverRunResultとして作成する。
 タスクの設備候補・前後関係の複製テーブルは作らず、製品工程から利用時に組み立てる。
-既存DBの旧2テーブルを削除する場合はquery/remove_task_condition_tables_sqlserver.sqlを別途適用する。
 旧属性定義・ルールは作成せず、曜日制限は製品工程に保持する。
-段取り替えは前後の製品工程IDを参照し、AttributeKey・FromValue・ToValueは作成しない。曜日4列の旧DB移行はmigrate_process_weekdaysを使用する。この移行処理は段取り替えの旧文字列から工程IDへの変換を行わない。
+段取り替えは前後の製品工程IDを参照し、AttributeKey・FromValue・ToValueは作成しない。
 デモはパン6製品、製品工程18件、実行候補18件、店舗向けオーダー7件、タスク21件、下書き計画2件を登録する。
 計画名は「各店舗向けパン製造・通常計画」「各店舗向けパン製造・見直し計画」とする。
 新規テーブルには、同じ拠点内で計画名を重複させない現在のモデル定義を適用する。
 デモ拠点が登録済みの場合は、以前の内容も含めて既存データを保持する。
 勤務時間はM_Calendarsへ直接登録し、組織・カレンダーパターンは作成しない。
-作業者3人・全工程リンク54件・勤務36件・不在1件も作成する。作業者の画面・API・計算連携はまだ行わない。
+作業者3人・全工程リンク54件・勤務36件・例外休日1件も作成する。作業者の画面・APIは実装済みで、計算連携は行わない。
+例外休日はWorkerIDで本人へ直接関連付け、通常稼働時間の登録・削除から独立させる。
 2026-11-13: 全23テーブル・255列。担当工程はM_WorkerSkillMap・WorkerSkillMapIDで識別する。
 設備は所属拠点の勤務を共有し、計画・停止例外・計算実行の開始終了列をStartAt・EndAtへ統一する。
 2026-11-16: 拠点のCalendarIDを廃止し、週間勤務・停止予定はLocationIDで直接関連付ける。
-開発用DBは現在の定義で再作成する。この新規作成処理は既存テーブルの列を変更しない。
+開発用DBの構成を変更した場合は、DBを削除して現在の定義で再作成する。
 計算時間上限は持たず、作業中の実績はEndAt・StatusともNULL、終了時はDONEまたはSUSPENDEDとする。
 """
 import argparse
@@ -97,7 +97,7 @@ def connection_help(url: URL, exc: DBAPIError) -> str:
 def setup_database() -> None:
     """製品マスタからタスク条件を計算する構成でDBを作成し、未登録のデモを追加する。"""
     ensure_database()
-    # 現在のモデルで未作成テーブルを追加する。既存DBの列削除・名称変更は行わないため、構成変更後は新規DBを使う。
+    # 現在のモデル定義でテーブルを作成する。DB構成を変更した場合は、DBを削除してから実行する。
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         # 削除済みも含めてデモ拠点を確認し、再実行による重複を防ぐ。

@@ -175,9 +175,9 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
                 ))
     db.add_all(worker_calendars)
     db.flush()
-    # 作業者Aの不在1件。今回は保存の整備までで、計画計算への適用は行わない。
+    # 作業者Aの例外休日を本人へ直接登録する。計画計算への適用は行わない。
     db.add(m.WorkerCalendarException(
-        WorkerCalendarsID=worker_calendars[0].WorkerCalendarsID,
+        WorkerID=workers[0].WorkerID,
         StartAt=start.replace(hour=10), EndAt=start.replace(hour=11), Remark="研修（デモ）", CreatedBy=USER,
     ))
 

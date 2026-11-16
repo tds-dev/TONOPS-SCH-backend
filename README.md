@@ -1,20 +1,18 @@
-<!-- バックエンドの構成・起動・DB作成と移行手順を説明する資料。 -->
+<!-- バックエンドの構成・起動・DB再作成・仮データ登録手順を説明する資料。 -->
 
 > 2026-11-16：週間勤務・稼働停止予定はLocationIDで拠点へ直接関連付ける。M_Locations.CalendarIDを廃止し、稼働時間APIをGET /api/v1/locations/{locationId}/working-timeへ変更。開発用DBは更新済みのDB作成・仮データ挿入クエリで再作成する。[変更内容・DB作成手順](docs/CALENDAR_LOCATION_LINK_20261116.md)を参照。
-
-<!-- アプリの構成、利用手順、APIとDBの対応を説明する資料。 -->
 
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 
 > 現行構成（2026-11-11）：`M_Product` → `M_ProductProcesses` → `M_ProductProcessResources`。組織を削除し、曜日・時間帯を`M_Calendars`へ統合。拠点ごとの週次勤務を使い、終了時刻が開始時刻より後の同日勤務だけを登録する。例外は休日・設備停止として扱う。以下の日付付き記録は変更当時の仕様。
 
-> 現行構成（2026-11-13）：旧属性定義・ルールを廃止し、曜日制限を製品工程の4列へ統合。23テーブル・255カラム。工程の曜日・有効状態・適用開始終了日時は画面から登録・更新可能。既存DBの移行は[変更内容と手順](docs/DB_SCHEMA_UPDATE_20261113.md)を参照。
+> 現行構成（2026-11-13）：旧属性定義・ルールを廃止し、曜日制限を製品工程の4列へ統合。23テーブル・255カラム。工程の曜日・有効状態・適用開始終了日時は画面から登録・更新可能。DBの再作成は[変更内容と手順](docs/DB_SCHEMA_UPDATE_20261113.md)を参照。
 
 # TONOPS-SCH-backend
 
 > 2026-11-12：設備の種別・個別カレンダーと計算時間上限を廃止。計画・停止例外・計算実行の開始終了はStartAt・EndAt、担当工程はM_WorkerSkillMap・WorkerSkillMapIDに統一。作業中実績はEndAt・StatusをNULLで保存する。[変更一覧・DB作成・確認手順](docs/DB_SCHEMA_UPDATE_20261112.md)を参照。
 
-> 作業者4マスタを追加し、全25テーブル・283カラムへ更新。作業者3人・全工程リンク54件・勤務36件・不在1件を登録する。既存の工程新規追加時にも担当不可のリンクを生成する。作業者画面・CRUD API・計画計算への接続は今回追加しない。[仕様と作成手順](docs/WORKER_MASTERS.md)を参照。
+> 作業者4マスタと仮データを追加済み。2026-11-16：本人の基本情報に加え、通常稼働時間・例外休日・スキルマップの画面とAPIを追加。例外休日はWorkerIDで本人へ直接関連付け、勤務未登録でも登録できる。勤務削除で休日の参照先・監査情報を変更しない。DB作成・仮データクエリとPython仮データも同じ定義へ更新。作業者設定を考慮する計画計算は未実装。[設定画面とAPIの仕様](docs/WORKER_SETTINGS_20261116.md)を参照。
 
 > 2026-11-11：`M_Organizations`と関連`OrganizationID`、`M_CalendarPatterns`を削除。`M_Calendars`に曜日・勤務開始終了・勤務名を持たせ、拠点の`DefaultCalendarID`を`CalendarID`へ変更。カレンダー例外は`StartTime`・`EndTime`へ改名し、`IsWorking`を削除。共通監査列`UpdatedAt`・`UpdatedBy`は継続する。[変更内容とDB作成手順](docs/DB_SCHEMA_UPDATE_20261111.md)を参照。
 
@@ -22,13 +20,13 @@
 
 > 2026-10-30: 表示用語を、マスタは「工程」、オーダー・計画は「タスク」へ戻した。集計の表示名やエラーメッセージも同じ呼び方に揃え、Product系の名称・API項目・DB構造・計算条件は維持する。
 
-> 2026-10-30: 製品モデル・列名・APIをProduct系へ統一。`M_Product.ProductID`・`ProductCode`・`ProductName`、`/products`、製品の属性区分 `PRODUCT` を使う。IDの数値と計算処理は維持する。実DBはテーブル・列・属性区分を手動で変更してから利用する。`DataBase/query` 内の製品に関係するSQL2ファイルも更新したが、実行していない。
+> 2026-10-30: 製品モデル・列名・APIをProduct系へ統一。`M_Product.ProductID`・`ProductCode`・`ProductName`、`/products`、製品の属性区分 `PRODUCT` を使う。IDの数値と計算処理は維持する。`DataBase/query` 内の製品に関係するSQL2ファイルも更新したが、実行していない。
 
-> 2026-10-30: 計算実行の保存先を `T_SolverRunResult` へ変更。既存DBのテーブル名は手動で変更してから利用する。列・保存値と `/solver-runs` のAPIは維持する。`DataBase/query` 内の新規作成SQLも同じ名称へ更新済み。実DBへの変更は行っていない。
+> 2026-10-30: 計算実行の保存先を `T_SolverRunResult` へ変更。列・保存値と `/solver-runs` のAPIは維持する。`DataBase/query` 内の新規作成SQLも同じ名称へ更新済み。実DBへの変更は行っていない。
 
-> 2026-10-30: 拠点のモデル・APIをLocation系へ統一。`/api/v1/locations` と `locationId` を使い、DBでは `M_Locations`・`LocationID`・`LocationCode`・`LocationName` を参照する。実DBと `DataBase/query` 内の保存済みSQLは今回変更していない。既存DBを手動で改称してから利用する。初期設定プログラムは既存テーブルの改称を行わない。
+> 2026-10-30: 拠点のモデル・APIをLocation系へ統一。`/api/v1/locations` と `locationId` を使い、DBでは `M_Locations`・`LocationID`・`LocationCode`・`LocationName` を参照する。実DBと `DataBase/query` 内の保存済みSQLは今回変更していない。
 
-> 2026-10-30: プログラムとAPIはOrder/Ordersへ改称。DBもT_Orders・OrderID等へ変更される前提で動作する。実DBの変更は未実施のため、DB側の名称変更後に利用する。既存のSYSTEM_OVERVIEW.md等に記載されたJob名は変更前の構成を含む。現行APIは/api/v1/orders。
+> 2026-10-30: プログラムとAPIはOrder/Ordersへ改称。DBもT_Orders・OrderID等へ変更される前提で動作する。既存のSYSTEM_OVERVIEW.md等に記載されたJob名は変更前の構成を含む。現行APIは/api/v1/orders。
 
 
 TONOPS-SCH（業種に依存しない生産・プロジェクト生産スケジューラ）のバックエンドです。
@@ -156,7 +154,7 @@ python -m DataBase.setup_database
 
 今回の構成は新規DB用です。この初期設定は既存テーブル・カラムを削除・変換しないため、旧構成のDBは作り直してから実行してください。
 SSMSで手動作成する場合は、`DataBase/query/create_database_sqlserver.sql` → `schema_sqlserver.sql` → `seed_demo_sqlserver.sql`の順に実行します。Pythonの初期設定と手動SQLのデータ登録は、どちらか一方を使ってください。
-現在の製品工程構成を持つ既存DBで旧タスク条件2テーブルだけを削除する場合は、`DataBase/query/remove_task_condition_tables_sqlserver.sql`を更新後のアプリと併せて適用します。初期設定の再実行だけでは既存テーブルを削除しません。変更内容と確認手順は[タスク条件の組み立て](docs/TASK_CONDITIONS.md)を参照してください。
+DB構成を変更した場合は、既存DBを削除してから上記のPython初期設定または手動SQLで再作成してください。変更内容と確認手順は[タスク条件の組み立て](docs/TASK_CONDITIONS.md)を参照してください。
 SQLファイルや実行結果のファイル出力は行いません。既存の手動実行用SQLは`DataBase/query`フォルダにあります。
 
 ---
@@ -296,4 +294,4 @@ Order系へ変更したSQLファイルの内容と実行順は、[DB作成・初
 * API の JSON は camelCase（`resourceName`、`locationId`）。
 * 認証は未実装。`CreatedBy` / `UpdatedBy` には `X-User-Email` ヘッダーの値（なければ `system`）を記録します。
 * コメント・docstring・メッセージは日本語。
-* マイグレーションツール（Alembic）は未導入。既存DBの列追加・改称は別途定義変更が必要です。
+* DB構成を変更した場合は、DBを削除してから `python -m DataBase.setup_database` でDB・テーブル・仮データを再作成します。

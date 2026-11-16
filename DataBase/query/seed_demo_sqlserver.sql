@@ -1,6 +1,6 @@
 -- 段取り替え明細は、参照する製品工程を登録した後に挿入する。
 -- DataBase/queryに配置した、SSMSで手動実行するデモデータ挿入SQL。
--- 新規作成した空のDB向け。既存データの変換は行わない。
+-- 新規作成した空のDBへ仮データを登録する。
 -- 出荷日時ShippingDateは未指定（NULL）で登録する。日時の表示は共通の日本時間設定を使う。
 -- 工程ルートの選択・版管理は行わず、工程を製品に直接紐づける。
 -- 分類属性はタスクへ直接登録し、オーダーには種別・管理元・属性を登録しない。
@@ -258,10 +258,10 @@ INSERT INTO [M_WorkerCalendars] ([WorkerCalendarsID], [WorkerID], [DayOfWeek], [
 SET IDENTITY_INSERT [M_WorkerCalendars] OFF;
 SET @IdentityTable = NULL;
 
--- M_WorkerCalendarExceptions: 1件。作業者Aの不在を、同作業者の勤務行へ関連付ける。
+-- M_WorkerCalendarExceptions: 1件。作業者Aの例外休日をWorkerIDで本人へ直接関連付ける。
 SET @IdentityTable = N'M_WorkerCalendarExceptions';
 SET IDENTITY_INSERT [M_WorkerCalendarExceptions] ON;
-INSERT INTO [M_WorkerCalendarExceptions] ([ExceptionID], [WorkerCalendarsID], [StartAt], [EndAt], [Remark], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, '2026-10-31T10:00:00', '2026-10-31T11:00:00', N'研修（デモ）', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
+INSERT INTO [M_WorkerCalendarExceptions] ([ExceptionID], [WorkerID], [StartAt], [EndAt], [Remark], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, '2026-10-31T10:00:00', '2026-10-31T11:00:00', N'研修（デモ）', '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_WorkerCalendarExceptions] OFF;
 SET @IdentityTable = NULL;
 

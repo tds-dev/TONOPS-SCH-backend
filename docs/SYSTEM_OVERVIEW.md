@@ -3,7 +3,7 @@
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 # TONOPS-SCH システム概要
 
-> 現行DBの変更（2026-11-13）：23テーブル・255カラム。段取り替えの工程ID方式は[専用仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。曜日制限を製品工程へ移し、旧属性定義・ルールを廃止。詳細は[今回の移行手順](DB_SCHEMA_UPDATE_20261113.md)を参照。前回変更：オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
+> 現行DBの変更（2026-11-13）：23テーブル・255カラム。段取り替えの工程ID方式は[専用仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。曜日制限を製品工程へ移し、旧属性定義・ルールを廃止。詳細は[DB再作成の手順](DB_SCHEMA_UPDATE_20261113.md)を参照。前回変更：オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
 
 
 2026-11-12：[タスク条件の組み立て](TASK_CONDITIONS.md)に対応。設備候補・前後関係の複製保存を廃止し、製品工程から利用時に計算する。
@@ -565,6 +565,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業条件の組み立て） | T_Tasks（作業生成） |
 | 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に工程設備候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
+| 作業者（`/workers`） | `/workers`、`/worker-calendars`、`/worker-calendar-exceptions`、`/worker-skill-maps`、`GET /workers/{id}/working-time` | M_Workers, M_Locations, M_Product, M_ProductProcesses, M_WorkerCalendars, M_WorkerCalendarExceptions, M_WorkerSkillMap | 本人情報・通常勤務・例外休日・担当可否と日上限を保存 |
 | カレンダー（`/calendars`） | `/calendars`、`/calendar-exceptions` の CRUD、`GET /locations/{id}/working-time` | M_Calendars, M_CalendarExceptions, M_Locations | M_Calendars, M_CalendarExceptions。拠点の参照更新は行わない |
 | 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にオーダー・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
 | 段取り替え（`/rules`） | `/product-switch-times`、`/product-switch-rules` の CRUD | M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups | M_ProductSwitchTimes, M_ProductSwitchRules |
@@ -594,6 +595,10 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `/calendar-exceptions` | M_CalendarExceptions | StartTime |
 | `/resource-groups` | M_ResourceGroups | SortOrder |
 | `/resources` | M_Resources | SortOrder |
+| `/workers` | M_Workers | WorkerID |
+| `/worker-calendars` | M_WorkerCalendars | DayOfWeek |
+| `/worker-calendar-exceptions` | M_WorkerCalendarExceptions | StartAt |
+| `/worker-skill-maps` | M_WorkerSkillMap | ProductProcessID。削除は不可、担当可能を無効へ変更 |
 | `/product-switch-times` | M_ProductSwitchTimes | ID |
 | `/product-switch-rules` | M_ProductSwitchRules | ID |
 | `/calculation-settings` | M_CalculationSettings | ID |
@@ -634,7 +639,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 画面・確認ダイアログ・通知では計画番号ではなく、保存された計画名を表示する。計画名の重複判定は下書き・マスタ・破棄済みなど全状態を対象とし、別拠点の同名は許可する。
 
-既存DBには `DataBase/query/add_plan_name_unique_sqlserver.sql` をSSMSで適用する。モデル定義の更新や `create_all` だけでは、既存テーブルに制約は追加されない。このSQLは空欄・重複の既存計画があると対象を表示して停止し、名前を自動で変更しない。DBに制約を適用するまで、同時登録の重複防止は保証されない。
+同じ拠点で計画名を重複させない制約は、モデル定義と新規作成SQLに含まれる。DB構成を変更した場合は、DBを削除してから現在の定義で再作成する。
 
 ### 8.4 計画ボード・編集・比較・配台表（拠点の現地時刻）
 
@@ -746,7 +751,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 * 作業は稼働枠をまたいで分割しない（休憩・夜間をまたぐ長い作業は割り付けられない場合がある）。
 * 1 リソースの候補作業が 80 件を超えると、そのリソースの段取り替えは計算で考慮しない（検証では検出）。
 * DayPilot Lite の制限: リソースのツリー表示、外部からのドラッグ（未割付作業の直接ドロップ）は不可 → 配置フォームで対応。
-* DB マイグレーションツール未導入（列追加時は作り直し）。
+* 開発用DBの構成を変更した場合は、DB・テーブル・仮データを再作成する。
 
 **今後の予定（フェーズ 5 以降）**
 
@@ -761,5 +766,5 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 M_Workers・M_WorkerSkillMap・M_WorkerCalendars・M_WorkerCalendarExceptionsを追加する。
 製品別工程の担当可否・日上限・個人の週次勤務と不在を保存する。全工程分のリンクは既存の工程追加時に生成する。
-画面・作業者CRUD API・作業者を考慮した計画計算はまだ追加しない。
+2026-11-16：本人情報・通常稼働時間・例外休日・スキルマップの画面とAPIを追加した。通常勤務と例外休日はWorkerIDで本人へ直接関連付け、勤務を削除しても例外休日を保持する。通常勤務から休日を差し引いた週間表示を確認できる。作業者設定を考慮した計画計算は未実装。画面と保存先・入力条件は[作業者設定仕様](WORKER_SETTINGS_20261116.md)を参照。
 列構成・初期データ・既存機能への影響は[作業者マスタ追加仕様](WORKER_MASTERS.md)を参照。

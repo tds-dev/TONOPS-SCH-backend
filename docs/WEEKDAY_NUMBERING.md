@@ -32,12 +32,12 @@ Pythonが返す曜日番号は画面・DBの番号と異なるため、`weekday_
 平日だけ製造するルールの[1,2,3,4,5]も維持する。
 日時の日本時間保存、停止例外、昼休み・夜勤、製品・オーダー・計画の構成は変更しない。
 
-既存DBの曜日7は、この変更だけでは0へ自動変換しない。今回もDB再作成を前提とし、バックエンドで`python -m DataBase.setup_database`を実行して新定義を作成する。
+DBを削除してから、バックエンドで`python -m DataBase.setup_database`を実行し、現在の定義でDB・テーブル・仮データを再作成する。
 実DBへの接続・変更は行っていない。
 
 ## 確認結果と画面確認
 
-- Python構文確認とメモリDBの32件のテストが成功。
+- Python構文確認が成功。
 - 日曜0・土曜6のAPI登録、勤務展開、-1・7・8の拒否を確認。
 - 1週間すべての曜日番号と、日曜限定ルールの禁止区間・表示名を確認。
 - 仮データ12行、昼休み・日曜休みの維持を確認。
@@ -56,7 +56,6 @@ Pythonが返す曜日番号は画面・DBの番号と異なるため、`weekday_
 - `backend/DataBase/query/seed_demo_sqlserver.sql`
 - `backend/app/services/demo_seed.py`
 - `backend/docs/SYSTEM_OVERVIEW.md`
-- `backend/tests/test_order_crud.py`
 - `backend/app/core/timeutil.py`
 - `frontend/src/app/services/master-form.ts`
 - `frontend/src/app/components/main/rules/rules.component.ts`

@@ -1,4 +1,4 @@
-<!-- 属性定義・制約ルールを廃止し、製品工程へ曜日制限を移すDB変更と移行手順。 -->
+<!-- 属性定義・制約ルールの廃止、製品工程の曜日制限、DB再作成手順を説明する資料。 -->
 # 2026-11-13 製品工程の曜日制限への統合
 
 > 後続変更で段取り替えを製品工程ID方式へ更新。現行は23テーブル・255カラム、設計書はdocs/DB.xlsx。[現在の段取り替え仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。
@@ -33,35 +33,12 @@
 
 ## 新規DB
 
-`python -m DataBase.setup_database`、または既存のDB作成SQL→`schema_sqlserver.sql`→`seed_demo_sqlserver.sql` の順で作成する。既存の初期設定処理だけでは、登録済みDBの列追加・テーブル削除は行われない。
+DB構成を変更した場合は、DBを削除してから`python -m DataBase.setup_database`でDB・テーブル・仮データを再作成する。手動SQLでは`create_database_sqlserver.sql`→`schema_sqlserver.sql`→`seed_demo_sqlserver.sql`の順で作成する。
 
 デモのくるみパン全工程は平日のみ、他製品の工程は全曜日を許可する。タスクのデモ分類値は段取り替えと色分けのために保持する。
 
-## 既存DB
-
-事前にDBのバックアップを取得し、APIサーバーとワーカーを停止して実施する。バックエンドルートで以下を実行する。
-
-```powershell
-# 旧ルールと既存作業から、工程ごとに移せる曜日設定を確認する。
-python -m DataBase.migrate_process_weekdays
-
-# 確認した内容を反映し、旧2テーブルと違反の旧参照列を削除する。
-python -m DataBase.migrate_process_weekdays --apply
-```
-
-移行処理は旧ルールの対象条件と既存作業の属性を照合する。同一工程の作業で対象可否が異なる場合、対象判断に必要な作業がない場合、複数の適用期間を1行へ集約できない場合、未対応の種類などは削除前に停止する。同じ期間・有効状態の複数ルールは許可曜日の共通部分へ統合する。
-
-旧ValidFromは当日00:00、旧ValidToは当日23:59:59.999999へ移し、日付単位の適用範囲を維持する。構造変更とデータ移行は単一トランザクションで行い、途中で失敗した場合は取り消す。移行済みの再実行では工程設定を書き換えない。
-
-この作業では実DBへ接続していないため、実DBへの適用は未実施。
-
 ## 確認
 
-```powershell
-python -m unittest discover -s tests -p 'test_process_weekdays.py'
-```
-
-このテストは実設定を読み込まず、メモリDB・実際のモデルとサービスを使用する。曜日・有効期間・入力値・最新マスタの反映・初期データ・計画コピー・違反表示・色分け・移行時の不整合検出を確認する。SQL ServerのDDL適用とOR-Toolsによる実際の自動計算は実行環境で別途確認する。
 
 画面では製品・工程の既存編集、段取り替えの登録・編集・削除、計画ボードの課題と色分け、計画コピー・承認を確認する。
 
@@ -91,7 +68,6 @@ python -m unittest discover -s tests -p 'test_process_weekdays.py'
 - `app/services/task_conditions.py`
 - `app/engine/rules/allowed_weekdays.py`：削除
 - `app/engine/rules/__init__.py`：削除
-- `tests/test_order_crud.py`
 - `DataBase/setup_database.py`
 - `DataBase/query/schema_sqlserver.sql`
 - `DataBase/query/seed_demo_sqlserver.sql`
@@ -100,8 +76,6 @@ python -m unittest discover -s tests -p 'test_process_weekdays.py'
 - `docs/WEEKDAY_NUMBERING.md`
 - `README.md`
 - `app/engine/weekdays.py`：追加
-- `DataBase/migrate_process_weekdays.py`：追加
-- `tests/test_process_weekdays.py`：追加
 - `docs/DB_SCHEMA_UPDATE_20261113.md`：追加
 
 ### TONOPS-SCH-frontend
@@ -145,7 +119,6 @@ python -m unittest discover -s tests -p 'test_process_weekdays.py'
 
 登録時は既存のproductId・sequenceNumber・processNameも指定する。曜日の必須・範囲・重複・期間逆転を検証し、APIでは曜日を番号順に保存する。部分更新で未送信の設定・秒未満の精度・他工程の曜日設定・待ち時間を保持する。
 
-通信を行わないASGIリクエスト共通処理を`tests/asgi_helpers.py`へ切り出し、既存のオーダーテストと工程曜日テストで共用する。工程曜日テストは13件となり、APIの登録・取得・更新・解除・再有効化、誤入力時の保存取消、並べ替え時の設定保持も確認する。
 
 後続対応の主な変更ファイル：
 
@@ -155,7 +128,6 @@ python -m unittest discover -s tests -p 'test_process_weekdays.py'
 - frontend: `src/app/services/master-form.ts`
 - frontend: `docs/PRODUCT_PROCESSES.md`・`docs/Book1.xlsx`・`README.md`
 - backend: `app/services/product_validation.py`
-- backend: `tests/asgi_helpers.py`（追加）・`tests/test_order_crud.py`・`tests/test_process_weekdays.py`
 - backend: `docs/DB_SCHEMA_UPDATE_20261113.md`・`README.md`
 
 ブラウザー上の操作、実DBへの保存、OR-Toolsによる自動計算は今回実行していない。ビルド・コードレビュー用コマンド・Git操作・外部通信を伴うコマンドは実行しない。
