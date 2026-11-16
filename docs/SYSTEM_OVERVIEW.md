@@ -559,7 +559,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 |---|---|---|---|
 | サイドバーの拠点選択（アプリ名の下） | `GET /locations` | M_Locations | — |
 | ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /orders` | T_Plans, T_PlanKpis, T_Orders, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
-| 計画一覧（`/plans`） | `GET /plans`、`GET /calculation-settings`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_CalculationSettings, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
+| 計画一覧・比較（`/plans`） | `GET /plans`、`GET /calculation-settings`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_CalculationSettings, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
 | 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, M_ProductProcesses, M_ProductProcessResources, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・M_CalendarExceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
 | 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Orders, M_Resources | T_Plans（承認・破棄） |
 | オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業条件の組み立て） | T_Tasks（作業生成） |
@@ -622,7 +622,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/plans?locationId=&status=DRAFT,MASTER` | 計画一覧（期間開始の新しい順） |
+| GET | `/plans?locationId=&status=DRAFT,MASTER` | 計画一覧・比較（期間開始の新しい順） |
 | POST | `/plans` | 計画作成。`{locationId, horizonStart, horizonEnd, planName, calculationSettingId?, basePlanId?, useMasterAsBase?, remarks?}`。計画名は必須・100文字以内・同じ拠点内で重複不可。前後の空白は除去。オフセットなしの日時はアプリ共通の日本時間（Asia/Tokyo） |
 | GET | `/plans/{planId}` | 計画 |
 | POST | `/plans/{planId}/solve` | 計算依頼。`{scope: "FULL"|"REPAIR", wait?}` → 202 と実行情報。`wait: true` はリクエスト内で同期計算 |
