@@ -1,3 +1,4 @@
+-- 段取り替え明細は製品工程IDを参照する。DB作成後に現行schema・seedの順で実行する。
 -- DataBase/queryに配置した、SSMSで手動実行するDB作成SQL。
 -- DB名はTONOPS-SCHのままとし、拠点はM_Locationsで管理する。
 -- 拠点の週次勤務はM_Calendars、休日・停止はM_CalendarExceptionsで管理する。

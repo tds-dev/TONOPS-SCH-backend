@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.core import db as dbmod
 from app.core.db import get_db
 from app.core.timeutil import to_jst_naive
-from app.engine.rules import all_plugins
 from app.engine.solve import execute_run
 from app.models.masters import Resource, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
@@ -67,15 +66,6 @@ class AssignmentView(ApiModel):
     is_locked: bool
     source: str
     attributes: dict = {}
-
-
-# 制約ルールの種類と入力項目の定義。
-class RuleTypeView(ApiModel):
-    type_key: str
-    label: str
-    description: str
-    supports_soft: bool
-    params_schema: dict
 
 
 # 計画を取得し、存在しない場合は見つからない理由を返す。
@@ -198,16 +188,6 @@ def get_violations(plan_id: int, db: Session = Depends(get_db)):
     return db.scalars(
         select(PlanViolation).where(PlanViolation.PlanID == plan_id).order_by(PlanViolation.Severity, PlanViolation.ViolationID)
     ).all()
-
-
-@router.get("/rule-types", response_model=list[RuleTypeView], tags=["Configuration"])
-def list_rule_types():
-    """利用可能なルールプラグインとパラメータの JSON Schema（ルール編集フォームに使う）。"""
-    return [
-        RuleTypeView(type_key=p.type_key, label=p.label, description=p.description,
-                     supports_soft=p.supports_soft, params_schema=p.params_schema)
-        for p in all_plugins()
-    ]
 
 
 # ---------------------------------------------------------------- ライフサイクル（フェーズ3）

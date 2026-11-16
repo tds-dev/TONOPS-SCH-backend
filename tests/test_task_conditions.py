@@ -119,7 +119,8 @@ class TaskConditionsTest(InMemoryApiTestCase):
         # 実績・進捗を持つタスクでも候補だけが新しいマスタへ追従する。
         task = self.db.get(Task, tasks[0]["taskId"])
         task.Status = "IN_PROGRESS"
-        self.db.add(WorkActual(TaskID=task.TaskID, ResourceID=1, Status="IN_PROGRESS"))
+        # 現行の実績仕様では、作業中の終了日時・状態はNULLで保持する。
+        self.db.add(WorkActual(TaskID=task.TaskID, ResourceID=1, StartAt=assignment.StartAt, Status=None))
         self.db.commit()
         self.assertEqual(self.call("PATCH", "/product-process-resources/1", {"resourceId": 2, "fixedMinutes": 8})[0], 200)
         changed = build_problem(self.db, plan)

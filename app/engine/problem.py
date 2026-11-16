@@ -40,6 +40,10 @@ class PTask:
     deadline: int | None = None  # タスク単位の期限（分）
     lock: PLock | None = None  # 固定位置（ロック・確定期間・作業中）
     hint: PLock | None = None  # 前回の位置（初期解と安定性に使用）
+    # 最新の製品工程から取得した許可曜日。Noneは制限無効または適用期間外。
+    allowed_weekdays: list[int] | None = None
+    # 段取り替えの判定元となる製品工程。作業属性の有無に依存しない。
+    product_process_id: int | None = None
 
 
 @dataclass
@@ -59,37 +63,31 @@ class POrder:
     no: str
     due: int | None  # 分。負の値もありうる（既に遅れている）
     priority: int = 50  # 1 = 最優先
+    # ボードの製品単位の色分けに使う製品ID。
+    product_id: int | None = None
 
 
 @dataclass
 class PChangeover:
-    """リソース群に対する順序依存の段取り。1 つの属性をキーとする。"""
+    """リソース群に対する製品工程の順序依存の段取り。"""
 
     id: int
-    attribute: str
     resource_ids: set[int]
     default: int
-    entries: dict[tuple[str, str], tuple[int, bool]]  # (切替前, 切替後) -> (分, 禁止)
+    # (切替前工程ID, 切替後工程ID)→(分, 禁止)。キー内のNoneは任意指定。
+    entries: dict[tuple[int | None, int | None], tuple[int, bool]]
 
-    def lookup(self, frm: Any, to: Any) -> tuple[int, bool]:
-        f, t = str(frm), str(to)
-        if f == t:
-            return self.entries.get((f, t), (0, False))
-        for key in ((f, t), (f, "*"), ("*", t), ("*", "*")):
+    # 個別指定、切替前のみ、切替後のみ、両方任意の順に条件を探す。
+    def lookup(self, frm: int | None, to: int | None) -> tuple[int, bool]:
+        # 元工程が不明な既存作業には、任意指定を誤って当てはめない。
+        if frm is None or to is None:
+            return (0, False)
+        if frm == to:
+            return self.entries.get((frm, to), (0, False))
+        for key in ((frm, to), (frm, None), (None, to), (None, None)):
             if key in self.entries:
                 return self.entries[key]
         return (self.default, False)
-
-
-@dataclass
-class PRule:
-    id: int
-    type_key: str
-    name: str
-    selector: dict[str, Any]
-    params: dict[str, Any]
-    hard: bool = True
-    weight: int = 100
 
 
 @dataclass
@@ -102,8 +100,11 @@ class Problem:
     orders: dict[int, POrder]  # オーダーIDをキーに、案件全体の計算条件を保持する。
     dependencies: list[PDependency] = field(default_factory=list)
     changeovers: list[PChangeover] = field(default_factory=list)
-    rules: list[PRule] = field(default_factory=list)
     weights: dict[str, int] = field(default_factory=dict)
+
+    # 設備に適用する切替設定を、自動計算と手動編集で共用する。
+    def changeover_for(self, resource_id: int) -> PChangeover | None:
+        return next((changeover for changeover in self.changeovers if resource_id in changeover.resource_ids), None)
 
     def to_dt(self, minute: int) -> datetime:
         return self.horizon_start + timedelta(minutes=minute)
@@ -128,27 +129,3 @@ class Problem:
             day += timedelta(days=1)
         return out
 
-
-def matches(selector: dict[str, Any], attrs: dict[str, Any]) -> bool:
-    """ルールのセレクターをタスク属性と照合する。
-
-    {"family": "A"}                       一致
-    {"family": {"in": ["A", "B"]}}        いずれかに一致
-    {"family": {"ne": "C"}}               不一致
-    {"family": {"notIn": ["C"]}}          いずれにも不一致
-    {}                                    すべてのタスクに一致
-    """
-    for key, cond in (selector or {}).items():
-        value = attrs.get(key)
-        if isinstance(cond, dict):
-            if "in" in cond and value not in cond["in"]:
-                return False
-            if "notIn" in cond and value in cond["notIn"]:
-                return False
-            if "ne" in cond and value == cond["ne"]:
-                return False
-            if "eq" in cond and value != cond["eq"]:
-                return False
-        elif value != cond:
-            return False
-    return True

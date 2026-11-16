@@ -12,7 +12,7 @@ from collections import Counter
 from dataclasses import dataclass, replace
 
 from app.engine.evaluate import check_schedule
-from app.engine.problem import PChangeover, Problem
+from app.engine.problem import Problem
 from app.engine.result import SAssignment, Violation
 
 
@@ -35,23 +35,18 @@ def option_duration(problem: Problem, task_id: int, resource_id: int) -> int | N
     return next((o.duration for o in task.options if o.resource_id == resource_id), None)
 
 
-# 対象リソースに適用する段取り替え条件を取得する。
-def _changeover_for(problem: Problem, resource_id: int) -> PChangeover | None:
-    return next((c for c in problem.changeovers if resource_id in c.resource_ids), None)
-
-
 def recompute_setups(problem: Problem, assignments: list[SAssignment], resource_ids: set[int]) -> None:
     """指定リソース上の割付を開始順に並べ、直前タスクとの段取り時間を設定し直す。"""
     for rid in resource_ids:
         records = sorted((a for a in assignments if a.resource_id == rid), key=lambda a: a.start)
-        co = _changeover_for(problem, rid)
+        co = problem.changeover_for(rid)
         prev = None
         for a in records:
             need = 0
             if co is not None and prev is not None:
                 pt, ct = problem.tasks.get(prev.task_id), problem.tasks.get(a.task_id)
-                pv = pt.attrs.get(co.attribute) if pt else None
-                cv = ct.attrs.get(co.attribute) if ct else None
+                pv = pt.product_process_id if pt else None
+                cv = ct.product_process_id if ct else None
                 if pv is not None and cv is not None:
                     need, _ = co.lookup(pv, cv)
             a.setup = need
@@ -135,7 +130,7 @@ def apply_changes(
 def _key(v: Violation) -> tuple:
     # タスクに紐づく違反はコード単位で比較（メッセージ内の時刻の変化を無視）。
     # オーダーの納期遅れなどタスクに紐づかないものはメッセージごと比較し、遅れの増加を検出する。
-    return (v.severity, v.code, v.task_id, v.rule_id, "" if v.task_id is not None else v.message)
+    return (v.severity, v.code, v.task_id, "" if v.task_id is not None else v.message)
 
 
 def new_violations(problem: Problem, before: list[SAssignment], after: list[SAssignment]) -> list[Violation]:

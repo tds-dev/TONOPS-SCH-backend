@@ -40,9 +40,9 @@ def _active_run(db: Session, plan_id: int) -> int | None:
 
 # 計画全体の割付を使い、承認を妨げる必須違反か判定する。
 def blocks_plan_approval(violation: PlanViolation, assigned_task_ids: set[int]) -> bool:
-    # ルール指定なしの未割付違反だけを承認の阻止対象から除く。
+    # 対象タスクが未割付の違反だけを承認の阻止対象から除く。
     return violation.Severity == "HARD" and (
-        violation.RuleID is not None or violation.TaskID is None or violation.TaskID in assigned_task_ids
+        violation.TaskID is None or violation.TaskID in assigned_task_ids
     )
 
 
@@ -143,7 +143,7 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
         db.add(PlanKpi(PlanID=new.PlanID, KpiKey=k.KpiKey, KpiValue=k.KpiValue))
     for v in db.scalars(select(PlanViolation).where(PlanViolation.PlanID == plan.PlanID)):
         db.add(PlanViolation(
-            PlanID=new.PlanID, RuleID=v.RuleID, TaskID=v.TaskID, Severity=v.Severity,
+            PlanID=new.PlanID, TaskID=v.TaskID, Severity=v.Severity,
             Penalty=v.Penalty, Message=v.Message, CreatedBy=user,
         ))
     db.commit()

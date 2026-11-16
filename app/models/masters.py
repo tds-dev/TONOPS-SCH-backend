@@ -4,7 +4,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
-    Date,
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
@@ -12,6 +11,7 @@ from sqlalchemy import (
     SmallInteger,
     Time,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -19,13 +19,11 @@ from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
 from app.models.types import DateTime, String
 
-# 属性定義の区分。製品の属性欄は廃止済みで、PRODUCTは既存の定義値として保持する。
-ENTITY_TYPES = ["PRODUCT", "RESOURCE", "ORDER", "TASK"]
-DATA_TYPES = ["TEXT", "NUMBER", "BOOL", "DATE", "ENUM"]
+# 計算設定で許可する時間単位。既存の計算設定の区分を維持する。
 TIME_UNITS = ["MINUTE", "DAY"]
 
 
-# ---------------------------------------------------------------- 拠点
+# 拠点の基本情報と、その拠点の代表勤務行を保持する。
 class Location(AuditMixin, SoftDeleteMixin, Base):
     """拠点マスタ"""
 
@@ -118,55 +116,16 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
 
 
 # ---------------------------------------------------------------- 設定
-class AttributeDefinition(AuditMixin, Base):
-    """属性定義マスタ"""
-
-    __tablename__ = "M_AttributeDefinitions"
-    __table_args__ = (
-        UniqueConstraint("EntityType", "AttributeKey"),
-        CheckConstraint(in_check("EntityType", ENTITY_TYPES), name="EntityType"),
-        CheckConstraint(in_check("DataType", DATA_TYPES), name="DataType"),
-    )
-    AttributeDefID = Column(Integer, primary_key=True, autoincrement=True)
-    # 属性の対象区分。旧区分も保存値として許可し、現在のタスク属性にはTASKを使う。
-    EntityType = Column(String(20), nullable=False)
-    AttributeKey = Column(String(50), nullable=False)
-    Label = Column(String(100), nullable=False)
-    DataType = Column(String(20), nullable=False, default="TEXT")
-    EnumValuesJSON = Column(JSON, nullable=True)
-    IsRequired = Column(Boolean, nullable=False, default=False)
-    SortOrder = Column(Integer, nullable=False, default=0)
-
-
-class Rule(AuditMixin, Base):
-    """制約ルールマスタ — ルールプラグインの 1 インスタンス。対象はセレクターで絞り込む。"""
-
-    __tablename__ = "M_Rules"
-    RuleID = Column(Integer, primary_key=True, autoincrement=True)
-    # 拠点の識別番号。既存データのID値と所属関係は維持する。
-    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    RuleTypeKey = Column(String(50), nullable=False)
-    RuleName = Column(String(100), nullable=False)
-    SelectorJSON = Column(JSON, nullable=False, default=dict)
-    ParamsJSON = Column(JSON, nullable=False, default=dict)
-    IsHard = Column(Boolean, nullable=False, default=True)
-    Weight = Column(Integer, nullable=False, default=100)
-    ValidFrom = Column(Date, nullable=True)
-    ValidTo = Column(Date, nullable=True)
-    IsActive = Column(Boolean, nullable=False, default=True)
-
-
 class ProductSwitchTime(AuditMixin, Base):
-    """製品切替時間マスタ。属性と設備グループごとの切替条件をまとめる。"""
+    """製品切替時間マスタ。設備グループごとの製品工程切替条件をまとめる。"""
 
     __tablename__ = "M_ProductSwitchTimes"
     # 切替時間設定の識別番号。明細からの参照にも使う。
     ProductSwitchTimeID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    # 切替時間設定の表示名と、切替の判定に使う属性。
+    # 設備グループごとの切替時間設定の表示名。
     ProductSwitchTimeName = Column(String(100), nullable=False)
-    AttributeKey = Column(String(50), nullable=False)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     DefaultMinutes = Column(Integer, nullable=False, default=0)
     IsActive = Column(Boolean, nullable=False, default=True)
@@ -176,17 +135,18 @@ class ProductSwitchTime(AuditMixin, Base):
 
 
 class ProductSwitchRule(AuditMixin, Base):
-    """製品切替ルールマスタ。FromValue/ToValueの'*'は任意の値。"""
+    """製品工程の切替ルール。切替前後のNULLは任意の工程を表す。"""
 
     __tablename__ = "M_ProductSwitchRules"
-    __table_args__ = (UniqueConstraint("ProductSwitchTimeID", "FromValue", "ToValue"),)
+    __table_args__ = (UniqueConstraint("ProductSwitchTimeID", "FromProductProcessID", "ToProductProcessID"),)
     # 切替ルールの識別番号と、所属する切替時間設定。
     ProductSwitchRuleID = Column(Integer, primary_key=True, autoincrement=True)
     ProductSwitchTimeID = Column(
         Integer, ForeignKey("M_ProductSwitchTimes.ProductSwitchTimeID", ondelete="CASCADE"), nullable=False
     )
-    FromValue = Column(String(50), nullable=False)
-    ToValue = Column(String(50), nullable=False)
+    # 前後する製品工程を直接参照する。参照中の工程の物理削除は許可しない。
+    FromProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
+    ToProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
     SetupMinutes = Column(Integer, nullable=False, default=0)
     IsForbidden = Column(Boolean, nullable=False, default=False)
     Cost = Column(Numeric(12, 2), nullable=True)
@@ -233,7 +193,13 @@ class ProductProcess(AuditMixin, Base):
     """製品に直接属する工程マスタ。"""
 
     __tablename__ = "M_ProductProcesses"
-    __table_args__ = (UniqueConstraint("ProductID", "SequenceNumber"),)
+    __table_args__ = (
+        UniqueConstraint("ProductID", "SequenceNumber"),
+        CheckConstraint(
+            "WeekdayRestrictionStartAt IS NULL OR WeekdayRestrictionEndAt IS NULL OR "
+            "WeekdayRestrictionStartAt <= WeekdayRestrictionEndAt", name="WeekdayRestrictionPeriod",
+        ),
+    )
     # 工程の識別番号と、その工程が属する製品。
     ProductProcessID = Column(Integer, primary_key=True, autoincrement=True)
     ProductID = Column(
@@ -245,6 +211,14 @@ class ProductProcess(AuditMixin, Base):
     # この工程が終わってから次工程を開始するまでの待ち時間。最大の未指定は上限なし。
     MinLagAfterMin = Column(Integer, nullable=False, default=0)
     MaxLagAfterMin = Column(Integer, nullable=True)
+    # 許可曜日は日曜0～土曜6。新規工程は全曜日を許可し、工程ごとに独立した一覧を持つ。
+    AllowedWeekdaysJSON = Column(JSON, nullable=False, default=lambda: list(range(7)),
+                                 server_default=text("'[0,1,2,3,4,5,6]'"))
+    # 曜日制限だけの有効状態。無効にしても工程自体は計算対象から外さない。
+    WeekdayRestrictionEnabled = Column(Boolean, nullable=False, default=True, server_default=text("1"))
+    # 計画開始日時で判定する適用期間。日本時間で保存し、NULL側は期間の制限なし。
+    WeekdayRestrictionStartAt = Column(DateTime, nullable=True)
+    WeekdayRestrictionEndAt = Column(DateTime, nullable=True)
 
     # この工程を実行できる設備または設備グループと所要時間。
     resources = relationship(

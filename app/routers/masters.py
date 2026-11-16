@@ -21,6 +21,7 @@ from app.services.calendar_service import (
     working_time,
 )
 from app.services.product_process_service import delete_product_process, save_product_process
+from app.services.product_switch_service import filter_product_process_list, validate_switch_rule, validate_switch_time
 from app.services.product_validation import (
     validate_product_process_resource_write,
     validate_product_write,
@@ -34,14 +35,12 @@ routers = [
                 validate_write=validate_calendar_exception_write, filter_list=filter_calendar_exceptions),
     crud_router(m.ResourceGroup, "/resource-groups", "Resources", order_by="SortOrder"),
     crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder", validate_write=validate_resource_location_write),
-    crud_router(m.AttributeDefinition, "/attribute-definitions", "Configuration"),
-    crud_router(m.Rule, "/rules", "Configuration"),
-    crud_router(m.ProductSwitchTime, "/product-switch-times", "Configuration"),
-    crud_router(m.ProductSwitchRule, "/product-switch-rules", "Configuration"),
+    crud_router(m.ProductSwitchTime, "/product-switch-times", "Configuration", validate_write=validate_switch_time),
+    crud_router(m.ProductSwitchRule, "/product-switch-rules", "Configuration", validate_write=validate_switch_rule),
     crud_router(m.CalculationSetting, "/calculation-settings", "Configuration"),
     crud_router(m.Product, "/products", "Products & processes", validate_write=validate_product_write),
     crud_router(m.ProductProcess, "/product-processes", "Products & processes", order_by="SequenceNumber",
-                write_handler=save_product_process, delete_handler=delete_product_process),
+                write_handler=save_product_process, delete_handler=delete_product_process, filter_list=filter_product_process_list),
     crud_router(m.ProductProcessResource, "/product-process-resources", "Products & processes", validate_write=validate_product_process_resource_write),
 ]
 

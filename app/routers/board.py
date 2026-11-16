@@ -44,7 +44,6 @@ class ViolationOut(ApiModel):
     severity: str
     message: str
     task_id: int | None = None
-    rule_id: int | None = None
 
 
 # 手動編集の検証結果・違反・評価値の応答項目。
@@ -74,7 +73,7 @@ def _requests(body: EditBody) -> list[ChangeRequest]:
 def _out(result) -> EditOut:
     # 一件の制約違反をAPIの応答形式へ変換する。
     def v(x: Violation) -> ViolationOut:
-        return ViolationOut(severity=x.severity, message=x.message, task_id=x.task_id, rule_id=x.rule_id)
+        return ViolationOut(severity=x.severity, message=x.message, task_id=x.task_id)
 
     return EditOut(ok=result.ok, errors=result.errors, hard=[v(x) for x in result.hard],
                    soft=[v(x) for x in result.soft], kpis=result.kpis, changed_task_ids=result.changed_task_ids)

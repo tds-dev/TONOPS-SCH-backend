@@ -51,7 +51,7 @@ Pythonが返す曜日番号は画面・DBの番号と異なるため、`weekday_
 - `backend/app/models/masters.py`
 - `backend/app/services/calendar_service.py`
 - `backend/app/services/worktime.py`
-- `backend/app/engine/rules/allowed_weekdays.py`
+- `backend/app/engine/weekdays.py`
 - `backend/DataBase/query/schema_sqlserver.sql`
 - `backend/DataBase/query/seed_demo_sqlserver.sql`
 - `backend/app/services/demo_seed.py`

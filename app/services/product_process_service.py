@@ -9,6 +9,7 @@ from app.models.masters import Product, ProductProcess
 from app.models.transactions import Task
 from app.services.product_validation import validate_product_process_write
 from app.services.worker_process_service import add_worker_skill_maps
+from app.services.product_switch_service import switch_rule_using_process
 
 
 # 同じ製品の並べ替えを直列化し、保存済み工程を現在の番号順で取得する。
@@ -78,6 +79,8 @@ def delete_product_process(db: Session, original: ProductProcess, user: str) -> 
     used = db.scalar(select(Task.TaskID).where(Task.ProductProcessID == original.ProductProcessID).limit(1))
     if used is not None:
         raise HTTPException(409, "既存タスクから参照されている工程は削除できません。")
+    if switch_rule_using_process(db, original.ProductProcessID) is not None:
+        raise HTTPException(409, "段取り替えで参照されている工程は削除できません。先に段取り替え明細を変更してください。")
     processes.remove(original)
     db.delete(original)
     db.flush()

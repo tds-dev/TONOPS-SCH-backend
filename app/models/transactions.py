@@ -90,7 +90,7 @@ class Task(AuditMixin, Base):
     # 全計画で共有する作業状態と進捗率。
     Status = Column(String(20), nullable=False, default="NOT_STARTED")
     ProgressPct = Column(Numeric(5, 2), nullable=False, default=0)
-    # タスク固有の分類属性。ルールと製品切替時間の判定に使う。
+    # 旧データ互換の作業属性。API応答や明示した属性の色分けに使い、切替判定は工程IDで行う。
     AttributesJSON = Column(JSON, nullable=True)
 
     # この作業が所属するオーダー。
@@ -205,7 +205,6 @@ class PlanViolation(AuditMixin, Base):
     __table_args__ = (CheckConstraint(in_check("Severity", SEVERITIES), name="Severity"),)
     ViolationID = Column(BigId, primary_key=True, autoincrement=True)
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), nullable=False)
-    RuleID = Column(Integer, ForeignKey("M_Rules.RuleID"), nullable=True)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=True)
     Severity = Column(String(10), nullable=False)
     # 違反は重大度・対象タスク・ルール・説明で保持する。

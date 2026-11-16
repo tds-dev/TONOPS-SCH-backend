@@ -3,7 +3,7 @@
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 # TONOPS-SCH システム概要
 
-> 現行DBの変更（2026-11-12）：25テーブル・280カラム。オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
+> 現行DBの変更（2026-11-13）：23テーブル・255カラム。段取り替えの工程ID方式は[専用仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。曜日制限を製品工程へ移し、旧属性定義・ルールを廃止。詳細は[今回の移行手順](DB_SCHEMA_UPDATE_20261113.md)を参照。前回変更：オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
 
 
 2026-11-12：[タスク条件の組み立て](TASK_CONDITIONS.md)に対応。設備候補・前後関係の複製保存を廃止し、製品工程から利用時に計算する。
@@ -19,7 +19,7 @@ TONOPS-SCH は、業種に依存しない **生産・プロジェクト 生産�
 稼働カレンダー・作業順序・段取り替え・制約ルールを守りながら自動で計画し、計画者が画面で調整・承認します。
 
 旧システム ADK-SCH1（マーガリン・ショートニング・ホイップ専用）の考え方を一般化したもので、
-食品固有の用語（アレルゲンなど）は **属性（AttributesJSON）とルール** で表現します。
+段取り替えは前後の製品工程ID、工程の実行可能曜日は製品工程の専用列で保持します。
 
 | 項目 | 内容 |
 |---|---|
@@ -43,7 +43,7 @@ TONOPS-SCH は、業種に依存しない **生産・プロジェクト 生産�
 8. [API 一覧](#8-api-一覧)
 9. [日時・タイムゾーンの扱い](#9-日時タイムゾーンの扱い)
 10. [KPI と違反コード](#10-kpi-と違反コード)
-11. [拡張方法（ルールプラグイン・属性）](#11-拡張方法ルールプラグイン属性)
+11. [属性と工程の曜日制限](#11-属性と工程の曜日制限)
 12. [他システムとの連携（予定）](#12-他システムとの連携予定)
 13. [現在の制約・今後の予定](#13-現在の制約今後の予定)
 
@@ -112,8 +112,8 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | 計画 | T_Plans | スケジュールの 1 つの版。下書き → マスタ（承認） |
 | 割付 | T_PlanAssignments | 計画内で「作業 × リソース × 時刻」を決めたもの |
 | 計算（ソルバー実行） | T_SolverRunResult | エンジンによる自動計画の 1 回分。作業キューも兼ねる |
-| 段取り替え | M_ProductSwitchTimes | 同じリソースで属性値が変わるときに必要な時間（例: 系統 A→C は 45 分） |
-| 制約ルール | M_Rules | プラグインで実装された追加の制約（例: 系統 C は平日のみ） |
+| 段取り替え | M_ProductSwitchTimes | 同じ設備で前後する製品工程の組合せごとに必要な切替時間 |
+| 工程の曜日制限 | M_ProductProcesses | 許可曜日・有効状態・適用開始終了日時 |
 | 計算設定 | M_CalculationSettings | 目的関数の重み・計算時間の上限など、計算の方針 |
 | ロック（固定） | PlanAssignment.IsLocked | 再計算で動かさない割付。手動で動かした割付は既定でロック |
 | マスタ計画 | T_Plans.Status = MASTER | 承認済みで現場が使う計画。配台表の元データ |
@@ -135,7 +135,7 @@ flowchart TD
   I -.->|"状況変化（追加受注・設備停止）"| D
 ```
 
-1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、製品・工程、制約ルール・段取り替えを登録（API / Swagger からも登録可能）。拠点・プラン計算設定の登録は引き続き API / Swagger を使用。
+1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、製品・工程、段取り替えを登録（API / Swagger からも登録可能）。拠点・プラン計算設定の登録は引き続き API / Swagger を使用。
 2. **オーダー登録** → **作業生成**: オーダーの製品に属する工程を展開し、作業本体だけを保存します。候補・前後関係は利用時に現在の製品マスタから組み立てます。
    所要時間 = 作業リソース候補の `SetupMinutes` + `FixedMinutes` + 数量 × `MinutesPerUnit`（分、切り上げ）。
 3. **計画作成**: 計画期間（拠点の現地時刻）とプロファイルを指定。現在のマスタ計画が「元計画（BasePlanID）」になります。
@@ -163,7 +163,7 @@ flowchart TD
 | 候補 | M_ProductProcessResources + T_Orders.Quantity | 所要時間をその都度計算。グループ指定はグループ内の有効リソースに展開 |
 | 依存関係 | M_ProductProcesses + T_Tasks.ProductProcessID | 同一オーダーの隣接工程をFSで結び、前工程の待ち時間を使う |
 | 段取り替え | M_ProductSwitchTimes / M_ProductSwitchRules | 有効なもの。グループ指定ならそのグループのリソースに適用 |
-| ルール | M_Rules | 有効かつ計画開始日（現地）が有効期間内のもの |
+| 工程の曜日制限 | M_ProductProcesses | 有効かつ計画開始日時が適用期間内の場合に参照 |
 | 重み・固定期間 | M_CalculationSettings | `ObjectiveWeightsJSON`、`FrozenWindowHours`。探索時間の上限は設けない |
 | 前回の位置 | T_PlanAssignments | この計画の割付、なければ元計画（マスタ）の割付 |
 
@@ -185,9 +185,9 @@ flowchart TD
 | 依存関係 | 製品マスタからFS（前の終了→後の開始）を生成。最小・最大待ち時間を使用。後作業を割り付けるなら前作業も割り付ける |
 | 段取り替え | リソースごとに `AddCircuit`（作業の並び順）。順序 i→j を選んだら「j の開始 ≥ i の終了 + 段取り時間」。禁止の組合せ（IsForbidden）は順序の候補から除外。1 リソースの候補が 80 件を超える場合は段取りを無視（ログに注記） |
 | ロック | 開始・終了・リソースを固定。非稼働時間に置かれたロックもそのまま受け入れる |
-| ルール | プラグインが制約を追加（例: `allowed_weekdays` は許可されない曜日をブロック区間として追加） |
+| 工程の曜日制限 | 許可されない曜日をブロック区間として追加 |
 
-段取り時間の照合（`M_ProductSwitchRules`）: 同じ値どうしは 0 分（明細があればその値）。
+段取り時間の照合（`M_ProductSwitchRules`）: 同じ工程IDどうしは0分（個別の明細があればその条件）。
 異なる値は `(From, To)` → `(From, *)` → `(*, To)` → `(*, *)` の順に探し、なければマトリクスの `DefaultMinutes`。
 
 ### 4.3 目的関数（最小化）
@@ -298,7 +298,6 @@ erDiagram
     M_Locations ||--o{ M_Product : ""
   M_Product ||--o{ M_ProductProcesses : ""
   M_ProductProcesses ||--o{ M_ProductProcessResources : ""
-  M_Locations ||--o{ M_Rules : ""
   M_Locations ||--o{ M_ProductSwitchTimes : ""
   M_ProductSwitchTimes ||--o{ M_ProductSwitchRules : ""
   M_Locations ||--o{ M_CalculationSettings : ""
@@ -373,40 +372,12 @@ erDiagram
 | SortOrder | INT | ボードの表示順 |
 | DeleteFlag | BIT | |
 
-#### M_AttributeDefinitions（属性定義）
-タスクの `AttributesJSON` に入れる項目の定義。区分の保存値にはPRODUCT・RESOURCE・ORDERも残すが、製品・リソース・オーダーは属性保存列を持たない。
-
-| 列 | 型 | 説明 |
-|---|---|---|
-| AttributeDefID | INT PK | |
-| EntityType | NVARCHAR(20) | 値: `PRODUCT` `RESOURCE` `ORDER` `TASK`。AttributeKeyとの組で重複不可 |
-| AttributeKey | NVARCHAR(50) | JSON のキー（例: `family`）。EntityTypeとの組で重複不可。組織別の区分は持たない |
-| Label | NVARCHAR(100) | 表示名（例: 系統） |
-| DataType | NVARCHAR(20) | 値: `TEXT` `NUMBER` `BOOL` `DATE` `ENUM` |
-| EnumValuesJSON | NVARCHAR(MAX) | ENUM の選択肢 |
-| IsRequired / SortOrder | BIT / INT | |
-
-#### M_Rules（制約ルール）
-| 列 | 型 | 説明 |
-|---|---|---|
-| RuleID | INT PK | |
-| LocationID | INT FK | |
-| RuleTypeKey | NVARCHAR(50) | プラグインの種類（`GET /rule-types` で一覧） |
-| RuleName | NVARCHAR(100) | |
-| SelectorJSON | NVARCHAR(MAX) | 対象作業の条件（作業属性で照合）。例 `{"family": "C"}`、`{"family": {"in": ["A","B"]}}`、`{}` = 全作業 |
-| ParamsJSON | NVARCHAR(MAX) | プラグインのパラメータ（例 `{"weekdays": [1,2,3,4,5]}`） |
-| IsHard | BIT | 1 = 必須（違反は HARD）、0 = 推奨（SOFT） |
-| Weight | INT | 推奨ルールの重み（予約） |
-| ValidFrom / ValidTo | DATE NULL | 有効期間（計画開始日で判定） |
-| IsActive | BIT | |
-
 #### M_ProductSwitchTimes（段取り替えマトリクス）
 | 列 | 型 | 説明 |
 |---|---|---|
 | ProductSwitchTimeID | INT PK | |
 | LocationID | INT FK | |
 | ProductSwitchTimeName | NVARCHAR(100) | |
-| AttributeKey | NVARCHAR(50) | 切り替えの基準となる作業属性（例: `family`）。ボードの色分けにも使う |
 | ResourceGroupID | INT FK NULL | 適用するグループ（NULL = 拠点の全リソース） |
 | DefaultMinutes | INT | 明細にない組合せの段取り時間 |
 | IsActive | BIT | |
@@ -416,7 +387,7 @@ erDiagram
 |---|---|---|
 | ProductSwitchRuleID | INT PK | |
 | ProductSwitchTimeID | INT FK（CASCADE） | |
-| FromValue / ToValue | NVARCHAR(50) | 前後の属性値。`*` は任意の値。(ProductSwitchTimeID, From, To) 一意 |
+| FromProductProcessID / ToProductProcessID | INT FK NULL | 前後の製品工程ID。NULLは任意の工程。設定内で組合せが一意 |
 | SetupMinutes | INT | 段取り時間（分） |
 | IsForbidden | BIT | 1 = この順序は禁止 |
 | Cost | DECIMAL NULL | 予約 |
@@ -449,6 +420,9 @@ erDiagram
 | ProcessName | NVARCHAR(100) | 例: こねる、焼く、包装する |
 | MinLagAfterMin | INT | 次工程までの最小待ち時間（分）。例: 発酵60分 |
 | MaxLagAfterMin | INT NULL | 次工程までの最大待ち時間（分）。NULLは上限なし |
+| AllowedWeekdaysJSON | NVARCHAR(MAX) | 日曜0～土曜6。初期値は全曜日許可 |
+| WeekdayRestrictionEnabled | BIT | 曜日制限だけの有効状態。初期値1 |
+| WeekdayRestrictionStartAt / WeekdayRestrictionEndAt | DATETIME2(7) NULL | 計画開始日時で判定する日本時間の適用期間。NULL側は無制限 |
 
 製品ごとに一つの工程列を持つ。工程番号は1からの連番で、既存番号への変更は交換、新規登録は挿入、削除後は番号を詰める。工程ルート・版・既定指定・工程属性の列は持たない。
 
@@ -497,7 +471,7 @@ erDiagram
 | DeadlineAt | DATETIME2(7) NULL | 作業単位の期限 |
 | Status | NVARCHAR(20) | 値: `NOT_STARTED` `IN_PROGRESS` `DONE` `CANCELLED`（配台表の開始・完了で更新） |
 | ProgressPct | DECIMAL(5,2) | 予約 |
-| AttributesJSON | NVARCHAR(MAX) | タスク固有の属性。新規生成時は未指定。ルール・段取り・色分けは既存値を使い、デモではタスクへ直接設定する |
+| AttributesJSON | NVARCHAR(MAX) | タスク固有の補足属性。新規生成時は未指定。旧データ・API応答・明示した属性の色分けのため保持する |
 
 設備候補・前後関係の専用テーブルは廃止した。詳細は[タスク条件の組み立て](TASK_CONDITIONS.md)を参照。
 
@@ -561,7 +535,6 @@ erDiagram
 |---|---|---|
 | ViolationID | BIGINT PK | |
 | PlanID | INT FK（CASCADE） | |
-| RuleID | INT FK NULL | ルールによる違反の場合 |
 | TaskID | INT FK NULL | |
 | Severity | NVARCHAR(10) | 値: `HARD`（必須）`SOFT`（推奨）`INFO` |
 | Penalty | DECIMAL NULL | 遅れ分など |
@@ -589,17 +562,17 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | サイドバーの拠点選択（アプリ名の下） | `GET /locations` | M_Locations | — |
 | ダッシュボード（`/`） | `GET /plans?status=MASTER,DRAFT`、`GET /plans/{id}/kpis`、`GET /plans/{id}/board`、`GET /orders` | T_Plans, T_PlanKpis, T_Orders, T_PlanAssignments, M_Resources, M_ResourceGroups, カレンダー（負荷率の分母） | — |
 | 計画一覧（`/plans`） | `GET /plans`、`GET /calculation-settings`、`POST /plans`、`POST /plans/{id}/copy`、`POST /plans/{id}/discard` | T_Plans, M_CalculationSettings, M_Locations | T_Plans（作成・破棄）。コピー時は T_PlanAssignments / T_PlanKpis / T_PlanViolations も複製 |
-| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, M_ProductProcesses, M_ProductProcessResources, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・M_CalendarExceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_Rules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
+| 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, M_ProductProcesses, M_ProductProcessResources, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・M_CalendarExceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
 | 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Orders, M_Resources | T_Plans（承認・破棄） |
 | オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業条件の組み立て） | T_Tasks（作業生成） |
 | 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に工程設備候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
 | カレンダー（`/calendars`） | `/calendars`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarExceptions, M_Locations | M_Calendars, M_CalendarExceptions。代表勤務行の設定・削除時はM_Locationsの参照も更新 |
 | 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にオーダー・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
-| 制約ルール（`/rules`） | `/rules`、`/product-switch-times`、`/product-switch-rules` の CRUD、`GET /rule-types` | M_Rules, M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups, サーバーのルール種類定義 | M_Rules, M_ProductSwitchTimes, M_ProductSwitchRules |
+| 段取り替え（`/rules`） | `/product-switch-times`、`/product-switch-rules` の CRUD | M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups | M_ProductSwitchTimes, M_ProductSwitchRules |
 | 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
 
-**画面で使っていないテーブル**: M_AttributeDefinitions（デモデータのみ）、T_WorkActuals（今後）。
+**画面で使っていないテーブル**: T_WorkActuals（今後）。
 
 ---
 
@@ -623,8 +596,6 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `/calendar-exceptions` | M_CalendarExceptions | StartTime |
 | `/resource-groups` | M_ResourceGroups | SortOrder |
 | `/resources` | M_Resources | SortOrder |
-| `/attribute-definitions` | M_AttributeDefinitions | ID |
-| `/rules` | M_Rules | ID |
 | `/product-switch-times` | M_ProductSwitchTimes | ID |
 | `/product-switch-rules` | M_ProductSwitchRules | ID |
 | `/calculation-settings` | M_CalculationSettings | ID |
@@ -659,7 +630,6 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | GET | `/plans/{planId}/assignments` | 割付一覧（日本時間） |
 | GET | `/plans/{planId}/kpis` | KPI（`{key: value}`） |
 | GET | `/plans/{planId}/violations` | 違反一覧 |
-| GET | `/rule-types` | 制約ルールのプラグイン一覧（パラメータの JSON Schema 付き） |
 | POST | `/plans/{planId}/approve` | 承認 `{force: false}` |
 | POST | `/plans/{planId}/discard` | 破棄 |
 | POST | `/plans/{planId}/copy` | 複製 `{planName?}` → 新しい下書き。名前省略時は「元の名前（コピー）」「元の名前（コピー2）」のように重複しない名前を生成。名前指定時の重複は409 |
@@ -672,7 +642,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/plans/{planId}/board?from=&to=&resourceGroupId=&colorBy=` | DayPilot 用のデータ: `plan`, `resources`, `groups`, `events`（割付）, `setups`（段取りブロック）, `nonWorking`（非稼働時間）, `unscheduled`（未割付作業）, `issues`（違反）, `kpis`。`colorBy` の既定は段取り替えマトリクスの属性 |
+| GET | `/plans/{planId}/board?from=&to=&resourceGroupId=&colorBy=` | DayPilot 用のデータ: `plan`, `resources`, `groups`, `events`（割付）, `setups`（段取りブロック）, `nonWorking`（非稼働時間）, `unscheduled`（未割付作業）, `issues`（違反）, `kpis`。`colorBy` の既定は製品ID（productId） |
 | POST | `/plans/{planId}/assignments/validate` | 変更の検証（保存しない）→ `{ok, errors, hard, soft, kpis, changedTaskIds}` |
 | PATCH | `/plans/{planId}/assignments` | 変更の保存。`{changes: [...], lockMoved: true, force: false}`。エラー・新たな必須違反は 422、`rowVer` 不一致は 409 |
 | GET | `/plans/compare?a=&b=` | 計画 A（基準）と B の KPI 差分（`better`: B が良いか）と変更作業（`MOVED` / `RESOURCE` / `ADDED` / `REMOVED`） |
@@ -744,28 +714,18 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 ---
 
-## 11. 拡張方法（ルールプラグイン・属性）
+## 11. 属性と工程の曜日制限
 
 ### 11.1 属性で業種固有の情報を表す
 
 食品のアレルゲン、塗装の色、プロジェクトのスキルなど、業種固有の情報は **AttributesJSON** に入れます。
-タスクに保存された属性を、ルールのセレクター・段取り替えの基準・ボードの色分けに使います。製品・工程・オーダーには属性列がなく、新規生成タスクの属性は未指定です。
+タスクの補足属性は旧データ・API応答・明示した属性での色分け用に保持します。曜日制限と段取り替えは工程の設定を使います。製品・工程・オーダーには属性列がなく、新規生成タスクの属性は未指定です。
 
-例: アレルゲンの切り替えに洗浄 120 分が必要
-1. タスクの `AttributesJSON` に `{"allergen": "milk"}` などを設定する（既存のタスク更新APIを使用）
-2. `M_ProductSwitchTimes` に `AttributeKey = "allergen"` のマトリクスを作り、`M_ProductSwitchRules` に `milk → none: 120 分` などを登録
-3. 戻れない順序は `IsForbidden = 1`
+段取り替えは`M_ProductSwitchRules`の切替前後工程IDを参照する。NULLで任意の工程を指定でき、作業属性の入力なしで通常生成した作業にも適用する。ボードの既定色分けは製品ID。詳細は[製品工程の段取り替え仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。
 
-### 11.2 ルールプラグインの追加
+### 11.2 製品工程の曜日制限
 
-1. `app/engine/rules/` にファイルを追加し、`RulePlugin` を継承したクラスに `@register` を付ける
-   * `type_key`（M_Rules.RuleTypeKey に入れる値）、`label`、`description`、`params_schema`（JSON Schema）
-   * `apply(ctx, rule)`: CP-SAT モデルに制約を追加（`ctx.model`、`ctx.task_vars`、`ctx.add_penalty` を使用）
-   * `check(problem, rule, assignments)`: 割付を検証して `Violation` を返す（手動編集の検証にも使われる）
-2. `app/engine/rules/__init__.py` で読み込む
-3. `M_Rules` に `RuleTypeKey`・`SelectorJSON`・`ParamsJSON` を登録
-
-既存の例: `allowed_weekdays.py`（指定した曜日だけに実行）。
+製品工程のAllowedWeekdaysJSON・WeekdayRestrictionEnabled・WeekdayRestrictionStartAt・WeekdayRestrictionEndAtを参照する。設定の取得は`services/task_conditions.py`、自動計算と手動検証での適用は`engine/weekdays.py`へ集約する。今回、画面入力欄は追加しない。
 
 ---
 
@@ -784,7 +744,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 **現在の制約**
 
 * 認証なし（`X-User-Email` ヘッダーで操作者を記録するのみ）。
-* 実績入力画面は未実装。4つのマスタ画面（リソース、カレンダー、製品・工程、制約ルール・段取り替え）はフロントエンドに実装。
+* 実績入力画面は未実装。4つのマスタ画面（リソース、カレンダー、製品・工程、段取り替え）はフロントエンドに実装。
 * 作業は稼働枠をまたいで分割しない（休憩・夜間をまたぐ長い作業は割り付けられない場合がある）。
 * 1 リソースの候補作業が 80 件を超えると、そのリソースの段取り替えは計算で考慮しない（検証では検出）。
 * DayPilot Lite の制限: リソースのツリー表示、外部からのドラッグ（未割付作業の直接ドロップ）は不可 → 配置フォームで対応。

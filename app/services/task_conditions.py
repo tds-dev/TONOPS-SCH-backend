@@ -1,6 +1,7 @@
 """製品工程マスタとオーダー数量から、保存しない設備候補・工程間の条件を組み立てる。"""
 import math
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session, selectinload
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db import chunks
 from app.models.masters import ProductProcess
 from app.models.transactions import Order, Task
+from app.services.product_validation import validate_weekday_settings
 
 
 # タスクに使える設備候補。option_idは保存行ではなく、元の工程設備候補のID。
@@ -36,12 +38,33 @@ class TaskLink:
     max_lag_min: int | None
 
 
-# 計算と画面表示で共用する、タスク別候補と前後関係の一覧。
+# 工程の曜日設定を、DBへの追加問合せなしで計算へ引き渡す。
+@dataclass
+class TaskWeekdayRestriction:
+    # 工程で許可する曜日と、この曜日制限だけの有効状態。
+    weekdays: list[int]
+    enabled: bool
+    # 計画開始日時と比較する日本時間の適用期間。None側は制限なし。
+    start_at: datetime | None
+    end_at: datetime | None
+
+    # 計画開始日時に有効な許可曜日を返し、無効・期間外なら制限を外す。
+    def allowed_at(self, plan_start: datetime) -> list[int] | None:
+        if not self.enabled or (self.start_at is not None and plan_start < self.start_at):
+            return None
+        if self.end_at is not None and plan_start > self.end_at:
+            return None
+        return self.weekdays
+
+
+# 計算と画面表示で共用する、タスク別候補・曜日設定と前後関係の一覧。
 @dataclass
 class TaskConditions:
     # タスクIDをキーに、候補がないタスクも空の一覧として保持する。
     options: dict[int, list[TaskOption]] = field(default_factory=dict)
     dependencies: list[TaskLink] = field(default_factory=list)
+    # タスクごとの最新工程設定。作業属性や廃止したルールテーブルには依存しない。
+    weekday_restrictions: dict[int, TaskWeekdayRestriction] = field(default_factory=dict)
     # 工程追加後など、作業本体がまだ揃っていないオーダーを計算前に通知する。
     errors: list[str] = field(default_factory=list)
 
@@ -101,6 +124,12 @@ def build_task_conditions(db: Session, tasks: list[Task]) -> TaskConditions:
         if order is None or process is None or process.ProductID != order.ProductID:
             continue
         by_order.setdefault(task.OrderID, {})[process.ProductProcessID] = task
+        # DBを直接更新した場合も、曜日・期間の不正値を計算前に拒否する。
+        validate_weekday_settings(process, {})
+        result.weekday_restrictions[task.TaskID] = TaskWeekdayRestriction(
+            weekdays=list(process.AllowedWeekdaysJSON), enabled=process.WeekdayRestrictionEnabled,
+            start_at=process.WeekdayRestrictionStartAt, end_at=process.WeekdayRestrictionEndAt,
+        )
         result.options[task.TaskID] = [
             TaskOption(
                 option_id=candidate.ProductProcessResourceID,

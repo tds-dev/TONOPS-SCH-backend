@@ -16,7 +16,6 @@ from sqlalchemy import false, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.timeutil import as_jst
 from app.engine.problem import (
     PChangeover,
     PDependency,
@@ -25,10 +24,9 @@ from app.engine.problem import (
     POption,
     PResource,
     Problem,
-    PRule,
     PTask,
 )
-from app.models.masters import ProductSwitchTime, CalculationSetting, Resource, Rule, Location
+from app.models.masters import ProductSwitchTime, CalculationSetting, Resource, Location
 from app.models.transactions import Order, Plan, PlanAssignment, Task
 from app.services.calendar_service import working_time
 from app.services.task_conditions import build_task_conditions
@@ -95,7 +93,8 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     )
     orders_rows = db.scalars(select(Order).where(*order_filter)).all()
     orders = {
-        j.OrderID: POrder(id=j.OrderID, no=j.WBSNumber, due=to_min(j.DeadLine) if j.DeadLine else None, priority=j.Priority)
+        j.OrderID: POrder(id=j.OrderID, no=j.WBSNumber, due=to_min(j.DeadLine) if j.DeadLine else None,
+                          priority=j.Priority, product_id=j.ProductID)
         for j in orders_rows
     }
     order_release = {j.OrderID: max(0, to_min(j.ReleaseAt)) if j.ReleaseAt else 0 for j in orders_rows}
@@ -136,6 +135,9 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         task = PTask(
             id=t.TaskID, order_id=t.OrderID, name=f"{orders[t.OrderID].no} {t.TaskName}",
             attrs=dict(t.AttributesJSON or {}), options=options, release=release,
+            product_process_id=t.ProductProcessID,
+            allowed_weekdays=(conditions.weekday_restrictions[t.TaskID].allowed_at(start)
+                              if t.TaskID in conditions.weekday_restrictions else None),
             deadline=to_min(t.DeadlineAt) if t.DeadlineAt else None,
         )
         prev = own.get(t.TaskID) or base.get(t.TaskID)
@@ -154,27 +156,19 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         for d in conditions.dependencies
     ]
 
-    # ---- 段取り替えとルール
+    # ---- 前後する製品工程による段取り替え
     changeovers = []
     for switch_time in db.scalars(
         select(ProductSwitchTime).where(ProductSwitchTime.LocationID == location.LocationID, ProductSwitchTime.IsActive == true())
     ):
         rids = set(members.get(switch_time.ResourceGroupID, [])) if switch_time.ResourceGroupID else set(resources)
         changeovers.append(PChangeover(
-            id=switch_time.ProductSwitchTimeID, attribute=switch_time.AttributeKey, resource_ids=rids,
+            id=switch_time.ProductSwitchTimeID, resource_ids=rids,
             default=int(switch_time.DefaultMinutes or 0),
-            entries={(rule.FromValue, rule.ToValue): (int(rule.SetupMinutes or 0), bool(rule.IsForbidden))
+            entries={(rule.FromProductProcessID, rule.ToProductProcessID): (int(rule.SetupMinutes or 0), bool(rule.IsForbidden))
                      for rule in switch_time.rules},
         ))
-    plan_day = as_jst(start).date()  # ルールの有効期間は現地の開始日で判定する
-    rules = [
-        PRule(r.RuleID, r.RuleTypeKey, r.RuleName, dict(r.SelectorJSON or {}), dict(r.ParamsJSON or {}),
-              bool(r.IsHard), int(r.Weight or 100))
-        for r in db.scalars(select(Rule).where(Rule.LocationID == location.LocationID, Rule.IsActive == true()))
-        if (r.ValidFrom is None or r.ValidFrom <= plan_day) and (r.ValidTo is None or r.ValidTo >= plan_day)
-    ]
-
     return Problem(
         horizon_start=start, horizon=horizon, tz=tz, resources=resources, tasks=tasks, orders=orders,
-        dependencies=deps, changeovers=changeovers, rules=rules, weights=weights,
+        dependencies=deps, changeovers=changeovers, weights=weights,
     )

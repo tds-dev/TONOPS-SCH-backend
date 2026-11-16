@@ -1,3 +1,4 @@
+-- 段取り替え明細は、参照する製品工程を登録した後に挿入する。
 -- DataBase/queryに配置した、SSMSで手動実行するデモデータ挿入SQL。
 -- 新規作成した空のDB向け。既存データの変換は行わない。
 -- 出荷日時ShippingDateは未指定（NULL）で登録する。日時の表示は共通の日本時間設定を使う。
@@ -10,9 +11,8 @@
 USE [TONOPS-SCH];
 GO
 SET XACT_ABORT ON;
--- 独立した属性定義も確認し、登録済みデータへの追加を防ぐ。
+-- 拠点の登録を確認し、登録済みデータへの追加を防ぐ。
 IF EXISTS (SELECT 1 FROM [M_Locations])
-    OR EXISTS (SELECT 1 FROM [M_AttributeDefinitions])
 BEGIN
     THROW 50001, N'初期データは空のDBに対して実行してください。', 1;
 END;
@@ -20,13 +20,6 @@ DECLARE @IdentityTable sysname = NULL;
 DECLARE @CleanupSql nvarchar(512);
 BEGIN TRY
 BEGIN TRANSACTION;
-
--- M_AttributeDefinitions: 1件
-SET @IdentityTable = N'M_AttributeDefinitions';
-SET IDENTITY_INSERT [M_AttributeDefinitions] ON;
-INSERT INTO [M_AttributeDefinitions] ([AttributeDefID], [EntityType], [AttributeKey], [Label], [DataType], [EnumValuesJSON], [IsRequired], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, N'TASK', N'family', N'パンの分類', N'ENUM', N'["食事パン", "菓子パン", "ナッツ入り"]', 0, 0, '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
-SET IDENTITY_INSERT [M_AttributeDefinitions] OFF;
-SET @IdentityTable = NULL;
 
 -- M_Locations: 1件
 SET @IdentityTable = N'M_Locations';
@@ -82,17 +75,10 @@ INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [LocationID], [GroupName], [S
 SET IDENTITY_INSERT [M_ResourceGroups] OFF;
 SET @IdentityTable = NULL;
 
--- M_Rules: 1件
-SET @IdentityTable = N'M_Rules';
-SET IDENTITY_INSERT [M_Rules] ON;
-INSERT INTO [M_Rules] ([RuleID], [LocationID], [RuleTypeKey], [RuleName], [SelectorJSON], [ParamsJSON], [IsHard], [Weight], [ValidFrom], [ValidTo], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'allowed_weekdays', N'くるみパンは平日のみ製造（デモ）', N'{"family": "ナッツ入り"}', N'{"weekdays": [1, 2, 3, 4, 5]}', 1, 100, NULL, NULL, 1, '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
-SET IDENTITY_INSERT [M_Rules] OFF;
-SET @IdentityTable = NULL;
-
 -- M_ProductSwitchTimes: 1件
 SET @IdentityTable = N'M_ProductSwitchTimes';
 SET IDENTITY_INSERT [M_ProductSwitchTimes] ON;
-INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [AttributeKey], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'ミキサーのパン分類切替', N'family', 1, 0, 1, '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
+INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'ミキサーの製品工程切替', 1, 0, 1, '2026-10-30T15:12:37.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_ProductSwitchTimes] OFF;
 SET @IdentityTable = NULL;
 
@@ -108,40 +94,56 @@ INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [Resou
 SET IDENTITY_INSERT [M_Resources] OFF;
 SET @IdentityTable = NULL;
 
--- M_ProductSwitchRules: 6件
-SET @IdentityTable = N'M_ProductSwitchRules';
-SET IDENTITY_INSERT [M_ProductSwitchRules] ON;
-INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromValue], [ToValue], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'食事パン', N'菓子パン', 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromValue], [ToValue], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (2, 1, N'食事パン', N'ナッツ入り', 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromValue], [ToValue], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (3, 1, N'菓子パン', N'食事パン', 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromValue], [ToValue], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (4, 1, N'菓子パン', N'ナッツ入り', 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromValue], [ToValue], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (5, 1, N'ナッツ入り', N'食事パン', 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromValue], [ToValue], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (6, 1, N'ナッツ入り', N'菓子パン', 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-SET IDENTITY_INSERT [M_ProductSwitchRules] OFF;
-SET @IdentityTable = NULL;
-
 -- M_ProductProcesses: 18件
 SET @IdentityTable = N'M_ProductProcesses';
 SET IDENTITY_INSERT [M_ProductProcesses] ON;
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, 1, N'こねる', 60, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (2, 1, 2, N'焼く', 30, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (3, 1, 3, N'包装する', 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (4, 2, 1, N'こねる', 60, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (5, 2, 2, N'焼く', 30, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (6, 2, 3, N'包装する', 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (7, 3, 1, N'こねる', 60, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (8, 3, 2, N'焼く', 30, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (9, 3, 3, N'包装する', 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (10, 4, 1, N'こねる', 60, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (11, 4, 2, N'焼く', 30, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (12, 4, 3, N'包装する', 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (13, 5, 1, N'こねる', 60, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (14, 5, 2, N'焼く', 30, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (15, 5, 3, N'包装する', 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (16, 6, 1, N'こねる', 60, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (17, 6, 2, N'焼く', 30, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
-INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (18, 6, 3, N'包装する', 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, 1, N'こねる', 60, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (2, 1, 2, N'焼く', 30, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (3, 1, 3, N'包装する', 0, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (4, 2, 1, N'こねる', 60, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (5, 2, 2, N'焼く', 30, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (6, 2, 3, N'包装する', 0, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (7, 3, 1, N'こねる', 60, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (8, 3, 2, N'焼く', 30, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (9, 3, 3, N'包装する', 0, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (10, 4, 1, N'こねる', 60, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (11, 4, 2, N'焼く', 30, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (12, 4, 3, N'包装する', 0, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (13, 5, 1, N'こねる', 60, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (14, 5, 2, N'焼く', 30, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (15, 5, 3, N'包装する', 0, NULL, N'[0,1,2,3,4,5,6]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (16, 6, 1, N'こねる', 60, NULL, N'[1,2,3,4,5]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (17, 6, 2, N'焼く', 30, NULL, N'[1,2,3,4,5]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (18, 6, 3, N'包装する', 0, NULL, N'[1,2,3,4,5]', 1, NULL, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
 SET IDENTITY_INSERT [M_ProductProcesses] OFF;
+SET @IdentityTable = NULL;
+
+-- M_ProductSwitchRules: 22件（製品工程IDで判定）
+SET @IdentityTable = N'M_ProductSwitchRules';
+SET IDENTITY_INSERT [M_ProductSwitchRules] ON;
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, 1, 10, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (2, 1, 1, 13, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (3, 1, 1, 16, 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (4, 1, 4, 10, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (5, 1, 4, 13, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (6, 1, 4, 16, 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (7, 1, 7, 10, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (8, 1, 7, 13, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (9, 1, 7, 16, 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (10, 1, 10, 1, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (11, 1, 10, 4, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (12, 1, 10, 7, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (13, 1, 10, 16, 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (14, 1, 13, 1, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (15, 1, 13, 4, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (16, 1, 13, 7, 10, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (17, 1, 13, 16, 15, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (18, 1, 16, 1, 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (19, 1, 16, 4, 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (20, 1, 16, 7, 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (21, 1, 16, 10, 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID], [SetupMinutes], [IsForbidden], [Cost], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (22, 1, 16, 13, 20, 0, NULL, '2026-10-30T15:12:37.000000', NULL, NULL, NULL);
+SET IDENTITY_INSERT [M_ProductSwitchRules] OFF;
 SET @IdentityTable = NULL;
 
 -- 作業者マスタの仮データ。今回は計画計算・CRUD API・画面には接続しない。

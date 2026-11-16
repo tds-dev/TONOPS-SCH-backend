@@ -76,30 +76,13 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             SortOrder=i, CreatedBy=USER,
         ))
 
-    # 分類属性の保存先はタスク。オーダーには属性を登録しない。
-    db.add(m.AttributeDefinition(
-        EntityType="TASK", AttributeKey="family",
-        Label="パンの分類", DataType="ENUM", EnumValuesJSON=["食事パン", "菓子パン", "ナッツ入り"], CreatedBy=USER,
-    ))
-
-    # パン分類を切り替える際の準備時間を表すデモ。同じ分類同士では追加の段取りを不要とする。
+    # 設備グループごとの段取り替え設定。明細は工程IDの確定後に追加する。
     switch_time = m.ProductSwitchTime(
-        LocationID=location.LocationID, ProductSwitchTimeName="ミキサーのパン分類切替", AttributeKey="family",
+        LocationID=location.LocationID, ProductSwitchTimeName="ミキサーの製品工程切替",
         ResourceGroupID=groups["KNEAD"].ResourceGroupID, DefaultMinutes=0, CreatedBy=USER,
     )
-    for frm, to, mins in [
-        ("食事パン", "菓子パン", 10), ("食事パン", "ナッツ入り", 15),
-        ("菓子パン", "食事パン", 10), ("菓子パン", "ナッツ入り", 15),
-        ("ナッツ入り", "食事パン", 20), ("ナッツ入り", "菓子パン", 20),
-    ]:
-        switch_time.rules.append(m.ProductSwitchRule(FromValue=frm, ToValue=to, SetupMinutes=mins))
     db.add(switch_time)
 
-    db.add(m.Rule(
-        LocationID=location.LocationID, RuleTypeKey="allowed_weekdays", RuleName="くるみパンは平日のみ製造（デモ）",
-        SelectorJSON={"family": "ナッツ入り"}, ParamsJSON={"weekdays": [1, 2, 3, 4, 5]}, IsHard=True,
-        CreatedBy=USER,
-    ))
     db.add(m.CalculationSetting(
         LocationID=location.LocationID, CalculationSettingName="パン製造・納期優先", TimeUnit="MINUTE", IsDefault=True,
         ObjectiveWeightsJSON={"lateness": 1000, "setup": 10, "makespan": 1, "unscheduled": 100000},
@@ -127,7 +110,10 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             (3, "包装する", "PACK", 5, 0, 0.15, 0),
         ]:
             # 工程の実行順序、工程名、次工程までの待ち時間。
-            process = m.ProductProcess(SequenceNumber=no, ProcessName=process_name, MinLagAfterMin=lag, CreatedBy=USER)
+            process = m.ProductProcess(
+                SequenceNumber=no, ProcessName=process_name, MinLagAfterMin=lag, CreatedBy=USER,
+                AllowedWeekdaysJSON=[1, 2, 3, 4, 5] if family == "ナッツ入り" else list(range(7)),
+            )
             process.resources.append(m.ProductProcessResource(
                 ResourceGroupID=groups[grp].ResourceGroupID, SetupMinutes=setup, FixedMinutes=fixed, MinutesPerUnit=mpu,
                 CreatedBy=USER,
@@ -135,6 +121,22 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             product.processes.append(process)
         products[name] = product
         task_families[product.ProductID] = family
+    db.flush()
+
+    # 既存の分類間の仮設定を、各製品の「こねる」工程のIDに展開する。
+    knead_processes = [process for product in products.values() for process in product.processes if process.SequenceNumber == 1]
+    switch_minutes = {("食事パン", "菓子パン"): 10, ("食事パン", "ナッツ入り"): 15,
+                      ("菓子パン", "食事パン"): 10, ("菓子パン", "ナッツ入り"): 15,
+                      ("ナッツ入り", "食事パン"): 20, ("ナッツ入り", "菓子パン"): 20}
+    for before in knead_processes:
+        for after in knead_processes:
+            # 工程から製品のデモ分類を取得し、異なる分類間の22組だけを登録する。
+            minutes = switch_minutes.get((task_families[before.ProductID], task_families[after.ProductID]))
+            if minutes is not None:
+                switch_time.rules.append(m.ProductSwitchRule(
+                    FromProductProcessID=before.ProductProcessID, ToProductProcessID=after.ProductProcessID,
+                    SetupMinutes=minutes,
+                ))
     db.flush()
 
     # 作業者と不在の基準日。既存オーダーと同じ翌日06:00を使用する。

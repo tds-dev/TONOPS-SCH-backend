@@ -8,7 +8,7 @@ from itertools import pairwise
 
 from app.engine.problem import Problem
 from app.engine.result import SAssignment, Violation, fmt, fmt_duration
-from app.engine.rules import get_plugin
+from app.engine.weekdays import check_weekday_restrictions
 
 __all__ = ["SAssignment", "Violation", "check_schedule", "compute_kpis", "order_finishes"]
 
@@ -60,15 +60,15 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
             if rid not in co.resource_ids:
                 continue
             for prev, cur in pairwise(records):
-                pv = tasks[prev.task_id].attrs.get(co.attribute) if prev.task_id in tasks else None
-                cv = tasks[cur.task_id].attrs.get(co.attribute) if cur.task_id in tasks else None
+                pv = tasks[prev.task_id].product_process_id if prev.task_id in tasks else None
+                cv = tasks[cur.task_id].product_process_id if cur.task_id in tasks else None
                 if pv is None or cv is None:
                     continue
                 need, forbidden = co.lookup(pv, cv)
                 if forbidden:
-                    out.append(Violation("HARD", "FORBIDDEN_SEQUENCE", f"{res.name}: {co.attribute} {pv}→{cv} の順序は禁止されています", task_id=cur.task_id))
+                    out.append(Violation("HARD", "FORBIDDEN_SEQUENCE", f"{res.name}: {tasks[prev.task_id].name}→{tasks[cur.task_id].name} の順序は禁止されています", task_id=cur.task_id))
                 elif cur.start - prev.end < need:
-                    out.append(Violation("HARD", "SETUP_TOO_SHORT", f"{res.name}: {pv}→{cv} の段取りに {need}分必要です", task_id=cur.task_id))
+                    out.append(Violation("HARD", "SETUP_TOO_SHORT", f"{res.name}: {tasks[prev.task_id].name}→{tasks[cur.task_id].name} の段取りに {need}分必要です", task_id=cur.task_id))
 
     # 依存関係
     for d in problem.dependencies:
@@ -82,11 +82,8 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
         if d.max_lag is not None and gap > d.max_lag:
             out.append(Violation("HARD", "MAX_LAG", f"{tasks[d.succ].name} は {tasks[d.pred].name} の後 {d.max_lag}分以内に開始する必要があります", task_id=d.succ))
 
-    # ルールプラグイン
-    for rule in problem.rules:
-        plugin = get_plugin(rule.type_key)
-        if plugin is not None:
-            out.extend(plugin.check(problem, rule, assignments))
+    # 自動計算と同じ工程の曜日設定で、手動変更後も検証する。
+    out.extend(check_weekday_restrictions(problem, assignments))
 
     # オーダー・タスクの納期遅れ（推奨扱い: 許容するがコストになる）
     for order_id, end, due in order_finishes(problem, by_task):

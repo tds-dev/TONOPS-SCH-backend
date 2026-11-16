@@ -1,9 +1,10 @@
 """実DB・設定ファイル・外部通信を使わず、オーダー・カレンダーCRUDと既存データの保持を確認するテスト。"""
 import asyncio
-import json
 import unittest
 from datetime import datetime
 from unittest.mock import patch
+
+from asgi_helpers import request
 
 from fastapi import FastAPI
 from sqlalchemy import select
@@ -22,32 +23,6 @@ with patch("app.core.config.get_settings", return_value=Settings(
     from app.models.transactions import WorkActual, Order, Plan, PlanAssignment, Task
     from app.routers.orders import routers
     from app.routers.masters import routers as master_routers
-
-
-# 実際のHTTP接続を開かず、FastAPIの受付処理へリクエストを渡す。
-async def request(app, method, path, body=None):
-    # リクエストとレスポンスの本文を保持する。
-    payload = json.dumps(body).encode() if body is not None else b""
-    messages = []
-
-    # ASGIへ本文を1回だけ渡す受信処理。
-    async def receive():
-        return {"type": "http.request", "body": payload, "more_body": False}
-
-    # ASGIが返したステータスと本文を記録する送信処理。
-    async def send(message):
-        messages.append(message)
-
-    # URLのパスと検索条件を分離する。
-    route, _, query = path.partition("?")
-    await app({"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method,
-               "scheme": "http", "path": route, "raw_path": route.encode(), "query_string": query.replace("+", "%2B").encode(),
-               "headers": [(b"content-type", b"application/json")], "server": ("test", 80), "client": ("test", 1),
-               "root_path": ""}, receive, send)
-    # 分割された本文をまとめ、APIの返却値を読み取る。
-    status = next(message["status"] for message in messages if message["type"] == "http.response.start")
-    content = b"".join(message.get("body", b"") for message in messages if message["type"] == "http.response.body")
-    return status, json.loads(content) if content else None
 
 
 # オーダーとカレンダーのテストで、通信不要のAPIと独立したメモリDBを共用する。
@@ -634,21 +609,18 @@ class CalendarCrudTest(InMemoryApiTestCase):
     def test_allowed_weekdays_share_sunday_zero(self):
         from datetime import timedelta
         from app.core.timeutil import weekday_number
-        from app.engine.problem import Problem, PRule, PTask
-        from app.engine.rules.allowed_weekdays import AllowedWeekdays, blocked_ranges
+        from app.engine.problem import Problem, PTask
+        from app.engine.weekdays import check_weekday_restrictions, blocked_ranges
         from app.engine.result import SAssignment
         # 日曜から1週間を用意し、0～6が暦と一致することを確認する。
         start = datetime(2026, 11, 8)
         self.assertEqual([weekday_number(start + timedelta(days=i)) for i in range(7)], list(range(7)))
         problem = Problem(horizon_start=start, horizon=7 * 1440, tz="Asia/Tokyo", resources={},
-                          tasks={1: PTask(id=1, order_id=1, name="作業", attrs={}, options=[])}, orders={})
+                          tasks={1: PTask(id=1, order_id=1, name="作業", attrs={}, options=[], allowed_weekdays=[0])}, orders={})
         self.assertEqual(blocked_ranges(problem, [0]), [(i * 1440, (i + 1) * 1440) for i in range(1, 7)])
-        rule = PRule(id=1, type_key="allowed_weekdays", name="日曜のみ", selector={}, params={"weekdays": [0]})
-        issues = AllowedWeekdays().check(problem, rule, [SAssignment(task_id=1, resource_id=1, start=1440, end=1500)])
+        issues = check_weekday_restrictions(problem, [SAssignment(task_id=1, resource_id=1, start=1440, end=1500)])
         self.assertEqual(len(issues), 1)
         self.assertIn("日 のみ実行可能", issues[0].message)
-        self.assertEqual(AllowedWeekdays().params_schema["properties"]["weekdays"]["items"],
-                         {"type": "integer", "minimum": 0, "maximum": 6})
 
     # 無効な曜日・時刻・拠点は422で拒否し、勤務行を保存しない。
     def test_invalid_work_values_are_rejected(self):

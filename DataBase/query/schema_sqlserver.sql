@@ -1,3 +1,5 @@
+-- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
+-- 2026-11-13: 旧属性定義・ルールを廃止。曜日制限は製品工程へ保存。全23テーブル・255列。
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
 -- 改名したID・名称と外部キーを統一し、出荷日時は任意入力として保持する。
 -- オーダーは種別・計画の管理元・属性の列を持たず、タスク固有の属性は保持する。
@@ -23,26 +25,6 @@ CREATE TABLE [M_Locations] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Locations] PRIMARY KEY ([LocationID])
-);
-GO
-
-CREATE TABLE [M_AttributeDefinitions] (
-	[AttributeDefID] INTEGER NOT NULL IDENTITY, 
-	[EntityType] NVARCHAR(20) NOT NULL, 
-	[AttributeKey] NVARCHAR(50) NOT NULL, 
-	[Label] NVARCHAR(100) NOT NULL, 
-	[DataType] NVARCHAR(20) NOT NULL, 
-	[EnumValuesJSON] NVARCHAR(max) NULL, 
-	[IsRequired] BIT NOT NULL, 
-	[SortOrder] INTEGER NOT NULL, 
-	[CreatedAt] DATETIME2(7) NOT NULL, 
-	[CreatedBy] NVARCHAR(254) NULL, 
-	[UpdatedAt] DATETIME2(7) NULL, 
-	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_AttributeDefinitions] PRIMARY KEY ([AttributeDefID]), 
-	CONSTRAINT [UQ_M_AttributeDefinitions_EntityType_AttributeKey] UNIQUE ([EntityType], [AttributeKey]), 
-	CONSTRAINT [CK_M_AttributeDefinitions_EntityType] CHECK (EntityType IN ('PRODUCT','RESOURCE','ORDER','TASK')), 
-	CONSTRAINT [CK_M_AttributeDefinitions_DataType] CHECK (DataType IN ('TEXT','NUMBER','BOOL','DATE','ENUM'))
 );
 GO
 
@@ -78,27 +60,6 @@ CREATE TABLE [M_ResourceGroups] (
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_ResourceGroups] PRIMARY KEY ([ResourceGroupID]), 
 	CONSTRAINT [FK_M_ResourceGroups_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
-);
-GO
-
-CREATE TABLE [M_Rules] (
-	[RuleID] INTEGER NOT NULL IDENTITY, 
-	[LocationID] INTEGER NOT NULL, 
-	[RuleTypeKey] NVARCHAR(50) NOT NULL, 
-	[RuleName] NVARCHAR(100) NOT NULL, 
-	[SelectorJSON] NVARCHAR(max) NOT NULL, 
-	[ParamsJSON] NVARCHAR(max) NOT NULL, 
-	[IsHard] BIT NOT NULL, 
-	[Weight] INTEGER NOT NULL, 
-	[ValidFrom] DATETIME NULL, 
-	[ValidTo] DATETIME NULL, 
-	[IsActive] BIT NOT NULL, 
-	[CreatedAt] DATETIME2(7) NOT NULL, 
-	[CreatedBy] NVARCHAR(254) NULL, 
-	[UpdatedAt] DATETIME2(7) NULL, 
-	[UpdatedBy] NVARCHAR(254) NULL, 
-	CONSTRAINT [PK_M_Rules] PRIMARY KEY ([RuleID]), 
-	CONSTRAINT [FK_M_Rules_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
 
@@ -185,7 +146,6 @@ CREATE TABLE [M_ProductSwitchTimes] (
 	[ProductSwitchTimeID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[ProductSwitchTimeName] NVARCHAR(100) NOT NULL, 
-	[AttributeKey] NVARCHAR(50) NOT NULL, 
 	[ResourceGroupID] INTEGER NULL, 
 	[DefaultMinutes] INTEGER NOT NULL, 
 	[IsActive] BIT NOT NULL, 
@@ -206,12 +166,17 @@ CREATE TABLE [M_ProductProcesses] (
 	[ProcessName] NVARCHAR(100) NOT NULL, 
 	[MinLagAfterMin] INTEGER NOT NULL, 
 	[MaxLagAfterMin] INTEGER NULL, 
+	[AllowedWeekdaysJSON] NVARCHAR(max) NOT NULL DEFAULT '[0,1,2,3,4,5,6]', 
+	[WeekdayRestrictionEnabled] BIT NOT NULL DEFAULT 1, 
+	[WeekdayRestrictionStartAt] DATETIME2(7) NULL, 
+	[WeekdayRestrictionEndAt] DATETIME2(7) NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_ProductProcesses] PRIMARY KEY ([ProductProcessID]), 
 	CONSTRAINT [UQ_M_ProductProcesses_ProductID_SequenceNumber] UNIQUE ([ProductID], [SequenceNumber]), 
+	CONSTRAINT [CK_M_ProductProcesses_WeekdayRestrictionPeriod] CHECK (WeekdayRestrictionStartAt IS NULL OR WeekdayRestrictionEndAt IS NULL OR WeekdayRestrictionStartAt <= WeekdayRestrictionEndAt), 
 	CONSTRAINT [FK_M_ProductProcesses_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]) ON DELETE CASCADE
 );
 GO
@@ -292,8 +257,8 @@ GO
 CREATE TABLE [M_ProductSwitchRules] (
 	[ProductSwitchRuleID] INTEGER NOT NULL IDENTITY, 
 	[ProductSwitchTimeID] INTEGER NOT NULL, 
-	[FromValue] NVARCHAR(50) NOT NULL, 
-	[ToValue] NVARCHAR(50) NOT NULL, 
+	[FromProductProcessID] INTEGER NULL, 
+	[ToProductProcessID] INTEGER NULL, 
 	[SetupMinutes] INTEGER NOT NULL, 
 	[IsForbidden] BIT NOT NULL, 
 	[Cost] NUMERIC(12, 2) NULL, 
@@ -302,8 +267,10 @@ CREATE TABLE [M_ProductSwitchRules] (
 	[UpdatedAt] DATETIME2(7) NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_ProductSwitchRules] PRIMARY KEY ([ProductSwitchRuleID]), 
-	CONSTRAINT [UQ_M_ProductSwitchRules_ProductSwitchTimeID_FromValue_ToValue] UNIQUE ([ProductSwitchTimeID], [FromValue], [ToValue]), 
-	CONSTRAINT [FK_M_ProductSwitchRules_ProductSwitchTimeID_M_ProductSwitchTimes] FOREIGN KEY([ProductSwitchTimeID]) REFERENCES [M_ProductSwitchTimes] ([ProductSwitchTimeID]) ON DELETE CASCADE
+	CONSTRAINT [UQ_M_ProductSwitchRules_ProductSwitchTimeID_FromProductProcessID_ToProductProcessID] UNIQUE ([ProductSwitchTimeID], [FromProductProcessID], [ToProductProcessID]), 
+	CONSTRAINT [FK_M_ProductSwitchRules_ProductSwitchTimeID_M_ProductSwitchTimes] FOREIGN KEY([ProductSwitchTimeID]) REFERENCES [M_ProductSwitchTimes] ([ProductSwitchTimeID]) ON DELETE CASCADE, 
+	CONSTRAINT [FK_M_ProductSwitchRules_FromProductProcessID_M_ProductProcesses] FOREIGN KEY([FromProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID]), 
+	CONSTRAINT [FK_M_ProductSwitchRules_ToProductProcessID_M_ProductProcesses] FOREIGN KEY([ToProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID])
 );
 GO
 
@@ -454,7 +421,6 @@ GO
 CREATE TABLE [T_PlanViolations] (
 	[ViolationID] BIGINT NOT NULL IDENTITY, 
 	[PlanID] INTEGER NOT NULL, 
-	[RuleID] INTEGER NULL, 
 	[TaskID] INTEGER NULL, 
 	[Severity] NVARCHAR(10) NOT NULL, 
 	[Penalty] NUMERIC(18, 2) NULL, 
@@ -466,7 +432,6 @@ CREATE TABLE [T_PlanViolations] (
 	CONSTRAINT [PK_T_PlanViolations] PRIMARY KEY ([ViolationID]), 
 	CONSTRAINT [CK_T_PlanViolations_Severity] CHECK (Severity IN ('HARD','SOFT','INFO')), 
 	CONSTRAINT [FK_T_PlanViolations_PlanID_T_Plans] FOREIGN KEY([PlanID]) REFERENCES [T_Plans] ([PlanID]) ON DELETE CASCADE, 
-	CONSTRAINT [FK_T_PlanViolations_RuleID_M_Rules] FOREIGN KEY([RuleID]) REFERENCES [M_Rules] ([RuleID]), 
 	CONSTRAINT [FK_T_PlanViolations_TaskID_T_Tasks] FOREIGN KEY([TaskID]) REFERENCES [T_Tasks] ([TaskID])
 );
 GO

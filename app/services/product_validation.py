@@ -74,6 +74,29 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
         if maximum < minimum:
             raise HTTPException(422, "最大待ち時間は最小待ち時間以上にしてください。")
     # 工程番号の重複は専用保存処理で交換する。範囲は製品の工程数に合わせて確認する。
+    validate_weekday_settings(original, values)
+
+
+# 曜日一覧・有効状態・日本時間の適用期間を確認し、部分更新でも既存値を保持する。
+def validate_weekday_settings(original: ProductProcess | None, values: dict[str, Any]) -> None:
+    # 設定がない新規工程は、全曜日を許可して既存の計算動作を維持する。
+    weekdays = _value(original, values, "AllowedWeekdaysJSON", list(range(7)))
+    if (not isinstance(weekdays, list) or not weekdays
+            or any(type(day) is not int or not 0 <= day <= 6 for day in weekdays)
+            or len(set(weekdays)) != len(weekdays)):
+        raise HTTPException(422, "許可曜日は0（日曜）～6（土曜）の重複しない整数を1つ以上指定してください。")
+    # 画面以外からの登録も曜日番号順に揃え、取得時の表示と差分を安定させる。
+    if "AllowedWeekdaysJSON" in values:
+        values["AllowedWeekdaysJSON"] = sorted(weekdays)
+    # nullを有効状態として保存せず、明示した真偽値だけを受け付ける。
+    enabled = _value(original, values, "WeekdayRestrictionEnabled", True)
+    if not isinstance(enabled, bool):
+        raise HTTPException(422, "曜日制限の有効状態はtrueまたはfalseで指定してください。")
+    # API側で日本時間へ変換された日時を、そのまま前後比較する。
+    start = _value(original, values, "WeekdayRestrictionStartAt")
+    end = _value(original, values, "WeekdayRestrictionEndAt")
+    if start is not None and end is not None and start > end:
+        raise HTTPException(422, "曜日制限の終了日時は開始日時以降にしてください。")
 
 
 # 工程の実行候補を同じ拠点に限定し、設備かグループの片方と所要時間を確認する。

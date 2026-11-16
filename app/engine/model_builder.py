@@ -11,7 +11,7 @@
   * ロック済みタスクは位置を固定
   * 目的関数: 納期遅れ（オーダー優先度で重み付け）、未割付タスク、段取り時間合計、
     最終完了時刻、前回計画からの変動（安定性）
-  * ルールプラグインが独自の制約を追加する（app.engine.rules）
+  * 製品工程の許可曜日外には、作業時間が重ならないようにする
 """
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -21,9 +21,9 @@ from typing import Any
 from ortools.sat.python import cp_model
 
 from app.engine.cancellation import watch_cancellation
-from app.engine.problem import PChangeover, Problem, PTask
+from app.engine.problem import Problem, PTask
 from app.engine.result import SAssignment
-from app.engine.rules import get_plugin
+from app.engine.weekdays import apply_weekday_restrictions
 from app.services.worktime import gaps, subtract
 
 DEFAULT_WEIGHTS = {"lateness": 1000, "unscheduled": 100000, "setup": 10, "makespan": 1, "stability": 0}
@@ -127,14 +127,10 @@ def _add_resources(ctx: BuildContext) -> None:
             m.AddCumulative(ivs + blocks, [1] * len(ivs) + [r.capacity] * len(blocks), r.capacity)
 
 
-def _changeover_for(problem: Problem, resource_id: int) -> PChangeover | None:
-    return next((c for c in problem.changeovers if resource_id in c.resource_ids), None)
-
-
 def _add_changeovers(ctx: BuildContext) -> None:
     m, p = ctx.model, ctx.problem
     for r in p.resources.values():
-        co = _changeover_for(p, r.id)
+        co = p.changeover_for(r.id)
         if co is None or r.capacity != 1:
             continue
         nodes = [(tv, ov) for tv in ctx.task_vars.values() for ov in tv.options if ov.resource_id == r.id]
@@ -152,8 +148,7 @@ def _add_changeovers(ctx: BuildContext) -> None:
             for j, (tvb, _) in enumerate(nodes, start=1):
                 if i == j:
                     continue
-                va, vb = tva.task.attrs.get(co.attribute), tvb.task.attrs.get(co.attribute)
-                need, forbidden = co.lookup(va, vb) if va is not None and vb is not None else (0, False)
+                need, forbidden = co.lookup(tva.task.product_process_id, tvb.task.product_process_id)
                 if forbidden:
                     continue
                 lit = m.NewBoolVar(f"arc{r.id}_{i}_{j}")
@@ -250,12 +245,7 @@ def build_model(problem: Problem) -> BuildContext:
     _add_resources(ctx)
     _add_changeovers(ctx)
     _add_dependencies(ctx)
-    for rule in problem.rules:
-        plugin = get_plugin(rule.type_key)
-        if plugin is None:
-            ctx.notes.append(f"rule {rule.id}: unknown type '{rule.type_key}' ignored")
-            continue
-        plugin.apply(ctx, rule)
+    apply_weekday_restrictions(ctx)
     _add_objective(ctx)
     return ctx
 

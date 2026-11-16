@@ -21,7 +21,6 @@ class Violation:
     code: str
     message: str
     task_id: int | None = None
-    rule_id: int | None = None
     penalty: float | None = None
 
 

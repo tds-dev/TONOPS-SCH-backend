@@ -5,13 +5,13 @@
 """
 from datetime import datetime
 
-from sqlalchemy import false, select, true
+from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.timeutil import to_jst_naive, as_jst
 from app.engine.snapshot import build_problem
-from app.models.masters import ProductSwitchTime, Product, Resource, ResourceGroup, Location
+from app.models.masters import Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
 from app.schemas.base import coerce
 from app.services.plan_lifecycle import blocks_plan_approval
@@ -23,16 +23,6 @@ SEVERITY_ORDER = {"HARD": 0, "SOFT": 1, "INFO": 2}
 # 日本時間の日時を、拠点の現地時刻を表す文字列へ変換する。
 def _local(dt: datetime, tz: str) -> str:
     return as_jst(dt).replace(tzinfo=None).isoformat(timespec="seconds")
-
-
-# 有効な製品切替時間の属性を、ボードの既定の色分けに使う。
-def default_color_attribute(db: Session, location_id: int) -> str | None:
-    """色分けの既定属性: 拠点の有効な製品切替時間設定の属性。"""
-    return db.scalar(
-        select(ProductSwitchTime.AttributeKey)
-        .where(ProductSwitchTime.LocationID == location_id, ProductSwitchTime.IsActive == true())
-        .order_by(ProductSwitchTime.ProductSwitchTimeID)
-    )
 
 
 # 計画の拠点に属する設備・割付・違反情報をボード表示用にまとめる。
@@ -49,7 +39,8 @@ def build_board(
     tz = get_settings().app_timezone
     start = to_jst_naive(start) if start else plan.StartAt
     end = to_jst_naive(end) if end else plan.EndAt
-    color_by = color_by or default_color_attribute(db, location.LocationID)
+    # 既定は製品IDで色分けし、指定された旧属性による色分けは引き続き許可する。
+    color_by = color_by or "productId"
     problem = build_problem(db, plan)
 
     # ---- リソース（グループ順・表示順）
@@ -110,7 +101,7 @@ def build_board(
             "quantity": coerce(j.Quantity),
             "deadLine": _local(j.DeadLine, tz) if j.DeadLine else None,
             "isLocked": a.IsLocked, "source": a.Source, "setupMinutes": a.SetupMinutes,
-            "colorValue": attrs.get(color_by) if color_by else j.WBSNumber,
+            "colorValue": (str(j.ProductID) if j.ProductID is not None else j.WBSNumber) if color_by == "productId" else attrs.get(color_by),
             "issue": worst.get(t.TaskID), "rowVer": a.RowVer,
         })
         if a.SetupMinutes:
@@ -138,7 +129,8 @@ def build_board(
             "taskId": t.id, "orderId": t.order_id, "wbsNumber": problem.orders[t.order_id].no, "name": t.name,
             "durations": {str(o.resource_id): o.duration for o in t.options},
             "deadLine": _local(problem.to_dt(problem.orders[t.order_id].due), tz) if problem.orders[t.order_id].due is not None else None,
-            "colorValue": t.attrs.get(color_by) if color_by else None,
+            "colorValue": (str(problem.orders[t.order_id].product_id) if problem.orders[t.order_id].product_id is not None
+                           else problem.orders[t.order_id].no) if color_by == "productId" else t.attrs.get(color_by),
         }
         for t in problem.tasks.values() if t.id not in assigned
     ]
@@ -162,7 +154,7 @@ def build_board(
         "unscheduled": unscheduled,
         "issues": [
             # 実際の承認処理と同じ判定結果を画面へ返す。
-            {"severity": v.Severity, "message": v.Message, "taskId": v.TaskID, "ruleId": v.RuleID,
+            {"severity": v.Severity, "message": v.Message, "taskId": v.TaskID,
              "blocksApproval": blocks_plan_approval(v, assigned)}
             for v in sorted(issues, key=lambda v: (SEVERITY_ORDER[v.Severity], v.ViolationID))
         ],
