@@ -24,7 +24,7 @@ BEGIN TRANSACTION;
 -- M_Locations: 1件
 SET @IdentityTable = N'M_Locations';
 SET IDENTITY_INSERT [M_Locations] ON;
-INSERT INTO [M_Locations] ([LocationID], [LocationName], [CalendarID], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, N'パン工場', NULL, '2026-10-30T15:12:37.000000', N'seed', '2026-10-30T15:12:37.000000', NULL, 0);
+INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, N'パン工場', '2026-10-30T15:12:37.000000', N'seed', '2026-10-30T15:12:37.000000', NULL, 0);
 SET IDENTITY_INSERT [M_Locations] OFF;
 SET @IdentityTable = NULL;
 
@@ -339,8 +339,6 @@ INSERT INTO [T_Plans] ([PlanID], [LocationID], [PlanName], [Status], [StartAt], 
 SET IDENTITY_INSERT [T_Plans] OFF;
 SET @IdentityTable = NULL;
 
--- 拠点の代表勤務行を設定する。計算には同じLocationIDの全勤務行を使う。
-UPDATE [M_Locations] SET [CalendarID] = 1 WHERE [LocationID] = 1;
 COMMIT TRANSACTION;
 END TRY
 BEGIN CATCH

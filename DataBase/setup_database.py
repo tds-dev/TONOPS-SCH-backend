@@ -32,6 +32,8 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 作業者3人・全工程リンク54件・勤務36件・不在1件も作成する。作業者の画面・API・計算連携はまだ行わない。
 2026-11-13: 全23テーブル・255列。担当工程はM_WorkerSkillMap・WorkerSkillMapIDで識別する。
 設備は所属拠点の勤務を共有し、計画・停止例外・計算実行の開始終了列をStartAt・EndAtへ統一する。
+2026-11-16: 拠点のCalendarIDを廃止し、週間勤務・停止予定はLocationIDで直接関連付ける。
+開発用DBは現在の定義で再作成する。この新規作成処理は既存テーブルの列を変更しない。
 計算時間上限は持たず、作業中の実績はEndAt・StatusともNULL、終了時はDONEまたはSUSPENDEDとする。
 """
 import argparse

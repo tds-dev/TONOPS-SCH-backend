@@ -1,4 +1,5 @@
 -- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
+-- 2026-11-16: 拠点のCalendarIDを廃止し、週間勤務・停止予定をLocationIDで直接関連付ける。
 -- 2026-11-13: 旧属性定義・ルールを廃止。曜日制限は製品工程へ保存。全23テーブル・255列。
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
 -- 改名したID・名称と外部キーを統一し、出荷日時は任意入力として保持する。
@@ -18,7 +19,6 @@ GO
 CREATE TABLE [M_Locations] (
 	[LocationID] INTEGER NOT NULL IDENTITY, 
 	[LocationName] NVARCHAR(100) NOT NULL, 
-	[CalendarID] INTEGER NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
@@ -43,7 +43,6 @@ CREATE TABLE [M_Calendars] (
 	CONSTRAINT [PK_M_Calendars] PRIMARY KEY ([CalendarID]), 
 	CONSTRAINT [CK_M_Calendars_DayOfWeek] CHECK (DayOfWeek BETWEEN 0 AND 6), 
 	CONSTRAINT [CK_M_Calendars_EndAfterStart] CHECK (EndTime > StartTime), 
-	CONSTRAINT [UQ_M_Calendars_CalendarID_LocationID] UNIQUE ([CalendarID], [LocationID]), 
 	CONSTRAINT [FK_M_Calendars_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
@@ -109,7 +108,7 @@ GO
 
 CREATE TABLE [M_CalendarExceptions] (
 	[ExceptionID] INTEGER NOT NULL IDENTITY, 
-	[CalendarID] INTEGER NOT NULL, 
+	[LocationID] INTEGER NOT NULL, 
 	[StartAt] DATETIME2(7) NOT NULL, 
 	[EndAt] DATETIME2(7) NOT NULL, 
 	[Reason] NVARCHAR(100) NULL, 
@@ -119,7 +118,7 @@ CREATE TABLE [M_CalendarExceptions] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_CalendarExceptions] PRIMARY KEY ([ExceptionID]), 
 	CONSTRAINT [CK_M_CalendarExceptions_EndAfterStart] CHECK (EndAt > StartAt), 
-	CONSTRAINT [FK_M_CalendarExceptions_CalendarID_M_Calendars] FOREIGN KEY([CalendarID]) REFERENCES [M_Calendars] ([CalendarID]) ON DELETE CASCADE
+	CONSTRAINT [FK_M_CalendarExceptions_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
 
@@ -458,5 +457,3 @@ CREATE TABLE [T_WorkActuals] (
 );
 GO
 
-ALTER TABLE [M_Locations] ADD CONSTRAINT [FK_M_Locations_CalendarID_M_Calendars] FOREIGN KEY([CalendarID], [LocationID]) REFERENCES [M_Calendars] ([CalendarID], [LocationID]);
-GO

@@ -19,7 +19,7 @@ with patch("app.core.config.get_settings", return_value=Settings(
     from app.core.db import Base, make_engine
     from app.engine.cancellation import watch_cancellation
     from app.engine.snapshot import build_problem
-    from app.models.masters import CalendarException, Location, Resource, WorkerSkillMap
+    from app.models.masters import Calendar, CalendarException, Resource, WorkerSkillMap
     from app.models.transactions import Plan, PlanAssignment, Task, WorkActual
     from app.routers.plans import router as plan_router
     from app.services.board_service import build_board
@@ -49,10 +49,10 @@ class SchemaUpdateTest(InMemoryApiTestCase):
                         if mode == "python":
                             seed_demo(db, now=datetime(2026, 11, 8, 12))
                         else:
-                            # INSERTと代表勤務行のUPDATEを取り出し、文字列のN接頭辞だけ外す。
+                            # 初期データのINSERTを取り出し、文字列のN接頭辞だけ外す。
                             sql = (Path(__file__).parents[1] / "DataBase/query/seed_demo_sqlserver.sql").read_text(encoding="utf-8")
                             for line in sql.splitlines():
-                                if line.startswith(("INSERT INTO ", "UPDATE [M_Locations]")):
+                                if line.startswith("INSERT INTO "):
                                     db.execute(text(re.sub(r"\bN'", "'", line)))
                             db.commit()
                         # 製品工程とスキル設定を失わず、計算対象も21件のままになる。
@@ -78,7 +78,7 @@ class SchemaUpdateTest(InMemoryApiTestCase):
         plan = self.db.scalar(select(Plan).order_by(Plan.PlanID))
         resource = self.db.scalar(select(Resource).where(Resource.LocationID == plan.LocationID))
         self.db.add(CalendarException(
-            CalendarID=self.db.get(Location, plan.LocationID).CalendarID,
+            LocationID=plan.LocationID,
             StartAt=datetime(2026, 11, 9, 9), EndAt=datetime(2026, 11, 9, 10),
         ))
         self.db.commit()
@@ -86,6 +86,25 @@ class SchemaUpdateTest(InMemoryApiTestCase):
         windows = problem.resources[resource.ResourceID].windows
         self.assertEqual(windows[:3], [(0, 180), (240, 360), (420, 720)])
         self.assertTrue(all(item.windows == windows for item in problem.resources.values()))
+
+    # 勤務未登録と、勤務登録済みの休日を区別し、稼働枠の展開を設備間で共有する。
+    def test_location_working_time_distinguishes_unregistered_and_holiday(self):
+        from app.services.calendar_service import working_time
+        # デモの勤務は月～土なので、日曜のみの計画には稼働枠がない。
+        plan = self.db.scalar(select(Plan).order_by(Plan.PlanID))
+        plan.StartAt, plan.EndAt = datetime(2026, 11, 15), datetime(2026, 11, 16)
+        self.db.commit()
+        with patch("app.engine.snapshot.working_time", wraps=working_time) as expand:
+            problem = build_problem(self.db, plan)
+        self.assertTrue(problem.resources)
+        self.assertTrue(all(resource.windows == [] for resource in problem.resources.values()))
+        self.assertEqual(expand.call_count, 1)
+        # 全勤務を論理削除した後だけ、同じ計画期間を常時稼働として扱う。
+        for work in self.db.scalars(select(Calendar).where(Calendar.LocationID == plan.LocationID)):
+            work.DeleteFlag = True
+        self.db.commit()
+        problem = build_problem(self.db, plan)
+        self.assertTrue(all(resource.windows == [(0, 1440)] for resource in problem.resources.values()))
 
     # 新しい日時項目で計画を作り、複製・比較・承認・ボード表示を続けて確認する。
     def test_plan_creation_copy_approval_and_board_use_new_dates(self):

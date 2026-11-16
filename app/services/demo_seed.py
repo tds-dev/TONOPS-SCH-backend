@@ -54,8 +54,6 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             ))
     db.add_all(calendars)
     db.flush()
-    # 先頭の勤務行を代表とし、すべての勤務行を拠点共通として使う。
-    location.CalendarID = calendars[0].CalendarID
 
     # 工程ごとに使える設備の集合。各工程には同じグループの設備を候補として紐付ける。
     groups = {}

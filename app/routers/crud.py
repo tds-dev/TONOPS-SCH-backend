@@ -37,7 +37,11 @@ def _parse(value: str, py: Any) -> Any:
     if py is bool:
         return value.lower() in ("1", "true", "yes")
     if py in (int, float):
-        return py(value)
+        # 数値に変換できない検索条件は、処理の異常終了ではなく入力エラーとして返す。
+        try:
+            return py(value)
+        except ValueError:
+            raise HTTPException(422, "検索条件の数値が不正です。") from None
     return value
 
 

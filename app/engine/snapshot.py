@@ -64,20 +64,14 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     rows = db.scalars(
         select(Resource).where(Resource.LocationID == location.LocationID, Resource.DeleteFlag == false())
     ).all()
-    # 勤務行IDが異なっても拠点共通の稼働枠になるため、展開結果を設備間で共有する。
+    # 拠点共通の週間勤務・停止予定を一度だけ展開し、設備間で共有する。
     calendar_windows: list[tuple[int, int]] | None = None
     for r in rows:
-        # 全設備で所属拠点のカレンダーを共有し、個別の勤務行参照は持たない。
-        cal_id = location.CalendarID
-        if cal_id is None:
-            windows = [(0, horizon)]  # カレンダーなし: 常に稼働
-        else:
-            if calendar_windows is None:
-                calendar_windows = _windows(working_time(db, cal_id, start, end, tz), start, horizon)
-            windows = calendar_windows
+        if calendar_windows is None:
+            calendar_windows = _windows(working_time(db, location.LocationID, start, end, tz), start, horizon)
         resources[r.ResourceID] = PResource(
             id=r.ResourceID, name=r.ResourceName,
-            capacity=max(1, int(r.Capacity or 1)), windows=windows, group_id=r.ResourceGroupID,
+            capacity=max(1, int(r.Capacity or 1)), windows=calendar_windows, group_id=r.ResourceGroupID,
         )
     members: dict[int, list[int]] = {}
     for r in rows:

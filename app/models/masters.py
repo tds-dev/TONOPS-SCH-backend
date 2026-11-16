@@ -5,7 +5,6 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     ForeignKey,
-    ForeignKeyConstraint,
     Integer,
     Numeric,
     SmallInteger,
@@ -23,24 +22,15 @@ from app.models.types import DateTime, String
 TIME_UNITS = ["MINUTE", "DAY"]
 
 
-# 拠点の基本情報と、その拠点の代表勤務行を保持する。
+# 拠点の基本情報を保持し、勤務・停止予定は各テーブルのLocationIDから参照する。
 class Location(AuditMixin, SoftDeleteMixin, Base):
     """拠点マスタ"""
 
     __tablename__ = "M_Locations"
-    # 代表勤務行が必ず同じ拠点に属するよう、拠点番号も組み合わせて参照する。
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["CalendarID", "LocationID"], ["M_Calendars.CalendarID", "M_Calendars.LocationID"],
-            name="FK_M_Locations_CalendarID_M_Calendars", use_alter=True,
-        ),
-    )
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, primary_key=True, autoincrement=True)
     # 画面の拠点選択欄に表示する名称。
     LocationName = Column(String(100), nullable=False)
-    # 拠点共通カレンダーの代表勤務行。計算には同じ拠点の全勤務行を使う。
-    CalendarID = Column(Integer, nullable=True)
 
 
 # ---------------------------------------------------------------- カレンダー
@@ -48,11 +38,10 @@ class Calendar(AuditMixin, SoftDeleteMixin, Base):
     """拠点ごとの週次勤務。1行が1曜日・1時間帯を表す。"""
 
     __tablename__ = "M_Calendars"
-    # 曜日と同日勤務の範囲、拠点の代表勤務行を参照する組合せを定義する。
+    # 曜日と同日勤務の範囲を定義する。
     __table_args__ = (
         CheckConstraint("DayOfWeek BETWEEN 0 AND 6", name="DayOfWeek"),
         CheckConstraint("EndTime > StartTime", name="EndAfterStart"),
-        UniqueConstraint("CalendarID", "LocationID"),
     )
     # 勤務行を識別する番号。カレンダー全体はLocationIDでまとめる。
     CalendarID = Column(Integer, primary_key=True, autoincrement=True)
@@ -66,17 +55,16 @@ class Calendar(AuditMixin, SoftDeleteMixin, Base):
     WorkName = Column(String(50), nullable=True)
 
 
+# 拠点全体から除外する休日・設備停止の日時を保持する。
 class CalendarException(AuditMixin, Base):
     """非稼働日。週次勤務から指定日時を差し引く。"""
 
     __tablename__ = "M_CalendarExceptions"
     # 終了が開始より後の停止時間のみ登録する。
     __table_args__ = (CheckConstraint("EndAt > StartAt", name="EndAfterStart"),)
-    # 例外の識別番号と、その拠点の代表勤務行。
+    # 停止予定の識別番号と、直接の適用先となる拠点。
     ExceptionID = Column(Integer, primary_key=True, autoincrement=True)
-    CalendarID = Column(
-        Integer, ForeignKey("M_Calendars.CalendarID", ondelete="CASCADE"), nullable=False
-    )
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     # 時刻だけでなく日付も持つ日本時間の日時。API入出力では時差を変換する。
     StartAt = Column(DateTime, nullable=False)
     EndAt = Column(DateTime, nullable=False)

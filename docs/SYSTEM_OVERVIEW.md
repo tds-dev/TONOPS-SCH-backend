@@ -99,7 +99,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 
 | 用語 | テーブル | 説明 |
 |---|---|---|
-| 拠点 | M_Locations | 工場・事業所。CalendarIDで代表勤務行を参照し、拠点ごとに週次カレンダーを持つ。左サイドバーのアプリ名の下で切り替え |
+| 拠点 | M_Locations | 工場・事業所。週間勤務と停止予定はLocationIDで直接関連付ける。左サイドバーのアプリ名の下で切り替え |
 | カレンダー | M_Calendars / M_CalendarExceptions | 同じLocationIDの曜日・時間帯をまとめた週次勤務と、休日・設備停止の例外。日時は共通の日本時間で扱う |
 | リソースグループ | M_ResourceGroups | 同種のリソースのまとまり（例: 配合、充填、包装） |
 | リソース | M_Resources | 作業を行う設備・人員等。所属グループと拠点で管理する |
@@ -157,7 +157,7 @@ flowchart TD
 | 入力 | 読み込み元 | 内容 |
 |---|---|---|
 | リソース | M_Resources（論理削除を除く） | 能力（Capacity）、稼働枠 |
-| 稼働枠 | M_Calendars / M_CalendarExceptions | リソースのLocationIDから所属拠点を求め、拠点のCalendarIDを入口に同じLocationIDの全有効勤務行を計画期間に展開。拠点内の例外を休日・停止として除外。カレンダー指定がなければ常時稼働 |
+| 稼働枠 | M_Calendars / M_CalendarExceptions | リソースのLocationIDから同じ拠点の全有効勤務行と停止予定を直接取得し、計画期間に展開。勤務未登録なら常時稼働。登録済み勤務の休日・停止時間は稼働なし |
 | オーダー | T_Orders | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、着手可能日時が未指定または期間終了より前 |
 | 作業 | T_Tasks | 上記オーダーの作業のうち、サマリーでなく `DONE`/`CANCELLED` 以外 |
 | 候補 | M_ProductProcessResources + T_Orders.Quantity | 所要時間をその都度計算。グループ指定はグループ内の有効リソースに展開 |
@@ -290,8 +290,7 @@ stateDiagram-v2
 ```mermaid
 erDiagram
   M_Locations ||--o{ M_Calendars : "曜日・時間帯"
-  M_Calendars |o--o| M_Locations : "代表勤務行"
-  M_Calendars ||--o{ M_CalendarExceptions : "休日・停止"
+  M_Locations ||--o{ M_CalendarExceptions : "休日・停止"
   M_Locations ||--o{ M_ResourceGroups : ""
   M_Locations ||--o{ M_Resources : ""
   M_ResourceGroups ||--o{ M_Resources : ""
@@ -323,7 +322,6 @@ erDiagram
 |---|---|---|
 | LocationID | INT PK | |
 | LocationName | NVARCHAR(100) | 拠点の表示名。識別にはLocationIDを使う |
-| CalendarID | INT FK NULL | 同じ拠点の週次カレンダーを代表する勤務行。CalendarID＋LocationIDの組で参照先の所属拠点も確認 |
 | DeleteFlag | BIT | |
 
 #### M_Calendars（拠点ごとの週次勤務）
@@ -339,13 +337,13 @@ erDiagram
 | WorkName | NVARCHAR(50) NULL | 例: 午前、午後 |
 | DeleteFlag | BIT | 削除済みの勤務行を計算から除外 |
 
-履歴は共通のCreatedAt・CreatedBy・UpdatedAt・UpdatedByを使う。親からの継承と曜日勤務の適用期間は持たない。最初の勤務登録時に拠点の代表行を設定し、代表行の削除時は残る勤務行へ拠点・例外の参照を付け替える。例外が残る場合は最後の勤務行を削除できない。
+履歴は共通のCreatedAt・CreatedBy・UpdatedAt・UpdatedByを使う。親からの継承と曜日勤務の適用期間は持たない。勤務・停止予定はLocationIDで直接関連付けるため、勤務行を削除しても拠点や停止予定の参照先・監査情報は変更しない。停止予定が残る場合は最後の勤務行を削除できない。
 
 #### M_CalendarExceptions（休日・設備停止）
 | 列 | 型 | 説明 |
 |---|---|---|
 | ExceptionID | INT PK | |
-| CalendarID | INT FK（CASCADE） | 拠点の勤務行を参照。例外は同じLocationIDの勤務全体に適用 |
+| LocationID | INT FK NOT NULL | 拠点を直接参照。停止予定はその拠点の勤務全体に適用 |
 | StartAt / EndAt | DATETIME2(7)（日本時間） | 休日・停止の開始終了日時。EndAt > StartAt。曜日勤務のTIME型とは区別 |
 | Reason | NVARCHAR(100) NULL | 休日・設備停止の説明 |
 
@@ -567,7 +565,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業条件の組み立て） | T_Tasks（作業生成） |
 | 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に工程設備候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
-| カレンダー（`/calendars`） | `/calendars`、`/calendar-exceptions` の CRUD、`GET /calendars/{id}/working-time` | M_Calendars, M_CalendarExceptions, M_Locations | M_Calendars, M_CalendarExceptions。代表勤務行の設定・削除時はM_Locationsの参照も更新 |
+| カレンダー（`/calendars`） | `/calendars`、`/calendar-exceptions` の CRUD、`GET /locations/{id}/working-time` | M_Calendars, M_CalendarExceptions, M_Locations | M_Calendars, M_CalendarExceptions。拠点の参照更新は行わない |
 | 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にオーダー・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
 | 段取り替え（`/rules`） | `/product-switch-times`、`/product-switch-rules` の CRUD | M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups | M_ProductSwitchTimes, M_ProductSwitchRules |
 | 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
@@ -605,7 +603,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | `/orders` | T_Orders | DeadLine |
 | `/tasks` | T_Tasks | Sequence |
 
-`GET /calendar-exceptions?locationId=1`では、その拠点の勤務行に紐づく停止例外をまとめて取得する。`GET /calendars/{id}/working-time?from=...&to=...`は、指定勤務行と同じ拠点の全有効勤務・停止例外から日本時間の稼働区間を返す。
+`GET /calendar-exceptions?locationId=1`では、その拠点に直接紐づく停止予定を取得する。`GET /locations/{id}/working-time?from=...&to=...`は、指定拠点の全有効勤務・停止予定から日本時間の稼働区間を返す。勤務行が未登録の場合だけ常時稼働とし、勤務がある拠点の休日は稼働なしとする。
 
 ### 8.2 オーダー・作業
 
