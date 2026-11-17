@@ -1,4 +1,4 @@
-"""計画期間・計画名の入力検証、拠点内の重複確認、コピー名の生成を定義する。"""
+"""計画期間・計画名・備考の入力検証、拠点内の重複確認、コピー名の生成を定義する。"""
 from datetime import datetime
 
 from fastapi import HTTPException, status
@@ -22,6 +22,15 @@ def validate_plan_period(start_at: datetime, end_at: datetime) -> None:
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "終了日時は開始日時より1分以上後、計画期間は60日以内にしてください。",
         )
+
+
+# 新規作成・更新で備考の文字数を確認し、空欄は削除を表すNULLへ揃える。
+def validate_plan_remarks(remarks: str | None) -> str | None:
+    # 改行は維持し、入力全体の前後の空白だけを取り除く。
+    value = (remarks or "").strip()
+    if len(value) > 500:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "備考は500文字以内で入力してください。")
+    return value or None
 
 
 # 計画の状態にかかわらず、同じ拠点に同名の計画があるか確認する。

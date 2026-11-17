@@ -48,6 +48,8 @@ class PlanCreateBody(ApiModel):
 class PlanUpdateBody(ApiModel):
     row_ver: int
     plan_name: str | None = None
+    # 備考は全状態で更新でき、明示したNULLは内容の削除として扱う。
+    remarks: str | None = None
     start_at: JstDatetime | None = None
     end_at: JstDatetime | None = None
     calculation_setting_id: int | None = None
@@ -120,7 +122,7 @@ def get_plan(plan_id: int, db: Session = Depends(get_db)):
     return _plan_or_404(db, plan_id)
 
 
-# 計画名は全状態で、期間・計算設定は下書きだけ更新する。
+# 計画名・備考は全状態で、期間・計算設定は下書きだけ更新する。
 @router.patch("/plans/{plan_id}", response_model=PlanRead)
 def patch_plan(plan_id: int, body: PlanUpdateBody, db: Session = Depends(get_db), user: str = Depends(current_user)):
     values = body.model_dump(exclude_unset=True)

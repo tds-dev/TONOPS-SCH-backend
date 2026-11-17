@@ -12,7 +12,7 @@ from app.models.transactions import Plan, PlanAssignment, PlanViolation, SolverR
 from app.engine.result import SAssignment
 from app.engine.snapshot import build_problem
 from app.engine.solve import write_evaluation
-from app.services.plan_validation import flush_named_plan, validate_plan_name, validate_plan_period
+from app.services.plan_validation import flush_named_plan, validate_plan_name, validate_plan_period, validate_plan_remarks
 
 
 # 指定時点に対する、開始が最も遅いマスタ計画を取得する。
@@ -47,6 +47,7 @@ def create_plan(
     validate_plan_period(start_at, end_at)
     # 同じ拠点で重複しない計画名を必須にする。
     name = validate_plan_name(db, location_id, plan_name)
+    remarks = validate_plan_remarks(remarks)
     if calculation_setting_id is None:
         setting = db.scalars(
             select(CalculationSetting).where(CalculationSetting.LocationID == location_id).order_by(CalculationSetting.IsDefault.desc())
@@ -73,7 +74,7 @@ def create_plan(
     return plan
 
 
-# 名前は全状態で、期間・計算設定は下書きだけ更新し、割付の日時と設備を保持する。
+# 名前・備考は全状態で、期間・計算設定は下書きだけ更新し、割付の日時と設備を保持する。
 def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) -> Plan:
     # 同じ計画への同時編集を直列化し、読み込み後の変更をRowVerで検出する。
     plan = db.scalar(select(Plan).where(Plan.PlanID == plan_id)
@@ -86,9 +87,12 @@ def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) ->
     condition_keys = {"start_at", "end_at", "calculation_setting_id"}
     if condition_keys.intersection(values) and plan.Status != "DRAFT":
         raise HTTPException(409, "開始日時・終了日時・計算設定は下書きの計画のみ変更できます。")
-    if any(values[key] is None for key in values if key != "row_ver"):
+    # 備考のNULLだけは内容の削除として受け付け、他項目の必須制約を維持する。
+    if any(values[key] is None for key in values if key not in {"row_ver", "remarks"}):
         raise HTTPException(422, "更新する項目にnullは指定できません。")
     name = validate_plan_name(db, plan.LocationID, values.get("plan_name", plan.PlanName), plan.PlanID)
+    # 未送信の場合は元の備考を保持し、明示された空欄・NULLだけを削除する。
+    remarks = validate_plan_remarks(values["remarks"]) if "remarks" in values else plan.Remarks
     start = values.get("start_at", plan.StartAt)
     end = values.get("end_at", plan.EndAt)
     if {"start_at", "end_at"}.intersection(values):
@@ -106,6 +110,7 @@ def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) ->
         raise HTTPException(409, "計算の待機中・実行中は計画条件を変更できません。")
     try:
         plan.PlanName = name
+        plan.Remarks = remarks
         plan.StartAt, plan.EndAt, plan.CalculationSettingID = start, end, setting_id
         plan.UpdatedBy = user
         flush_named_plan(db, plan)
