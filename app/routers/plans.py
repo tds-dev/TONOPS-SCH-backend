@@ -14,6 +14,7 @@ from app.core import db as dbmod
 from app.core.db import get_db
 from app.core.timeutil import to_jst_naive
 from app.engine.solve import execute_run
+from app.engine.kpi_keys import normalize_kpis
 from app.models.masters import Resource, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
@@ -196,7 +197,8 @@ def list_assignments(plan_id: int, db: Session = Depends(get_db)):
 @router.get("/plans/{plan_id}/kpis", response_model=dict[str, float])
 def get_kpis(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)
-    return {k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan_id))}
+    # DBの移行前でも、日本語キーで評価値を返す。
+    return normalize_kpis({k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan_id))})
 
 
 # 対象計画で検出した制約違反を返す。

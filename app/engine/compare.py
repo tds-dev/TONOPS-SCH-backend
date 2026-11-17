@@ -5,16 +5,17 @@
 """
 from dataclasses import dataclass
 from datetime import datetime
+from app.engine.kpi_keys import normalize_kpis
 
 # (表示名, 単位, 大きい方が良いか)
 KPI_META: dict[str, tuple[str, str, bool]] = {
-    "late_orders": ("納期遅れ", "件", False),
-    "total_lateness_min": ("遅れ時間の合計", "分", False),
-    "setup_min": ("段取り時間", "分", False),
-    "makespan_min": ("最終オーダーの完了", "分", False),
-    "utilisation_pct": ("平均負荷率", "%", True),
-    "scheduled_tasks": ("割付済みタスク", "件", True),
-    "unscheduled_tasks": ("未割付タスク", "件", False),
+    "納期遅れ": ("納期遅れ", "件", False),
+    "遅れ時間の合計": ("遅れ時間の合計", "分", False),
+    "段取り時間": ("段取り時間", "分", False),
+    "最終完了": ("最終オーダーの完了", "分", False),
+    "平均負荷率": ("平均負荷率", "%", True),
+    "割付済みタスク": ("割付済みタスク", "件", True),
+    "未割付タスク": ("未割付タスク", "件", False),
 }
 
 
@@ -32,6 +33,8 @@ class KpiDelta:
 
 # 二つの計画の評価値を、表示名と改善・悪化の判定を含む比較結果へまとめる。
 def kpi_deltas(a: dict[str, float], b: dict[str, float]) -> list[KpiDelta]:
+    # 旧計画と新計画のキー表記が異なっても、同じ指標として比較する。
+    a, b = normalize_kpis(a), normalize_kpis(b)
     out = []
     present = set(a) | set(b)
     for key in [k for k in KPI_META if k in present] + sorted(present - set(KPI_META)):

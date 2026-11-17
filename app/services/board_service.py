@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.timeutil import to_jst_naive, as_jst
 from app.engine.snapshot import build_problem
+from app.engine.kpi_keys import normalize_kpis
 from app.models.masters import Product, Resource, ResourceGroup, Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, Task
 from app.schemas.base import coerce
@@ -135,7 +136,8 @@ def build_board(
         for t in problem.tasks.values() if t.id not in assigned
     ]
 
-    kpis = {k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))}
+    # 既存DBの英語キーも日本語へ揃え、画面側の項目と一致させる。
+    kpis = normalize_kpis({k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))})
     return {
         "plan": {
             "planId": plan.PlanID, "planName": plan.PlanName, "status": plan.Status,

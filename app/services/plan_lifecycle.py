@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import jst_now
+from app.engine.kpi_keys import normalize_kpis
 from app.models.masters import Location
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.services.plan_validation import copy_plan_name, flush_named_plan, validate_plan_name
@@ -139,8 +140,10 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
             PlanID=new.PlanID, TaskID=a.TaskID, ResourceID=a.ResourceID, StartAt=a.StartAt, EndAt=a.EndAt,
             SetupMinutes=a.SetupMinutes, Units=a.Units, IsLocked=a.IsLocked, Source=a.Source, CreatedBy=user,
         ))
-    for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID)):
-        db.add(PlanKpi(PlanID=new.PlanID, KpiKey=k.KpiKey, KpiValue=k.KpiValue))
+    # 旧計画をコピーする場合も、新しい計画には日本語キーだけを保存する。
+    kpis = normalize_kpis({k.KpiKey: k.KpiValue for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))})
+    for key, value in kpis.items():
+        db.add(PlanKpi(PlanID=new.PlanID, KpiKey=key, KpiValue=value))
     for v in db.scalars(select(PlanViolation).where(PlanViolation.PlanID == plan.PlanID)):
         db.add(PlanViolation(
             PlanID=new.PlanID, TaskID=v.TaskID, Severity=v.Severity,

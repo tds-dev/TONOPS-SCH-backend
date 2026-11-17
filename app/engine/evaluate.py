@@ -115,11 +115,11 @@ def compute_kpis(problem: Problem, assignments: list[SAssignment]) -> dict[str, 
     working = sum(we - ws for r in problem.resources.values() for ws, we in r.windows)
     busy = sum(a.end - a.start for a in assignments)
     return {
-        "scheduled_tasks": float(len(by_task)),
-        "unscheduled_tasks": float(sum(1 for t in problem.tasks if t not in by_task)),
-        "late_orders": float(sum(1 for x in lateness if x > 0)),
-        "total_lateness_min": float(sum(lateness)),
-        "makespan_min": float(max((a.end for a in assignments), default=0)),
-        "setup_min": float(sum(a.setup for a in assignments)),
-        "utilisation_pct": round(100.0 * busy / working, 1) if working else 0.0,
+        "割付済みタスク": float(len(by_task)),
+        "未割付タスク": float(sum(1 for t in problem.tasks if t not in by_task)),
+        "納期遅れ": float(sum(1 for x in lateness if x > 0)),
+        "遅れ時間の合計": float(sum(lateness)),
+        "最終完了": float(max((a.end for a in assignments), default=0)),
+        "段取り時間": float(sum(a.setup for a in assignments)),
+        "平均負荷率": round(100.0 * busy / working, 1) if working else 0.0,
     }

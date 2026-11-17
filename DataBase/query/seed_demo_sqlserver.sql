@@ -410,13 +410,13 @@ INSERT INTO [T_PlanKpis] ([PlanID], [KpiKey], [KpiValue])
 SELECT m.PlanID, k.KpiKey, k.KpiValue
 FROM Metrics m JOIN Lateness l ON l.PlanID = m.PlanID JOIN Working w ON w.PlanID = m.PlanID
 CROSS APPLY (VALUES
-    (N'late_orders', CAST(l.LateOrders AS decimal(18,4))),
-    (N'total_lateness_min', CAST(l.LateMinutes AS decimal(18,4))),
-    (N'setup_min', CAST(m.SetupMinutes AS decimal(18,4))),
-    (N'makespan_min', CAST(m.MakespanMinutes AS decimal(18,4))),
-    (N'utilisation_pct', CAST(ROUND(100.0 * m.BusyMinutes / NULLIF(w.WorkingMinutes,0),1) AS decimal(18,4))),
-    (N'scheduled_tasks', CAST(m.ScheduledTasks AS decimal(18,4))),
-    (N'unscheduled_tasks', CAST(m.UnscheduledTasks AS decimal(18,4)))
+    (N'納期遅れ', CAST(l.LateOrders AS decimal(18,4))),
+    (N'遅れ時間の合計', CAST(l.LateMinutes AS decimal(18,4))),
+    (N'段取り時間', CAST(m.SetupMinutes AS decimal(18,4))),
+    (N'最終完了', CAST(m.MakespanMinutes AS decimal(18,4))),
+    (N'平均負荷率', CAST(ROUND(100.0 * m.BusyMinutes / NULLIF(w.WorkingMinutes,0),1) AS decimal(18,4))),
+    (N'割付済みタスク', CAST(m.ScheduledTasks AS decimal(18,4))),
+    (N'未割付タスク', CAST(m.UnscheduledTasks AS decimal(18,4)))
 ) k(KpiKey,KpiValue);
 
 COMMIT TRANSACTION;

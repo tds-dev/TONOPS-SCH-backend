@@ -193,7 +193,7 @@ class PlanKpi(Base):
 
     __tablename__ = "T_PlanKpis"
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), primary_key=True)
-    # 集計名はlate_orders等のプログラム上の名称をそのまま保存する。
+    # 集計名は「納期遅れ」など、日本語の指標名で保存する。
     KpiKey = Column(String(50), primary_key=True)
     KpiValue = Column(Numeric(18, 4), nullable=False)
 
