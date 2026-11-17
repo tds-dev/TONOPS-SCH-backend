@@ -1,5 +1,6 @@
 """LocationIDに紐づく週次勤務・停止予定の取得、入力確認、勤務削除時の保護。"""
 from datetime import datetime, time
+from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException
@@ -27,10 +28,17 @@ def _location(db: Session, location_id: int | None) -> Location:
     return location
 
 
-# 設備の所属拠点が有効かを確認する。勤務は所属拠点から共通で参照する。
+# 設備の所属拠点と日単位の能力上限を確認する。勤務は所属拠点から共通で参照する。
 def validate_resource_location_write(db: Session, original: Resource | None, values: dict[str, Any]) -> None:
     location_id = _value(original, values, "LocationID")
     _location(db, location_id)
+    # 未送信なら既存値を保持し、NULLの送信は上限設定の解除として受け付ける。
+    if "DailyCapacityHours" in values and values["DailyCapacityHours"] is not None:
+        hours = Decimal(str(values["DailyCapacityHours"]))
+        # SQL Serverでの丸めや桁あふれを防ぎ、NUMERIC(5,2)へそのまま保存できる値に限定する。
+        if (not hours.is_finite() or hours < 0 or hours > Decimal("999.99")
+                or hours != hours.quantize(Decimal("0.01"))):
+            raise HTTPException(422, "1日の能力上限は0～999.99時間、小数点以下2桁以内で入力してください。")
 
 
 # 保存・計算読込で同じ時刻確認を使い、同日内の勤務だけを受け付ける。
