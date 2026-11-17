@@ -1,5 +1,6 @@
 """計画の作成とソルバー実行のキュー登録。"""
 from datetime import datetime
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -7,8 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.core.timeutil import jst_now
 from app.models.masters import CalculationSetting, Location
-from app.models.transactions import Plan, SolverRun
-from app.services.plan_validation import flush_named_plan, validate_plan_name
+from app.models.transactions import Plan, PlanAssignment, PlanViolation, SolverRun
+from app.engine.result import SAssignment
+from app.engine.snapshot import build_problem
+from app.engine.solve import write_evaluation
+from app.services.plan_validation import flush_named_plan, validate_plan_name, validate_plan_period
 
 
 # 指定時点に対する、開始が最も遅いマスタ計画を取得する。
@@ -40,8 +44,7 @@ def create_plan(
     location = db.get(Location, location_id)
     if location is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Location {location_id} not found")
-    if end_at <= start_at:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "endAt must be after startAt")
+    validate_plan_period(start_at, end_at)
     # 同じ拠点で重複しない計画名を必須にする。
     name = validate_plan_name(db, location_id, plan_name)
     if calculation_setting_id is None:
@@ -68,6 +71,63 @@ def create_plan(
     db.commit()
     db.refresh(plan)
     return plan
+
+
+# 名前は全状態で、期間・計算設定は下書きだけ更新し、割付の日時と設備を保持する。
+def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) -> Plan:
+    # 同じ計画への同時編集を直列化し、読み込み後の変更をRowVerで検出する。
+    plan = db.scalar(select(Plan).where(Plan.PlanID == plan_id)
+                     .with_hint(Plan, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
+                     .execution_options(populate_existing=True))
+    if plan is None:
+        raise HTTPException(404, "計画が見つかりません。")
+    if values["row_ver"] != plan.RowVer:
+        raise HTTPException(409, "計画が更新されています。一覧を開き直してから編集してください。")
+    condition_keys = {"start_at", "end_at", "calculation_setting_id"}
+    if condition_keys.intersection(values) and plan.Status != "DRAFT":
+        raise HTTPException(409, "開始日時・終了日時・計算設定は下書きの計画のみ変更できます。")
+    if any(values[key] is None for key in values if key != "row_ver"):
+        raise HTTPException(422, "更新する項目にnullは指定できません。")
+    name = validate_plan_name(db, plan.LocationID, values.get("plan_name", plan.PlanName), plan.PlanID)
+    start = values.get("start_at", plan.StartAt)
+    end = values.get("end_at", plan.EndAt)
+    if {"start_at", "end_at"}.intersection(values):
+        validate_plan_period(start, end)
+    setting_id = values.get("calculation_setting_id", plan.CalculationSettingID)
+    # 保存済み設定が別拠点のものへ差し替わらないよう確認する。
+    if "calculation_setting_id" in values:
+        setting = db.get(CalculationSetting, setting_id)
+        if setting is None or setting.LocationID != plan.LocationID:
+            raise HTTPException(422, "同じ拠点の計算設定を指定してください。")
+    conditions_changed = (start, end, setting_id) != (plan.StartAt, plan.EndAt, plan.CalculationSettingID)
+    if conditions_changed and db.scalar(select(SolverRun.RunID).where(
+        SolverRun.PlanID == plan.PlanID, SolverRun.Status.in_(["QUEUED", "RUNNING"]),
+    )) is not None:
+        raise HTTPException(409, "計算の待機中・実行中は計画条件を変更できません。")
+    try:
+        plan.PlanName = name
+        plan.StartAt, plan.EndAt, plan.CalculationSettingID = start, end, setting_id
+        plan.UpdatedBy = user
+        flush_named_plan(db, plan)
+        if conditions_changed:
+            # 割付そのものは移動・削除せず、新しい開始日時を基準に評価だけを更新する。
+            rows = db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == plan.PlanID)).all()
+            assignments = [SAssignment(
+                row.TaskID, row.ResourceID,
+                int((row.StartAt - start).total_seconds() // 60),
+                int((row.EndAt - start).total_seconds() // 60), row.SetupMinutes, row.IsLocked,
+            ) for row in rows]
+            write_evaluation(db, plan, build_problem(db, plan), assignments, user)
+            db.add(PlanViolation(
+                PlanID=plan.PlanID, Severity="INFO", CreatedBy=user,
+                Message="計画条件を変更しました。既存の割付日時・設備は保持しています。計画ボードで再計算してください。",
+            ))
+        db.commit()
+        db.refresh(plan)
+        return plan
+    except Exception:
+        db.rollback()
+        raise
 
 
 # 下書き計画の重複実行を確認して、計算の実行要求を登録する。

@@ -19,7 +19,7 @@ from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanVi
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, JstDatetime, coerce, schemas_for
 from app.services.plan_lifecycle import approve_plan, copy_plan, discard_plan
-from app.services.plan_service import create_plan, queue_run
+from app.services.plan_service import create_plan, queue_run, update_plan
 
 PlanRead, _, _ = schemas_for(Plan)
 RunRead, _, _ = schemas_for(SolverRun)
@@ -42,6 +42,15 @@ class PlanCreateBody(ApiModel):
     use_master_as_base: bool = True
     # 計画の備考。指定がなければ空欄のまま保存する。
     remarks: str | None = None
+
+
+# 編集可能な項目だけを受け付け、画面読込後の別操作はバージョン番号で検出する。
+class PlanUpdateBody(ApiModel):
+    row_ver: int
+    plan_name: str | None = None
+    start_at: JstDatetime | None = None
+    end_at: JstDatetime | None = None
+    calculation_setting_id: int | None = None
 
 
 # 計算対象の範囲と完了待機の指定。時間上限は設けない。
@@ -109,6 +118,13 @@ def post_plan(body: PlanCreateBody, db: Session = Depends(get_db), user: str = D
 @router.get("/plans/{plan_id}", response_model=PlanRead)
 def get_plan(plan_id: int, db: Session = Depends(get_db)):
     return _plan_or_404(db, plan_id)
+
+
+# 計画名は全状態で、期間・計算設定は下書きだけ更新する。
+@router.patch("/plans/{plan_id}", response_model=PlanRead)
+def patch_plan(plan_id: int, body: PlanUpdateBody, db: Session = Depends(get_db), user: str = Depends(current_user)):
+    values = body.model_dump(exclude_unset=True)
+    return update_plan(db, plan_id, values, user)
 
 
 @router.post("/plans/{plan_id}/solve", response_model=RunRead, status_code=status.HTTP_202_ACCEPTED)
