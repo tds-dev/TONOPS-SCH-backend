@@ -19,7 +19,6 @@ class PResource:
 class POption:
     resource_id: int
     duration: int  # 分。候補ごとの固定段取りを含む
-    priority: int = 1
 
 
 @dataclass

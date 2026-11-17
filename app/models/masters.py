@@ -137,7 +137,6 @@ class ProductSwitchRule(AuditMixin, Base):
     ToProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
     SetupMinutes = Column(Integer, nullable=False, default=0)
     IsForbidden = Column(Boolean, nullable=False, default=False)
-    Cost = Column(Numeric(12, 2), nullable=True)
 
 
 class CalculationSetting(AuditMixin, Base):
@@ -233,11 +232,10 @@ class ProductProcessResource(AuditMixin, Base):
     # 設備またはグループのどちらか一方だけを指定する。
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
-    # 所要時間は準備＋固定＋数量×単位当たり時間。優先度はタスク候補に引き継ぐ。
+    # 所要時間は準備＋固定＋数量×単位当たり時間。
     SetupMinutes = Column(Integer, nullable=False, default=0)
     FixedMinutes = Column(Integer, nullable=False, default=0)
     MinutesPerUnit = Column(Numeric(12, 4), nullable=False, default=0)
-    Priority = Column(Integer, nullable=False, default=1)
 
 
 # ---------------------------------------------------------------- 作業者

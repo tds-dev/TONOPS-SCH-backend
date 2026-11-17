@@ -19,10 +19,9 @@ class TaskOption:
     option_id: int
     resource_id: int | None
     resource_group_id: int | None
-    # 固定準備を含む所要時間、内訳の準備時間、元マスタの優先度。
+    # 固定準備を含む所要時間と、内訳の準備時間。
     duration_min: int
     setup_minutes: int
-    priority: int
 
 
 # 同一オーダーの連続する製品工程を結ぶ、計算時だけの前後関係。
@@ -136,7 +135,7 @@ def build_task_conditions(db: Session, tasks: list[Task]) -> TaskConditions:
                 resource_id=candidate.ResourceID, resource_group_id=candidate.ResourceGroupID,
                 duration_min=option_duration(candidate.SetupMinutes, candidate.FixedMinutes,
                                              candidate.MinutesPerUnit, order.Quantity),
-                setup_minutes=candidate.SetupMinutes, priority=candidate.Priority,
+                setup_minutes=candidate.SetupMinutes,
             )
             for candidate in sorted(process.resources, key=lambda row: row.ProductProcessResourceID)
         ]

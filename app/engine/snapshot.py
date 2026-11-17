@@ -122,7 +122,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         options: list[POption] = []
         for o in conditions.options[t.TaskID]:
             targets = [o.resource_id] if o.resource_id else members.get(o.resource_group_id, [])
-            options.extend(POption(rid, o.duration_min, o.priority or 1) for rid in targets if rid in resources)
+            options.extend(POption(rid, o.duration_min) for rid in targets if rid in resources)
         release = order_release.get(t.OrderID, 0)
         if t.EarliestStartAt:
             release = max(release, to_min(t.EarliestStartAt))

@@ -121,10 +121,8 @@ def validate_product_process_resource_write(db: Session, original: Any, values: 
     setup = _value(original, values, "SetupMinutes", 0)
     fixed = _value(original, values, "FixedMinutes", 0)
     per_unit = _value(original, values, "MinutesPerUnit", 0)
-    priority = _value(original, values, "Priority", 1)
     _integer(setup, "準備時間")
     _integer(fixed, "固定時間")
-    _integer(priority, "優先度", 1)
     # 浮動小数の丸め誤差を避けてDBのNUMERIC(12,4)の範囲と桁数を確認する。
     decimal_per_unit = Decimal(str(per_unit)) if per_unit is not None else None
     if (decimal_per_unit is None or not decimal_per_unit.is_finite()
