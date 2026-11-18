@@ -116,7 +116,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | 計算（ソルバー実行） | T_SolverRunResult | エンジンによる自動計画の 1 回分。作業キューも兼ねる |
 | 段取り替え | M_ProductSwitchTimes | 同じ設備で前後する製品工程の組合せごとに必要な切替時間 |
 | 工程の曜日制限 | M_ProductProcesses | 許可曜日・有効状態・適用開始終了日時 |
-| 計算設定 | M_CalculationSettings | 目的関数の重み・計算時間の上限など、計算の方針 |
+| 計算設定 | M_CalculationSettings | 優先条件の重み・固定期間・既定設定。時間単位の保存値にかかわらず計算は分単位 |
 | ロック（固定） | PlanAssignment.IsLocked | 再計算で動かさない割付。手動で動かした割付は既定でロック |
 | マスタ計画 | T_Plans.Status = MASTER | 承認済みで現場が使う計画。配台表の元データ |
 
@@ -137,7 +137,7 @@ flowchart TD
   I -.->|"状況変化（追加受注・設備停止）"| D
 ```
 
-1. **マスタ登録**: フロントエンドの「設定」からリソース、カレンダー、製品・工程、段取り替えを登録（API / Swagger からも登録可能）。拠点・プラン計算設定の登録は引き続き API / Swagger を使用。
+1. **マスタ登録**: フロントエンドの「マスタ」からリソース、カレンダー、製品・工程、段取り替え、作業者、計算設定を管理する。作業者設定は保存・稼働表示までで、計算には未連携。拠点の登録はAPI / Swaggerを使用する。
 2. **オーダー登録** → **作業生成**: オーダーの製品に属する工程を展開し、作業本体だけを保存します。候補・前後関係は利用時に現在の製品マスタから組み立てます。
    所要時間 = 作業リソース候補の `SetupMinutes` + `FixedMinutes` + 数量 × `MinutesPerUnit`（分、切り上げ）。
 3. **計画作成**: 計画期間（拠点の現地時刻）とプロファイルを指定。現在のマスタ計画が「元計画（BasePlanID）」になります。
@@ -146,7 +146,7 @@ flowchart TD
    保存の前にサーバーで検証し、適用できない変更は元に戻します。手動で動かした作業は固定され、
    その後の **部分再計算** では動かさずに残りを組み直します。
 6. **比較・承認**: マスタ計画と KPI・変更作業を比較し、承認するとマスタ計画になります。
-7. **配台表**: 現場がタブレットでマスタ計画の 1 日分を見て、開始・完了を記録します（`T_Tasks.Status`）。
+7. **実績登録（予定表示・状態更新）**: `/dispatch`で承認済みの1日分の予定を確認・印刷し、開始・完了・取消で`T_Tasks.Status`を変更する。実際の開始・終了日時や数量を`T_WorkActuals`へ保存する機能は未実装。
 
 ---
 
@@ -398,7 +398,7 @@ erDiagram
 | CalculationSettingID | INT PK | |
 | LocationID | INT FK | |
 | CalculationSettingName | NVARCHAR(100) | 例: 納期優先、段取り最小 |
-| TimeUnit | NVARCHAR(10) | 値: `MINUTE` `DAY`（現在は MINUTE のみ使用） |
+| TimeUnit | NVARCHAR(10) | `MINUTE`・`DAY`を保存できるが、どちらも分単位で計算。日単位の意味・計算方法は正式情報を確認して決定する |
 | ObjectiveWeightsJSON | NVARCHAR(MAX) | 目的関数の重み（[4.3](#43-目的関数最小化)） |
 | FrozenWindowHours | INT | 確定期間（時間）。計画開始からこの時間内は元計画を固定し、新しい作業を始めない |
 | IsDefault | BIT | 計画作成時にプロファイル未指定なら使う |
@@ -562,15 +562,23 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | 計画ボード（`/plans/{id}/board`） | `GET /plans/{id}/board`、`POST …/solve`、`GET /solver-runs/{id}/events`、`POST …/assignments/validate`、`PATCH …/assignments`、`POST …/approve`、`POST …/copy` | T_Plans, T_PlanAssignments, T_Tasks, M_ProductProcesses, M_ProductProcessResources, T_Orders, M_Product, M_Resources, M_ResourceGroups, M_Calendars・M_CalendarExceptions, M_ProductSwitchTimes・M_ProductSwitchRules, M_CalculationSettings, T_PlanKpis, T_PlanViolations, T_SolverRunResult | T_SolverRunResult（計算依頼）、T_PlanAssignments・T_PlanKpis・T_PlanViolations（計算結果・手動編集）、T_Plans（承認・置換）、T_Orders.Status（承認時 OPEN→PLANNED） |
 | 計画比較（`/plans/compare?a=&b=`） | `GET /plans/compare`、`POST …/approve`、`POST …/discard` | T_Plans, T_PlanKpis, T_PlanAssignments, T_Tasks, T_Orders, M_Resources | T_Plans（承認・破棄） |
 | オーダー（`/orders`） | `GET /orders`、`GET /products`、`GET /resources`、`GET /resource-groups`、`GET /orders/{id}/tasks`、`GET /orders/{id}/dependencies`、`POST /orders/{id}/generate-tasks` | T_Orders, M_Product, T_Tasks, M_Resources, M_ResourceGroups, M_ProductProcesses, M_ProductProcessResources（作業条件の組み立て） | T_Tasks（作業生成） |
-| 配台表（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了） |
+| 実績登録（`/dispatch`） | `GET /dispatch?locationId=&date=&resourceGroupId=`、`GET /resource-groups`、`PATCH /tasks/{id}` | T_Plans（MASTER / SUPERSEDED）, T_PlanAssignments, T_Tasks, T_Orders, M_Product, M_Resources, M_ResourceGroups | T_Tasks.Status（開始・完了・取消）のみ。実際の日時・数量は保存しない |
 | リソース（`/resources`） | `/resources`、`/resource-groups` の CRUD、`GET /calendars` | M_Resources, M_ResourceGroups, M_Calendars。削除前に工程設備候補・既存割付などを確認 | M_Resources, M_ResourceGroups |
 | 作業者（`/workers`） | `/workers`、`/worker-calendars`、`/worker-calendar-exceptions`、`/worker-skill-maps`、`GET /workers/{id}/working-time` | M_Workers, M_Locations, M_Product, M_ProductProcesses, M_WorkerCalendars, M_WorkerCalendarExceptions, M_WorkerSkillMap | 本人情報・通常勤務・例外休日・担当可否と日上限を保存 |
 | カレンダー（`/calendars`） | `/calendars`、`/calendar-exceptions` の CRUD、`GET /locations/{id}/working-time` | M_Calendars, M_CalendarExceptions, M_Locations | M_Calendars, M_CalendarExceptions。拠点の参照更新は行わない |
 | 製品・工程（`/products`） | `/products`、`/product-processes`、`/product-process-resources` の CRUD | M_Product, M_ProductProcesses, M_ProductProcessResources, M_Resources, M_ResourceGroups。削除前にオーダー・作業などを確認 | M_Product, M_ProductProcesses, M_ProductProcessResources |
 | 段取り替え（`/rules`） | `/product-switch-times`、`/product-switch-rules` の CRUD | M_ProductSwitchTimes, M_ProductSwitchRules, M_ResourceGroups | M_ProductSwitchTimes, M_ProductSwitchRules |
-| 実績入力（`/actuals`） | — | 準備中。今回のマスタ画面追加にも含めない | — |
 
 **画面で使っていないテーブル**: T_WorkActuals（今後）。
+
+### 設備と作業者の違い
+
+| 対象 | 保存・表示できる情報 | 現在の計算への反映 |
+|---|---|---|
+| 設備（M_Resources） | 設備名・グループ・同時作業数・日別能力時間。稼働時間は拠点共通 | 工程の実行候補・同時作業数・拠点の稼働時間を使用。日別能力時間は未反映 |
+| 作業者（M_Workers） | 本人情報・本人の勤務と休日・工程別担当可否・日別生産上限 | 保存と週表示まで。作業者選択・人員確保・勤務・休日・スキル・日上限は未連携 |
+
+作業者を登録しても、計画に担当者が割り付いたり、担当可能な人がいることを保証したりする動作にはならない。作業者画面の計算未連携の注記は維持する。
 
 ---
 
@@ -667,7 +675,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 | 場所 | 形式 |
 |---|---|
 | DB | **naive な 日本時間**（DATETIME2(7)、オフセットなし） |
-| 通常の API の出力 | 日本時間 の ISO 文字列（`2026-10-27T21:00:00Z`） |
+| 通常の API の出力 | 日本時間のISO文字列（`2026-11-16T06:00:00+09:00`） |
 | 通常の API の入力 | オフセット付きならそのまま 日本時間 に変換、なしは 日本時間 とみなす |
 | 計画作成（`POST /plans`）の入力 | オフセットなしは **共通の日本時間（Asia/Tokyo）** |
 | ボード・編集・配台表 | **共通の日本時間**（オフセットなし `2026-10-28T06:00:00`）。DayPilot がそのまま扱える |
@@ -748,7 +756,7 @@ DBの`KpiKey`とAPIの評価値キーは日本語で統一する。既存DBの�
 **現在の制約**
 
 * 認証なし（`X-User-Email` ヘッダーで操作者を記録するのみ）。
-* 実績入力画面は未実装。4つのマスタ画面（リソース、カレンダー、製品・工程、段取り替え）はフロントエンドに実装。
+* 実績登録画面は予定表示・印刷・作業状態の更新まで実装済み。実際の開始・終了日時と数量の保存、作業者設定の計算連携、日単位計算は未実装。
 * 作業は稼働枠をまたいで分割しない（休憩・夜間をまたぐ長い作業は割り付けられない場合がある）。
 * 1 リソースの候補作業が 80 件を超えると、そのリソースの段取り替えは計算で考慮しない（検証では検出）。
 * DayPilot Lite の制限: リソースのツリー表示、外部からのドラッグ（未割付作業の直接ドロップ）は不可 → 配置フォームで対応。
