@@ -4,6 +4,7 @@
 保存する前の検証に使う。
 """
 from collections import defaultdict
+from heapq import heappop, heappush
 from itertools import pairwise
 
 from app.engine.problem import Problem
@@ -43,13 +44,31 @@ def check_schedule(problem: Problem, assignments: list[SAssignment]) -> list[Vio
         if a.start < t.release:
             out.append(Violation("HARD", "BEFORE_RELEASE", f"{t.name} が着手可能日時 {fmt(problem, t.release)} より前に開始しています", task_id=t.id))
 
-    # 単一能力リソースの重なり（段取り時間も占有として扱う）
+    # 設備ごとの同時作業数を確認する。段取り時間も設備の占有として扱う。
     per_res: dict[int, list[SAssignment]] = defaultdict(list)
     for a in assignments:
         per_res[a.resource_id].append(a)
     for rid, records in per_res.items():
         res = problem.resources.get(rid)
-        if res is None or res.capacity != 1:
+        if res is None:
+            continue
+        if res.capacity > 1:
+            # 終了時刻を小さい順に取り出し、各作業の占有開始時点で重複数を数える。
+            active_ends: list[int] = []
+            for cur in sorted(records, key=lambda a: (a.start - a.setup, a.task_id)):
+                occupied_start = cur.start - cur.setup
+                # 終了と開始が同時の作業は重複に含めない。
+                while active_ends and active_ends[0] <= occupied_start:
+                    heappop(active_ends)
+                if len(active_ends) >= res.capacity:
+                    out.append(Violation(
+                        "HARD", "OVERLAP",
+                        f"{res.name} で {fmt(problem, occupied_start)} に同時作業数の上限 {res.capacity} 件を超えています"
+                        f"（同時 {len(active_ends) + 1} 件）",
+                        task_id=cur.task_id,
+                    ))
+                heappush(active_ends, cur.end)
+            # 順序依存の段取り替え検証は、自動計算と同じく同時作業数1の設備に限定する。
             continue
         records.sort(key=lambda x: x.start)
         for prev, cur in pairwise(records):
