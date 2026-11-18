@@ -33,15 +33,12 @@ def build_board(
     start: datetime | None = None,
     end: datetime | None = None,
     resource_group_id: int | None = None,
-    color_by: str | None = None,
 ) -> dict:
     # 対象の拠点と、アプリ共通の時刻設定。
     location = db.get(Location, plan.LocationID)
     tz = get_settings().app_timezone
     start = to_jst_naive(start) if start else plan.StartAt
     end = to_jst_naive(end) if end else plan.EndAt
-    # 既定は製品IDで色分けし、指定された旧属性による色分けは引き続き許可する。
-    color_by = color_by or "productId"
     problem = build_problem(db, plan)
 
     # ---- リソース（グループ順・表示順）
@@ -92,7 +89,6 @@ def build_board(
     for a, t, j, product in rows:
         if a.ResourceID not in resource_ids:
             continue
-        attrs = t.AttributesJSON or {}
         events.append({
             "id": a.AssignmentID, "resource": a.ResourceID,
             "start": _local(a.StartAt, tz), "end": _local(a.EndAt, tz),
@@ -102,7 +98,8 @@ def build_board(
             "quantity": coerce(j.Quantity),
             "deadLine": _local(j.DeadLine, tz) if j.DeadLine else None,
             "isLocked": a.IsLocked, "source": a.Source, "setupMinutes": a.SetupMinutes,
-            "colorValue": (str(j.ProductID) if j.ProductID is not None else j.WBSNumber) if color_by == "productId" else attrs.get(color_by),
+            # 製品ごとの配色を維持し、製品未指定時はオーダー番号を使う。
+            "colorValue": str(j.ProductID) if j.ProductID is not None else j.WBSNumber,
             "issue": worst.get(t.TaskID), "rowVer": a.RowVer,
         })
         if a.SetupMinutes:
@@ -131,7 +128,7 @@ def build_board(
             "durations": {str(o.resource_id): o.duration for o in t.options},
             "deadLine": _local(problem.to_dt(problem.orders[t.order_id].due), tz) if problem.orders[t.order_id].due is not None else None,
             "colorValue": (str(problem.orders[t.order_id].product_id) if problem.orders[t.order_id].product_id is not None
-                           else problem.orders[t.order_id].no) if color_by == "productId" else t.attrs.get(color_by),
+                           else problem.orders[t.order_id].no),
         }
         for t in problem.tasks.values() if t.id not in assigned
     ]
@@ -147,7 +144,6 @@ def build_board(
         "timeZone": tz,
         "from": _local(start, tz),
         "to": _local(end, tz),
-        "colorBy": color_by,
         "groups": group_list,
         "resources": resources,
         "events": events,

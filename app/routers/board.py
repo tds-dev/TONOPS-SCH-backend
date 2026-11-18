@@ -91,11 +91,10 @@ def get_board(
     start: datetime | None = Query(None, alias="from"),
     end: datetime | None = Query(None, alias="to"),
     resource_group_id: int | None = Query(None, alias="resourceGroupId"),
-    color_by: str | None = Query(None, alias="colorBy"),
     db: Session = Depends(get_db),
 ):
     """DayPilot Scheduler 用のボードデータ（リソース、イベント、段取り、非稼働時間、未割付タスク、課題、KPI）。"""
-    return build_board(db, _plan_or_404(db, plan_id), start, end, resource_group_id, color_by)
+    return build_board(db, _plan_or_404(db, plan_id), start, end, resource_group_id)
 
 
 @router.post("/plans/{plan_id}/assignments/validate", response_model=EditOut)

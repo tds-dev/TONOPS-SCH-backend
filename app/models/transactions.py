@@ -70,7 +70,6 @@ class Task(AuditMixin, Base):
 
     __tablename__ = "T_Tasks"
     __table_args__ = (
-        UniqueConstraint("OrderID", "TaskNo"),
         CheckConstraint(in_check("Status", TASK_STATUSES), name="Status"),
     )
     # 計画・違反・実績から同じ作業を参照する識別番号。
@@ -79,19 +78,14 @@ class Task(AuditMixin, Base):
     OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
     # タスク生成元の製品工程。生成済みのタスクと工程の対応を保持する。
     ProductProcessID = Column(Integer, ForeignKey("M_ProductProcesses.ProductProcessID"), nullable=True)
-    # 生成時点の作業番号・名称・並び順。計算上の工程順序は製品マスタを参照する。
-    TaskNo = Column(String(30), nullable=False)
+    # 生成時点の名称・表示順。計算上の工程順序は製品マスタを参照する。
     TaskName = Column(String(200), nullable=False)
     Sequence = Column(Integer, nullable=False, default=0)
-    # 集約タスクを計算対象から外す区分と、作業固有の開始可能日時・期限。
-    IsSummary = Column(Boolean, nullable=False, default=False)
+    # 作業固有の開始可能日時・期限。
     EarliestStartAt = Column(DateTime, nullable=True)
     DeadlineAt = Column(DateTime, nullable=True)
-    # 全計画で共有する作業状態と進捗率。
+    # 全計画で共有する作業状態。
     Status = Column(String(20), nullable=False, default="NOT_STARTED")
-    ProgressPct = Column(Numeric(5, 2), nullable=False, default=0)
-    # 旧データ互換の作業属性。API応答や明示した属性の色分けに使い、切替判定は工程IDで行う。
-    AttributesJSON = Column(JSON, nullable=True)
 
     # この作業が所属するオーダー。
     order = relationship("Order", back_populates="tasks")
@@ -118,6 +112,8 @@ class Plan(AuditMixin, Base):
     # 計画の計算条件を参照する識別番号。
     CalculationSettingID = Column(Integer, ForeignKey("M_CalculationSettings.CalculationSettingID"), nullable=False)
     BasePlanID = Column(Integer, ForeignKey("T_Plans.PlanID"), nullable=True)
+    # 計算の基準計画とは別に、直接コピーした元の計画を記録する。新規作成時はNULL。
+    CopiedFromPlanID = Column(Integer, ForeignKey("T_Plans.PlanID"), nullable=True)
     SupersededAt = Column(DateTime, nullable=True)
     ApprovedAt = Column(DateTime, nullable=True)
     ApprovedBy = Column(String(254), nullable=True)

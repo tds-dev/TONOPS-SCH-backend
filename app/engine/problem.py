@@ -2,7 +2,6 @@
 整数分（0 .. horizon）。DB や OR-Tools はここでは import しない。"""
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Any
 
 
 @dataclass
@@ -33,7 +32,6 @@ class PTask:
     id: int
     order_id: int  # このタスクが所属するオーダーのID。
     name: str
-    attrs: dict[str, Any]
     options: list[POption]
     release: int = 0  # 最早開始（分）
     deadline: int | None = None  # タスク単位の期限（分）
@@ -41,7 +39,7 @@ class PTask:
     hint: PLock | None = None  # 前回の位置（初期解と安定性に使用）
     # 最新の製品工程から取得した許可曜日。Noneは制限無効または適用期間外。
     allowed_weekdays: list[int] | None = None
-    # 段取り替えの判定元となる製品工程。作業属性の有無に依存しない。
+    # 段取り替えの判定元となる製品工程。
     product_process_id: int | None = None
 
 

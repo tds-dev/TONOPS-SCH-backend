@@ -94,8 +94,8 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
 
     # 製品は名称だけを管理し、工程を直接紐づける。
     products = {}
-    # 分類は製品マスタには保存せず、後でデモタスクの属性へ直接設定する。
-    task_families = {}
+    # デモの曜日制限・段取り替え設定を組み立てる分類。DBには保存しない。
+    product_families = {}
     for name, family in [
         ("食パン", "食事パン"), ("バターロール", "食事パン"),
         ("フランスパン", "食事パン"), ("あんパン", "菓子パン"),
@@ -123,7 +123,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             ))
             product.processes.append(process)
         products[name] = product
-        task_families[product.ProductID] = family
+        product_families[product.ProductID] = family
     db.flush()
 
     # 既存の分類間の仮設定を、各製品の「こねる」工程のIDに展開する。
@@ -134,7 +134,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     for before in knead_processes:
         for after in knead_processes:
             # 工程から製品のデモ分類を取得し、異なる分類間の22組だけを登録する。
-            minutes = switch_minutes.get((task_families[before.ProductID], task_families[after.ProductID]))
+            minutes = switch_minutes.get((product_families[before.ProductID], product_families[after.ProductID]))
             if minutes is not None:
                 switch_time.rules.append(m.ProductSwitchRule(
                     FromProductProcessID=before.ProductProcessID, ToProductProcessID=after.ProductProcessID,
@@ -209,10 +209,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         orders.append(order)
     db.commit()
     for order in orders:
-        # デモの段取り替え・曜日ルール・色分けを維持するため、生成後のタスクへ分類を直接登録する。
-        for task in generate_tasks(db, order, USER):
-            task.AttributesJSON = {"family": task_families[order.ProductID]}
-    db.commit()
+        generate_tasks(db, order, USER)
 
     # 5日間の下書きと撮影用の割付・評価値を登録する。
     plans = []

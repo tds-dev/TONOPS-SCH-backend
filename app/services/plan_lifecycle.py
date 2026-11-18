@@ -132,6 +132,8 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
         PlanName=plan_name, Status="DRAFT",
         StartAt=plan.StartAt, EndAt=plan.EndAt, CalculationSettingID=plan.CalculationSettingID,
         BasePlanID=plan.BasePlanID, Remarks=plan.Remarks, CreatedBy=user,
+        # コピーを繰り返した場合も、今回直接コピーした計画のIDを保存する。
+        CopiedFromPlanID=plan.PlanID,
     )
     db.add(new)
     flush_named_plan(db, new)

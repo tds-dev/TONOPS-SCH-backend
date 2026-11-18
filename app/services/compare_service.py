@@ -132,7 +132,6 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
                 "end": as_jst(a.EndAt).strftime("%H:%M"),
                 "startAt": as_jst(a.StartAt).isoformat(), "endAt": as_jst(a.EndAt).isoformat(),
                 "setupMinutes": a.SetupMinutes, "isLocked": a.IsLocked, "taskStatus": t.Status,
-                "attributes": t.AttributesJSON or {},
             })
         out.append({
             "resourceId": r.ResourceID, "resourceName": r.ResourceName,

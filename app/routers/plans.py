@@ -77,7 +77,6 @@ class AssignmentView(ApiModel):
     setup_minutes: int
     is_locked: bool
     source: str
-    attributes: dict = {}
 
 
 # 計画を取得し、存在しない場合は見つからない理由を返す。
@@ -187,7 +186,7 @@ def list_assignments(plan_id: int, db: Session = Depends(get_db)):
             assignment_id=a.AssignmentID, task_id=t.TaskID, order_id=j.OrderID, wbs_number=j.WBSNumber,
             task_name=t.TaskName, resource_id=r.ResourceID, resource_name=r.ResourceName,
             start_at=a.StartAt, end_at=a.EndAt, setup_minutes=a.SetupMinutes,
-            is_locked=a.IsLocked, source=a.Source, attributes=t.AttributesJSON or {},
+            is_locked=a.IsLocked, source=a.Source,
         )
         for a, t, j, r in rows
     ]

@@ -96,7 +96,6 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
     # IN 句は値のリストではなくサブクエリにする（SQL Server のパラメータ上限 2,100 を超えないように）
     task_filter = (
         Task.OrderID.in_(select(Order.OrderID).where(*order_filter)),
-        Task.IsSummary == false(),
         Task.Status.notin_(["DONE", "CANCELLED"]),
     )
     task_rows = db.scalars(select(Task).where(*task_filter)).all()
@@ -129,7 +128,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         release = max(release, frozen_end)  # 確定期間内には新しいタスクを開始しない
         task = PTask(
             id=t.TaskID, order_id=t.OrderID, name=f"{orders[t.OrderID].no} {t.TaskName}",
-            attrs=dict(t.AttributesJSON or {}), options=options, release=release,
+            options=options, release=release,
             product_process_id=t.ProductProcessID,
             allowed_weekdays=(conditions.weekday_restrictions[t.TaskID].allowed_at(start)
                               if t.TaskID in conditions.weekday_restrictions else None),

@@ -4,7 +4,7 @@
 -- 2026-11-13: 旧属性定義・ルールを廃止。曜日制限は製品工程へ保存。全23テーブル・255列。
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
 -- 改名したID・名称と外部キーを統一し、出荷日時は任意入力として保持する。
--- オーダーは種別・計画の管理元・属性の列を持たず、タスク固有の属性は保持する。
+-- オーダーは種別・計画の管理元・属性、タスクは作業番号・集約指定・進捗率・属性の列を持たない。
 -- 設備の費用・属性、オーダーとタスクの親ID、節目指定・予定工数の6列は持たない。
 -- 組織と勤務パターンは廃止し、拠点ごとの曜日・時間帯をM_Calendarsへ直接保存する。
 -- 曜日勤務の時刻はTIME、休日・停止の例外日時は日本時間のDATETIME2とする。
@@ -236,6 +236,8 @@ CREATE TABLE [T_Plans] (
 	[EndAt] DATETIME2(7) NOT NULL, 
 	[CalculationSettingID] INTEGER NOT NULL, 
 	[BasePlanID] INTEGER NULL, 
+	-- 直接コピーした元の計画。通常の新規作成ではNULL。
+	[CopiedFromPlanID] INTEGER NULL,
 	[SupersededAt] DATETIME2(7) NULL, 
 	[ApprovedAt] DATETIME2(7) NULL, 
 	[ApprovedBy] NVARCHAR(254) NULL, 
@@ -250,7 +252,8 @@ CREATE TABLE [T_Plans] (
 	CONSTRAINT [CK_T_Plans_Status] CHECK (Status IN ('DRAFT','MASTER','SUPERSEDED','DISCARDED','ARCHIVED')), 
 	CONSTRAINT [FK_T_Plans_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_T_Plans_CalculationSettingID_M_CalculationSettings] FOREIGN KEY([CalculationSettingID]) REFERENCES [M_CalculationSettings] ([CalculationSettingID]), 
-	CONSTRAINT [FK_T_Plans_BasePlanID_T_Plans] FOREIGN KEY([BasePlanID]) REFERENCES [T_Plans] ([PlanID])
+	CONSTRAINT [FK_T_Plans_BasePlanID_T_Plans] FOREIGN KEY([BasePlanID]) REFERENCES [T_Plans] ([PlanID]),
+	CONSTRAINT [FK_T_Plans_CopiedFromPlanID_T_Plans] FOREIGN KEY([CopiedFromPlanID]) REFERENCES [T_Plans] ([PlanID])
 );
 GO
 
@@ -328,21 +331,16 @@ CREATE TABLE [T_Tasks] (
 	[TaskID] INTEGER NOT NULL IDENTITY, 
 	[OrderID] INTEGER NOT NULL, 
 	[ProductProcessID] INTEGER NULL, 
-	[TaskNo] NVARCHAR(30) NOT NULL, 
 	[TaskName] NVARCHAR(200) NOT NULL, 
 	[Sequence] INTEGER NOT NULL, 
-	[IsSummary] BIT NOT NULL, 
 	[EarliestStartAt] DATETIME2(7) NULL, 
 	[DeadlineAt] DATETIME2(7) NULL, 
 	[Status] NVARCHAR(20) NOT NULL, 
-	[ProgressPct] NUMERIC(5, 2) NOT NULL, 
-	[AttributesJSON] NVARCHAR(max) NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_T_Tasks] PRIMARY KEY ([TaskID]), 
-	CONSTRAINT [UQ_T_Tasks_OrderID_TaskNo] UNIQUE ([OrderID], [TaskNo]), 
 	CONSTRAINT [CK_T_Tasks_Status] CHECK (Status IN ('NOT_STARTED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [FK_T_Tasks_OrderID_T_Orders] FOREIGN KEY([OrderID]) REFERENCES [T_Orders] ([OrderID]), 
 	CONSTRAINT [FK_T_Tasks_ProductProcessID_M_ProductProcesses] FOREIGN KEY([ProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID])

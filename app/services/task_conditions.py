@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import false, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import chunks
@@ -106,7 +106,7 @@ def build_task_conditions(db: Session, tasks: list[Task]) -> TaskConditions:
     generated: dict[int, set[int]] = {}
     for batch in chunks(orders):
         for order_id, process_id in db.execute(select(Task.OrderID, Task.ProductProcessID).where(
-            Task.OrderID.in_(batch), Task.IsSummary == false(), Task.ProductProcessID.is_not(None),
+            Task.OrderID.in_(batch), Task.ProductProcessID.is_not(None),
         )):
             generated.setdefault(order_id, set()).add(process_id)
     for order_id, order in orders.items():

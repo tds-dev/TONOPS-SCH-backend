@@ -3,6 +3,8 @@
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 # TONOPS-SCH システム概要
 
+> 2026-11-18：タスクの作業番号・集約指定・進捗率・属性を廃止。タスクはTaskIDで識別し、表示順はSequence、計算条件は製品工程を使用する。計画のコピー元はCopiedFromPlanIDへ保存する。以下の過去日付のカラム数は当時の記録。
+
 > 現行DBの変更（2026-11-13）：23テーブル・255カラム。段取り替えの工程ID方式は[専用仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。曜日制限を製品工程へ移し、旧属性定義・ルールを廃止。詳細は[DB再作成の手順](DB_SCHEMA_UPDATE_20261113.md)を参照。前回変更：オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
 
 
@@ -43,7 +45,7 @@ TONOPS-SCH は、業種に依存しない **生産・プロジェクト 生産�
 8. [API 一覧](#8-api-一覧)
 9. [日時・タイムゾーンの扱い](#9-日時タイムゾーンの扱い)
 10. [KPI と違反コード](#10-kpi-と違反コード)
-11. [属性と工程の曜日制限](#11-属性と工程の曜日制限)
+11. [工程条件とボードの色分け](#11-工程条件とボードの色分け)
 12. [他システムとの連携（予定）](#12-他システムとの連携予定)
 13. [現在の制約・今後の予定](#13-現在の制約今後の予定)
 
@@ -414,7 +416,7 @@ erDiagram
 |---|---|---|
 | ProductProcessID | INT PK | 工程を識別する自動採番の番号 |
 | ProductID | INT FK（CASCADE） | M_Product.ProductID。製品に直接紐づく |
-| SequenceNumber | INT | 工程番号（10, 20, …）。同じ製品内で一意。TaskNoの生成元 |
+| SequenceNumber | INT | 工程番号（1からの連番）。同じ製品内で一意。計算上の前後関係に使用 |
 | ProcessName | NVARCHAR(100) | 例: こねる、焼く、包装する |
 | MinLagAfterMin | INT | 次工程までの最小待ち時間（分）。例: 発酵60分 |
 | MaxLagAfterMin | INT NULL | 次工程までの最大待ち時間（分）。NULLは上限なし |
@@ -461,15 +463,11 @@ erDiagram
 | TaskID | INT PK | |
 | OrderID | INT FK | |
 | ProductProcessID | INT FK NULL | 生成元の工程。現在の設備候補・前後関係の参照に使用 |
-| TaskNo | NVARCHAR(30) | オーダー内で一意 |
 | TaskName | NVARCHAR(200) | |
 | Sequence | INT | 表示順 |
-| IsSummary | BIT | 1 = サマリー（計算対象外） |
 | EarliestStartAt | DATETIME2(7) NULL | 作業単位の着手可能日時 |
 | DeadlineAt | DATETIME2(7) NULL | 作業単位の期限 |
 | Status | NVARCHAR(20) | 値: `NOT_STARTED` `IN_PROGRESS` `DONE` `CANCELLED`（配台表の開始・完了で更新） |
-| ProgressPct | DECIMAL(5,2) | 予約 |
-| AttributesJSON | NVARCHAR(MAX) | タスク固有の補足属性。新規生成時は未指定。旧データ・API応答・明示した属性の色分けのため保持する |
 
 設備候補・前後関係の専用テーブルは廃止した。詳細は[タスク条件の組み立て](TASK_CONDITIONS.md)を参照。
 
@@ -482,7 +480,8 @@ erDiagram
 | Status | NVARCHAR(20) | 値: `DRAFT` `MASTER` `SUPERSEDED` `DISCARDED` `ARCHIVED` |
 | StartAt / EndAt | DATETIME2(7)（日本時間） | 計画期間 |
 | CalculationSettingID | INT FK | |
-| BasePlanID | INT FK NULL | 元計画（作成時のマスタ、またはコピー元） |
+| BasePlanID | INT FK NULL | 計算の基準計画。新規作成時は指定計画またはマスタを選び、コピー時は元の値を引き継ぐ |
+| CopiedFromPlanID | INT FK NULL | 直接コピーした元の計画ID。通常の新規作成ではNULL。コピーを繰り返した場合も直前のコピー元を記録する |
 | SupersededAt | DATETIME2(7) NULL | 置換された時刻（この時刻より前の割付は有効） |
 | ApprovedAt / ApprovedBy | | 承認日時・承認者 |
 | Remarks | NVARCHAR(500) | |
@@ -645,7 +644,7 @@ R = 参照、W = 更新。ボード・ダッシュボードの「計算の入力
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/plans/{planId}/board?from=&to=&resourceGroupId=&colorBy=` | DayPilot 用のデータ: `plan`, `resources`, `groups`, `events`（割付）, `setups`（段取りブロック）, `nonWorking`（非稼働時間）, `unscheduled`（未割付作業）, `issues`（違反）, `kpis`。`colorBy` の既定は製品ID（productId） |
+| GET | `/plans/{planId}/board?from=&to=&resourceGroupId=` | DayPilot 用のデータ: `plan`, `resources`, `groups`, `events`（割付）, `setups`（段取りブロック）, `nonWorking`（非稼働時間）, `unscheduled`（未割付作業）, `issues`（違反）, `kpis`。色分けは製品ID、製品未指定時はオーダー番号 |
 | POST | `/plans/{planId}/assignments/validate` | 変更の検証（保存しない）→ `{ok, errors, hard, soft, kpis, changedTaskIds}` |
 | PATCH | `/plans/{planId}/assignments` | 変更の保存。`{changes: [...], lockMoved: true, force: false}`。エラー・新たな必須違反は 422、`rowVer` 不一致は 409 |
 | GET | `/plans/compare?a=&b=` | 計画 A（基準）と B の KPI 差分（`better`: B が良いか）と変更作業（`MOVED` / `RESOURCE` / `ADDED` / `REMOVED`） |
@@ -720,14 +719,13 @@ DBの`KpiKey`とAPIの評価値キーは日本語で統一する。既存DBの�
 
 ---
 
-## 11. 属性と工程の曜日制限
+## 11. 工程条件とボードの色分け
 
-### 11.1 属性で業種固有の情報を表す
+### 11.1 タスクと製品工程の役割
 
-食品のアレルゲン、塗装の色、プロジェクトのスキルなど、業種固有の情報は **AttributesJSON** に入れます。
-タスクの補足属性は旧データ・API応答・明示した属性での色分け用に保持します。曜日制限と段取り替えは工程の設定を使います。製品・工程・オーダーには属性列がなく、新規生成タスクの属性は未指定です。
+タスクはTaskIDで識別し、作業名・表示順・生成元工程・作業状態を保存します。作業番号・集約指定・進捗率・属性は保持しません。オーダー詳細の前後関係は作業名で表示します。
 
-段取り替えは`M_ProductSwitchRules`の切替前後工程IDを参照する。NULLで任意の工程を指定でき、作業属性の入力なしで通常生成した作業にも適用する。ボードの既定色分けは製品ID。詳細は[製品工程の段取り替え仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。
+段取り替えは`M_ProductSwitchRules`の切替前後工程IDを参照する。NULLで任意の工程を指定できる。ボードは製品IDで色分けし、製品未指定時はオーダー番号を使う。属性による色分け・配台表の属性表示は廃止した。詳細は[製品工程の段取り替え仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。
 
 ### 11.2 製品工程の曜日制限
 
