@@ -38,7 +38,7 @@ class TaskLink:
     dependency_id: int
     predecessor_task_id: int
     successor_task_id: int
-    # 製品工程の順序は、終了から開始までのFS関係として扱う。
+    # 製品工程の順序は「前工程の終了後に次工程を開始する」関係として扱う。
     dependency_type: str
     lag_min: int
     max_lag_min: int | None

@@ -47,7 +47,8 @@ class PTask:
 class PDependency:
     pred: int
     succ: int
-    type: str = "FS"  # FS / SS / FF / SF
+    # 既定は「前工程の終了後に次工程を開始」。開始同士・終了同士・開始から終了への関係も扱う。
+    type: str = "FS"
     lag: int = 0
     max_lag: int | None = None
 

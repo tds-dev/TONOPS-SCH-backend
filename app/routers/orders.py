@@ -33,7 +33,7 @@ class DependencyRead(ApiModel):
     dependency_id: int
     predecessor_task_id: int
     successor_task_id: int
-    # 工程マスタから作る関係はFSのみ。最大待ち時間の未指定は上限なし。
+    # 工程マスタからは「前工程の終了後に次工程を開始する」関係だけを作る。最大待ち時間の未指定は上限なし。
     dependency_type: str
     lag_min: int
     max_lag_min: int | None

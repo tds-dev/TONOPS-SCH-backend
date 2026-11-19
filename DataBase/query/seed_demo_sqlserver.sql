@@ -23,10 +23,11 @@ DECLARE @CleanupSql nvarchar(512);
 BEGIN TRY
 BEGIN TRANSACTION;
 
--- M_Locations: 1件
+-- M_Locations: 2件
 SET @IdentityTable = N'M_Locations';
 SET IDENTITY_INSERT [M_Locations] ON;
 INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, N'パン工場', '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, N'テスト工場', '2026-11-19T15:12:37.000000', N'SQL', '2026-11-15T15:12:37.000000', NULL, 0);
 SET IDENTITY_INSERT [M_Locations] OFF;
 SET @IdentityTable = NULL;
 

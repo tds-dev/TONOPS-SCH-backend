@@ -144,7 +144,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
                 task.hint = pos
         tasks[t.TaskID] = task
 
-    # 計算対象として残っている、隣接する製品工程のFS関係を使う。
+    # 計算対象の隣接工程を「前工程の終了後に次工程を開始する」関係で結ぶ。
     deps = [
         PDependency(d.predecessor_task_id, d.successor_task_id, d.dependency_type, d.lag_min, d.max_lag_min)
         for d in conditions.dependencies
