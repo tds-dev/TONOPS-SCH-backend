@@ -195,6 +195,10 @@ class ProductProcess(AuditMixin, Base):
     # 製品内の実行順序と工程の表示名。
     SequenceNumber = Column(Integer, nullable=False)
     ProcessName = Column(String(100), nullable=False)
+    # 準備・固定の未設定はNULL。数量当たりの作業時間とともに工程で共用する。
+    SetupMinutes = Column(Integer, nullable=True)
+    FixedMinutes = Column(Integer, nullable=True)
+    ProcessingMinutes = Column(Numeric(12, 4), nullable=False, default=0)
     # この工程が終わってから次工程を開始するまでの待ち時間。最大の未指定は上限なし。
     MinLagAfterMin = Column(Integer, nullable=False, default=0)
     MaxLagAfterMin = Column(Integer, nullable=True)
@@ -207,7 +211,7 @@ class ProductProcess(AuditMixin, Base):
     WeekdayRestrictionStartAt = Column(DateTime, nullable=True)
     WeekdayRestrictionEndAt = Column(DateTime, nullable=True)
 
-    # この工程を実行できる設備または設備グループと所要時間。
+    # この工程を実行できる設備または設備グループ。作業時間は工程で共用する。
     resources = relationship(
         "ProductProcessResource", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -232,10 +236,6 @@ class ProductProcessResource(AuditMixin, Base):
     # 設備またはグループのどちらか一方だけを指定する。
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
-    # 所要時間は準備＋固定＋数量×単位当たり時間。
-    SetupMinutes = Column(Integer, nullable=False, default=0)
-    FixedMinutes = Column(Integer, nullable=False, default=0)
-    MinutesPerUnit = Column(Numeric(12, 4), nullable=False, default=0)
 
 
 # ---------------------------------------------------------------- 作業者

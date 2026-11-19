@@ -109,7 +109,7 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | 工程 | M_ProductProcesses / M_ProductProcessResources | 製品ごとの工程順・待ち時間・実行候補・所要時間 |
 | オーダー | T_Orders | 需要の単位。受注（ORDER）またはプロジェクト（PROJECT）。納期・優先度を持つ |
 | 作業 | T_Tasks | スケジュールの最小単位。オーダーの製品の工程から生成、または直接登録 |
-| リソース候補 | M_ProductProcessResourcesから組み立て | 現在の候補とオーダー数量から所要時間を求める。タスク用の保存先は持たない |
+| リソース候補 | M_ProductProcessResourcesから組み立て | 候補は設備・グループを保持。所要時間は工程の共通時間とオーダー数量から求める。タスク用の保存先は持たない |
 | 依存関係 | M_ProductProcessesから組み立て | 製品内の隣接工程のFS関係と最小・最大待ち時間 |
 | 計画 | T_Plans | スケジュールの 1 つの版。下書き → マスタ（承認） |
 | 割付 | T_PlanAssignments | 計画内で「作業 × リソース × 時刻」を決めたもの |
@@ -139,7 +139,7 @@ flowchart TD
 
 1. **マスタ登録**: フロントエンドの「マスタ」からリソース、カレンダー、製品・工程、段取り替え、作業者、計算設定を管理する。作業者設定は保存・稼働表示までで、計算には未連携。拠点の登録はAPI / Swaggerを使用する。
 2. **オーダー登録** → **作業生成**: オーダーの製品に属する工程を展開し、作業本体だけを保存します。候補・前後関係は利用時に現在の製品マスタから組み立てます。
-   所要時間 = 作業リソース候補の `SetupMinutes` + `FixedMinutes` + 数量 × `MinutesPerUnit`（分、切り上げ）。
+   所要時間 = 製品工程（M_ProductProcesses）の `SetupMinutes` + `FixedMinutes` + 切り上げ（数量 × `ProcessingMinutes`）。準備・固定のNULLは計算時に0分とする。設備未登録でも工程の時間を登録できる。
 3. **計画作成**: 計画期間（拠点の現地時刻）とプロファイルを指定。現在のマスタ計画が「元計画（BasePlanID）」になります。
 4. **計算実行**: ワーカーが CP-SAT で割付を計算し、KPI と違反（課題）を保存します。
 5. **調整**: 計画ボードでドラッグ（移動・リサイズ）、固定・解除、割付を外す、未割付作業の配置。
@@ -162,7 +162,7 @@ flowchart TD
 | 稼働枠 | M_Calendars / M_CalendarExceptions | リソースのLocationIDから同じ拠点の全有効勤務行と停止予定を直接取得し、計画期間に展開。勤務未登録なら常時稼働。登録済み勤務の休日・停止時間は稼働なし |
 | オーダー | T_Orders | 拠点が一致、未削除、`DONE`/`CANCELLED` 以外、着手可能日時が未指定または期間終了より前 |
 | 作業 | T_Tasks | 上記オーダーの作業のうち、サマリーでなく `DONE`/`CANCELLED` 以外 |
-| 候補 | M_ProductProcessResources + T_Orders.Quantity | 所要時間をその都度計算。グループ指定はグループ内の有効リソースに展開 |
+| 候補 | M_ProductProcessResources + M_ProductProcesses + T_Orders.Quantity | 工程共通の所要時間をその都度計算。グループ指定はグループ内の有効リソースに展開 |
 | 依存関係 | M_ProductProcesses + T_Tasks.ProductProcessID | 同一オーダーの隣接工程をFSで結び、前工程の待ち時間を使う |
 | 段取り替え | M_ProductSwitchTimes / M_ProductSwitchRules | 有効なもの。グループ指定ならそのグループのリソースに適用 |
 | 工程の曜日制限 | M_ProductProcesses | 有効かつ計画開始日時が適用期間内の場合に参照 |
@@ -418,6 +418,9 @@ erDiagram
 | ProductID | INT FK（CASCADE） | M_Product.ProductID。製品に直接紐づく |
 | SequenceNumber | INT | 工程番号（1からの連番）。同じ製品内で一意。計算上の前後関係に使用 |
 | ProcessName | NVARCHAR(100) | 例: こねる、焼く、包装する |
+| SetupMinutes | INT NULL | 工程共通の準備時間（所要時間に含む）。未設定はNULL、計算時は0分 |
+| FixedMinutes | INT NULL | 工程共通の数量によらない固定時間。未設定はNULL、計算時は0分 |
+| ProcessingMinutes | DECIMAL(12,4) | 工程共通の数量1当たりの時間（分） |
 | MinLagAfterMin | INT | 次工程までの最小待ち時間（分）。例: 発酵60分 |
 | MaxLagAfterMin | INT NULL | 次工程までの最大待ち時間（分）。NULLは上限なし |
 | AllowedWeekdaysJSON | NVARCHAR(MAX) | 日曜0～土曜6。初期値は全曜日許可 |
@@ -432,10 +435,9 @@ erDiagram
 | ProductProcessResourceID | INT PK | 実行候補を識別する自動採番の番号 |
 | ProductProcessID | INT FK（CASCADE） | M_ProductProcesses.ProductProcessID |
 | ResourceID / ResourceGroupID | INT FK NULL | どちらか一方を指定（CHECK制約） |
-| SetupMinutes | INT | 毎回かかる準備時間（所要時間に含む） |
-| FixedMinutes | INT | 数量によらない固定時間 |
-| MinutesPerUnit | DECIMAL(12,4) | 数量1当たりの時間（分） |
-| Priority | INT | タスク候補へ引き継ぐ優先順。候補の優先選択には未反映 |
+
+作業時間3項目はM_ProductProcessesへ登録する。実行候補は設備・グループの指定だけを持つ。
+工程の時間保存とオーダー詳細での表示は設備未登録でも利用できる。リソースなし工程の自動日程計算は今回の変更に含めない。
 
 ### 6.4 トランザクションテーブル（T_）
 

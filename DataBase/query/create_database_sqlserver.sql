@@ -4,6 +4,8 @@
 -- 拠点の週次勤務はM_Calendars、休日・停止はM_CalendarExceptionsで管理する。
 -- DB作成後はschema_sqlserver.sql、seed_demo_sqlserver.sqlの順で、製品・工程・実行候補の3階層を作成・登録する。
 -- タスク本体だけを保存し、設備候補と工程間条件は製品マスタから計算時に組み立てる。
+-- 準備・固定・数量当たり時間はM_ProductProcessesに登録し、設備候補には保持しない。
+-- 数量当たりの作業時間はProcessingMinutes、準備・固定時間の未設定はNULLとする。
 USE [master];
 GO
 IF DB_ID(N'TONOPS-SCH') IS NULL

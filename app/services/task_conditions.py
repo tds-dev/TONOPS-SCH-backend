@@ -24,6 +24,13 @@ class TaskOption:
     setup_minutes: int
 
 
+# リソース未登録でも返せる、工程とオーダー数量から求めた作業時間。
+@dataclass
+class TaskTiming:
+    duration_min: int
+    setup_minutes: int
+
+
 # 同一オーダーの連続する製品工程を結ぶ、計算時だけの前後関係。
 @dataclass
 class TaskLink:
@@ -61,6 +68,8 @@ class TaskWeekdayRestriction:
 class TaskConditions:
     # タスクIDをキーに、候補がないタスクも空の一覧として保持する。
     options: dict[int, list[TaskOption]] = field(default_factory=dict)
+    # 工程を特定できたタスクの共通作業時間。設備候補の件数に依存しない。
+    timings: dict[int, TaskTiming] = field(default_factory=dict)
     dependencies: list[TaskLink] = field(default_factory=list)
     # タスクごとの最新工程設定。作業属性や廃止したルールテーブルには依存しない。
     weekday_restrictions: dict[int, TaskWeekdayRestriction] = field(default_factory=dict)
@@ -69,10 +78,11 @@ class TaskConditions:
 
 
 # 準備＋固定＋数量×単位当たり時間を、整数分へ切り上げて求める。
-def option_duration(setup: int, fixed: int, minutes_per_unit: float, quantity: float) -> int:
+def option_duration(setup: int | None, fixed: int | None, processing_minutes: float, quantity: float) -> int:
     # 小数の計算誤差で、ちょうどの分数が余分に切り上がることを防ぐ。
-    run = round(float(quantity or 0) * float(minutes_per_unit or 0), 6)
-    return int(setup + fixed + math.ceil(run))
+    run = round(float(quantity or 0) * float(processing_minutes or 0), 6)
+    # 準備・固定のNULLは保存値を変えず、所要時間の計算時だけ0分にする。
+    return int((setup or 0) + (fixed or 0) + math.ceil(run))
 
 
 # 最新の製品工程をまとめて読み込み、タスク用テーブルへの複製を行わず条件を作る。
@@ -129,13 +139,19 @@ def build_task_conditions(db: Session, tasks: list[Task]) -> TaskConditions:
             weekdays=list(process.AllowedWeekdaysJSON), enabled=process.WeekdayRestrictionEnabled,
             start_at=process.WeekdayRestrictionStartAt, end_at=process.WeekdayRestrictionEndAt,
         )
+        # 工程の時間を一度だけ計算し、画面表示とすべての設備候補で共用する。
+        timing = TaskTiming(
+            duration_min=option_duration(process.SetupMinutes, process.FixedMinutes,
+                                         process.ProcessingMinutes, order.Quantity),
+            setup_minutes=process.SetupMinutes or 0,
+        )
+        result.timings[task.TaskID] = timing
         result.options[task.TaskID] = [
             TaskOption(
                 option_id=candidate.ProductProcessResourceID,
                 resource_id=candidate.ResourceID, resource_group_id=candidate.ResourceGroupID,
-                duration_min=option_duration(candidate.SetupMinutes, candidate.FixedMinutes,
-                                             candidate.MinutesPerUnit, order.Quantity),
-                setup_minutes=candidate.SetupMinutes,
+                duration_min=timing.duration_min,
+                setup_minutes=timing.setup_minutes,
             )
             for candidate in sorted(process.resources, key=lambda row: row.ProductProcessResourceID)
         ]

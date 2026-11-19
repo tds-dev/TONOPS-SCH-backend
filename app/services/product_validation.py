@@ -52,7 +52,7 @@ def validate_product_write(db: Session, original: Product | None, values: dict[s
         raise HTTPException(409, "同じ拠点で製品名が登録済みです。別の名称を入力してください。")
 
 
-# 製品工程の名称、順序、待ち時間と製品参照を確認する。
+# 製品工程の名称、順序、作業時間、待ち時間と製品参照を確認する。
 def validate_product_process_write(db: Session, original: ProductProcess | None, values: dict[str, Any]) -> None:
     _name(original, values, "ProcessName", "工程名")
     # 製品の所属先は登録後に変更せず、既存タスクの生成元を保持する。
@@ -75,6 +75,7 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
             raise HTTPException(422, "最大待ち時間は最小待ち時間以上にしてください。")
     # 工程番号の重複は専用保存処理で交換する。範囲は製品の工程数に合わせて確認する。
     validate_weekday_settings(original, values)
+    validate_process_time(original, values)
 
 
 # 曜日一覧・有効状態・日本時間の適用期間を確認し、部分更新でも既存値を保持する。
@@ -99,7 +100,7 @@ def validate_weekday_settings(original: ProductProcess | None, values: dict[str,
         raise HTTPException(422, "曜日制限の終了日時は開始日時以降にしてください。")
 
 
-# 工程の実行候補を同じ拠点に限定し、設備かグループの片方と所要時間を確認する。
+# 工程の実行候補を同じ拠点に限定し、設備かグループの片方を確認する。
 def validate_product_process_resource_write(db: Session, original: Any, values: dict[str, Any]) -> None:
     # この候補が属する工程と製品。
     process_id = _value(original, values, "ProductProcessID")
@@ -117,17 +118,24 @@ def validate_product_process_resource_write(db: Session, original: Any, values: 
     target = db.get(Resource, resource_id) if resource_id is not None else db.get(ResourceGroup, group_id)
     if target is None or target.DeleteFlag or target.LocationID != product.LocationID:
         raise HTTPException(422, "製品と同じ拠点の有効なリソースかグループを指定してください。")
-    # 準備・固定は整数分、数量当たり時間は小数4桁まで。少なくとも1つは正数にする。
-    setup = _value(original, values, "SetupMinutes", 0)
-    fixed = _value(original, values, "FixedMinutes", 0)
-    per_unit = _value(original, values, "MinutesPerUnit", 0)
-    _integer(setup, "準備時間")
-    _integer(fixed, "固定時間")
+
+
+# 設備候補の有無に関係なく、工程共通の作業時間の範囲と精度を確認する。
+def validate_process_time(original: ProductProcess | None, values: dict[str, Any]) -> None:
+    # 準備・固定は未指定ならNULL、指定時は整数分。作業時間は小数4桁まで。
+    setup = _value(original, values, "SetupMinutes")
+    fixed = _value(original, values, "FixedMinutes")
+    processing = _value(original, values, "ProcessingMinutes", 0)
+    if setup is not None:
+        _integer(setup, "準備時間")
+    if fixed is not None:
+        _integer(fixed, "固定時間")
     # 浮動小数の丸め誤差を避けてDBのNUMERIC(12,4)の範囲と桁数を確認する。
-    decimal_per_unit = Decimal(str(per_unit)) if per_unit is not None else None
-    if (decimal_per_unit is None or not decimal_per_unit.is_finite()
-            or decimal_per_unit < 0 or decimal_per_unit > Decimal("99999999.9999")
-            or decimal_per_unit != decimal_per_unit.quantize(Decimal("0.0001"))):
-        raise HTTPException(422, "単位当たり時間は0以上99999999.9999以下、小数点以下4桁以内で入力してください。")
-    if setup + fixed + decimal_per_unit <= 0:
-        raise HTTPException(422, "準備・固定・単位当たり時間のいずれかを0より大きくしてください。")
+    decimal_processing = Decimal(str(processing)) if processing is not None else None
+    if (decimal_processing is None or not decimal_processing.is_finite()
+            or decimal_processing < 0 or decimal_processing > Decimal("99999999.9999")
+            or decimal_processing != decimal_processing.quantize(Decimal("0.0001"))):
+        raise HTTPException(422, "作業時間は0以上99999999.9999以下、小数点以下4桁以内で入力してください。")
+    # 保存値はNULLのまま保ち、合計時間の確認時だけ0分とみなす。
+    if (setup or 0) + (fixed or 0) + decimal_processing <= 0:
+        raise HTTPException(422, "作業時間・準備時間・固定時間のいずれかを0より大きくしてください。")

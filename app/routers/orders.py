@@ -25,7 +25,6 @@ class OptionRead(ApiModel):
     # 所要時間は固定準備を含み、準備時間はその内訳として返す。
     duration_min: int
     setup_minutes: int
-    priority: int
 
 
 # 製品工程の順序と待ち時間から組み立てる、保存しない前後関係。
@@ -42,6 +41,9 @@ class DependencyRead(ApiModel):
 
 # タスクに実行できる設備候補を含めて返す。
 class TaskWithOptions(TaskRead):  # type: ignore[misc, valid-type]
+    # 工程がない旧タスクはnullとし、時間未取得と0分を区別する。
+    duration_min: int | None = None
+    setup_minutes: int | None = None
     # 保存列に加え、現在のマスタから得た設備候補を返す。
     options: list[OptionRead] = []  # type: ignore[valid-type]
 
@@ -50,8 +52,17 @@ class TaskWithOptions(TaskRead):  # type: ignore[misc, valid-type]
 def tasks_with_options(db: Session, tasks: list[Task]) -> list[TaskWithOptions]:
     # タスク本体の保存情報と、保存しない設備候補を結合する。
     conditions = build_task_conditions(db, tasks)
-    return [TaskWithOptions(**TaskRead.model_validate(task).model_dump(),
-                            options=conditions.options[task.TaskID]) for task in tasks]
+    # 設備未登録の工程も、候補とは独立した作業時間を返す。
+    result: list[TaskWithOptions] = []
+    for task in tasks:
+        timing = conditions.timings.get(task.TaskID)
+        result.append(TaskWithOptions(
+            **TaskRead.model_validate(task).model_dump(),
+            duration_min=timing.duration_min if timing is not None else None,
+            setup_minutes=timing.setup_minutes if timing is not None else None,
+            options=conditions.options[task.TaskID],
+        ))
+    return result
 
 
 # タスク生成と詳細取得をまとめる追加API。

@@ -107,18 +107,19 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         db.flush()
         # 工程は製品ごとのひな形、タスクはオーダーごとの実行単位。時間は準備＋固定＋数量×単位時間で求める。
         # こねた後の60分を発酵、焼いた後の30分を冷却として簡略表現する。
-        for no, process_name, grp, setup, fixed, mpu, lag in [
+        for no, process_name, grp, setup, fixed, processing, lag in [
             (1, "こねる", "KNEAD", 10, 20, 0.05, 60),
             (2, "焼く", "BAKE", 10, 25, 0.10, 30),
-            (3, "包装する", "PACK", 5, 0, 0.15, 0),
+            (3, "包装する", "PACK", 5, None, 0.15, 0),
         ]:
-            # 工程の実行順序、工程名、次工程までの待ち時間。
+            # 工程の実行順序、共通作業時間、次工程までの待ち時間。
             process = m.ProductProcess(
                 SequenceNumber=no, ProcessName=process_name, MinLagAfterMin=lag, CreatedBy=USER,
+                SetupMinutes=setup, FixedMinutes=fixed, ProcessingMinutes=processing,
                 AllowedWeekdaysJSON=[1, 2, 3, 4, 5] if family == "ナッツ入り" else list(range(7)),
             )
             process.resources.append(m.ProductProcessResource(
-                ResourceGroupID=groups[grp].ResourceGroupID, SetupMinutes=setup, FixedMinutes=fixed, MinutesPerUnit=mpu,
+                ResourceGroupID=groups[grp].ResourceGroupID,
                 CreatedBy=USER,
             ))
             product.processes.append(process)
@@ -271,9 +272,8 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     for plan_number, task_number, resource_number, minute, setup in slots:
         plan, task, resource = plans[plan_number - 1], tasks[task_number - 1], resources[resource_number - 1]
         process = db.get(m.ProductProcess, task.ProductProcessID)
-        candidate = process.resources[0]
         order = db.get(t.Order, task.OrderID)
-        duration = option_duration(candidate.SetupMinutes, candidate.FixedMinutes, candidate.MinutesPerUnit, order.Quantity)
+        duration = option_duration(process.SetupMinutes, process.FixedMinutes, process.ProcessingMinutes, order.Quantity)
         db.add(t.PlanAssignment(
             PlanID=plan.PlanID, TaskID=task.TaskID, ResourceID=resource.ResourceID,
             StartAt=start + timedelta(minutes=minute), EndAt=start + timedelta(minutes=minute + duration),
