@@ -147,6 +147,7 @@ CREATE TABLE [M_ProductSwitchTimes] (
 	[ProductSwitchTimeID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[ProductSwitchTimeName] NVARCHAR(100) NOT NULL, 
+	[ResourceID] INTEGER NULL,
 	[ResourceGroupID] INTEGER NULL, 
 	[DefaultMinutes] INTEGER NOT NULL, 
 	[IsActive] BIT NOT NULL, 
@@ -155,6 +156,8 @@ CREATE TABLE [M_ProductSwitchTimes] (
 	[UpdatedAt] DATETIME2(7) NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_ProductSwitchTimes] PRIMARY KEY ([ProductSwitchTimeID]), 
+	CONSTRAINT [CK_M_ProductSwitchTimes_ResourceScope] CHECK (ResourceID IS NULL OR ResourceGroupID IS NULL),
+	CONSTRAINT [FK_M_ProductSwitchTimes_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID]),
 	CONSTRAINT [FK_M_ProductSwitchTimes_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_M_ProductSwitchTimes_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID])
 );

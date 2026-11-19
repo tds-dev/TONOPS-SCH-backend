@@ -1,5 +1,5 @@
 -- 段取り替え明細は、参照する製品工程を登録した後に挿入する。
--- DataBase/queryに配置した、SSMSで手動実行するデモデータ挿入SQL。
+-- SSMSの手動実行と、python -m DataBase.setup_databaseのSQL Server初期設定で共用する仮データ挿入SQL。
 -- 新規作成した空のDBへ仮データを登録する。
 -- 出荷日時ShippingDateは未指定（NULL）で登録する。日時の表示は共通の日本時間設定を使う。
 -- 工程ルートの選択・版管理は行わず、工程を製品に直接紐づける。
@@ -27,7 +27,7 @@ BEGIN TRANSACTION;
 SET @IdentityTable = N'M_Locations';
 SET IDENTITY_INSERT [M_Locations] ON;
 INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, N'パン工場', '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, N'テスト工場', '2026-11-19T15:12:37.000000', N'SQL', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, N'センシング', '2026-11-19T00:00:00.0000000', N'test', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Locations] OFF;
 SET @IdentityTable = NULL;
 
@@ -78,10 +78,10 @@ INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [LocationID], [GroupName], [S
 SET IDENTITY_INSERT [M_ResourceGroups] OFF;
 SET @IdentityTable = NULL;
 
--- M_ProductSwitchTimes: 1件
+-- M_ProductSwitchTimes: 有効なグループ設定1件。無効な単体設定1件はリソース登録後に追加する。
 SET @IdentityTable = N'M_ProductSwitchTimes';
 SET IDENTITY_INSERT [M_ProductSwitchTimes] ON;
-INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'ミキサーの製品工程切替条件', 1, 0, 1, '2026-11-15T15:12:37.000000', N'seed', NULL, NULL);
+INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [ResourceID], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (1, 1, N'ミキサーの製品工程切替条件', NULL, 1, 0, 1, '2026-11-15T15:12:37.000000', N'seed', NULL, NULL);
 SET IDENTITY_INSERT [M_ProductSwitchTimes] OFF;
 SET @IdentityTable = NULL;
 
@@ -95,6 +95,13 @@ INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [Resou
 INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, 3, N'包装機1号機', 1.00, NULL, 4, '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
 INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, 3, N'包装機2号機', 1.00, NULL, 5, '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Resources] OFF;
+SET @IdentityTable = NULL;
+
+-- 単体指定の設定例。既存の有効なグループ設定と重複するため、無効で登録する。
+SET @IdentityTable = N'M_ProductSwitchTimes';
+SET IDENTITY_INSERT [M_ProductSwitchTimes] ON;
+INSERT INTO [M_ProductSwitchTimes] ([ProductSwitchTimeID], [LocationID], [ProductSwitchTimeName], [ResourceID], [ResourceGroupID], [DefaultMinutes], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (2, 1, N'ミキサー1号機の切替条件（設定例）', 1, NULL, 0, 0, '2026-11-15T15:12:37.000000', N'seed', NULL, NULL);
+SET IDENTITY_INSERT [M_ProductSwitchTimes] OFF;
 SET @IdentityTable = NULL;
 
 -- M_ProductProcesses: 18件
@@ -423,6 +430,91 @@ CROSS APPLY (VALUES
     (N'割付済みタスク', CAST(m.ScheduledTasks AS decimal(18,4))),
     (N'未割付タスク', CAST(m.UnscheduledTasks AS decimal(18,4)))
 ) k(KpiKey,KpiValue);
+
+
+-- センシングのマスタ仮データ。トランザクションデータは追加しない。
+-- センシング：M_Product 4件。指定されたID・NULL・監査情報を維持する。
+SET @IdentityTable = N'M_Product';
+SET IDENTITY_INSERT [M_Product] ON;
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 2, N'LC-450A', N'LC', '2026-11-19T14:48:55.0000000', N'system', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (8, 2, N'RF-400', N'RF', '2026-11-19T15:01:21.0000000', N'system', '2026-11-19T15:01:54.0000000', N'system', 1);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (9, 2, N'LD-450及びSセンサ単品', N'LD', '2026-11-19T15:01:56.0000000', N'system', '2026-11-19T15:02:00.0000000', N'system', 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (10, 2, N'OXZ-740', NULL, '2026-11-19T15:04:23.0000000', N'system', NULL, NULL, 0);
+SET IDENTITY_INSERT [M_Product] OFF;
+SET @IdentityTable = NULL;
+
+-- センシング：M_ProductProcesses 15件。指定されたID・NULL・監査情報を維持する。
+SET @IdentityTable = N'M_ProductProcesses';
+SET IDENTITY_INSERT [M_ProductProcesses] ON;
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (19, 7, 1, N'ピッキング', NULL, NULL, 3.0000, 0, 0, N'[0, 1, 2, 3, 4, 5, 6]', 1, NULL, NULL, '2026-11-19T14:49:36.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (20, 7, 2, N'組立', NULL, NULL, 19.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T14:50:54.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (21, 7, 3, N'電気調整', NULL, NULL, 20.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T14:54:37.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (22, 7, 4, N'エージング', NULL, NULL, 3.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T14:54:51.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (23, 7, 5, N'ガス校正', NULL, NULL, 41.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T14:55:17.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (24, 7, 6, N'出荷準備', NULL, NULL, 7.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T14:55:34.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (27, 9, 1, N'ピッキング', NULL, NULL, 3.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:02:26.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (28, 9, 2, N'電気調整', NULL, NULL, 25.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:02:48.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (29, 9, 3, N'エージング', NULL, NULL, 3.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:03:01.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (30, 9, 4, N'ガス校正', NULL, NULL, 162.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:03:17.0000000', N'system', '2026-11-19T15:03:26.0000000', N'system');
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (31, 9, 5, N'出荷準備', NULL, NULL, 20.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:03:43.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (32, 9, 6, N'リークテスト', NULL, NULL, 3.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:04:01.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (33, 10, 1, N'ピッキング', NULL, NULL, 3.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:12:55.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (34, 10, 2, N'組立', NULL, NULL, 30.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:13:11.0000000', N'system', NULL, NULL);
+INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (35, 10, 3, N'電気調整', NULL, NULL, 30.0000, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 0, NULL, NULL, '2026-11-19T15:14:55.0000000', N'system', NULL, NULL);
+SET IDENTITY_INSERT [M_ProductProcesses] OFF;
+SET @IdentityTable = NULL;
+
+-- センシング：M_Resources 2件。指定されたID・NULL・監査情報を維持する。
+SET @IdentityTable = N'M_Resources';
+SET IDENTITY_INSERT [M_Resources] ON;
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 2, NULL, N'MFC5連治具', 1.00, NULL, 0, '2026-11-19T14:33:00.0000000', N'system', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (8, 2, NULL, N'ガス校正5連治具', 1.00, NULL, 1, '2026-11-19T14:33:13.0000000', N'system', NULL, NULL, 0);
+SET IDENTITY_INSERT [M_Resources] OFF;
+SET @IdentityTable = NULL;
+
+-- センシング：M_Workers 2件。指定されたID・NULL・監査情報を維持する。
+SET @IdentityTable = N'M_Workers';
+SET IDENTITY_INSERT [M_Workers] ON;
+INSERT INTO [M_Workers] ([WorkerID], [LocationID], [WorkerName], [Remarks], [DeleteFlag]) VALUES (4, 2, N'本田', NULL, 0);
+INSERT INTO [M_Workers] ([WorkerID], [LocationID], [WorkerName], [Remarks], [DeleteFlag]) VALUES (5, 2, N'岩崎', NULL, 0);
+SET IDENTITY_INSERT [M_Workers] OFF;
+SET @IdentityTable = NULL;
+
+-- センシング：M_WorkerSkillMap 30件。指定されたID・NULL・監査情報を維持する。
+SET @IdentityTable = N'M_WorkerSkillMap';
+SET IDENTITY_INSERT [M_WorkerSkillMap] ON;
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (55, 4, 19, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (56, 5, 19, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (57, 4, 20, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (58, 5, 20, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (59, 4, 21, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (60, 5, 21, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (61, 4, 22, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (62, 5, 22, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (63, 4, 23, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (64, 5, 23, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (65, 4, 24, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (66, 5, 24, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (71, 4, 27, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (72, 5, 27, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (73, 4, 28, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (74, 5, 28, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (75, 4, 29, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (76, 5, 29, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (77, 4, 30, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (78, 5, 30, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (79, 4, 31, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (80, 5, 31, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (81, 4, 32, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (82, 5, 32, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (83, 4, 33, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (84, 5, 33, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (85, 4, 34, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (86, 5, 34, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (87, 4, 35, 0, NULL, NULL);
+INSERT INTO [M_WorkerSkillMap] ([WorkerSkillMapID], [WorkerID], [ProductProcessID], [CanExecute], [MaxDailyQuantity], [Remarks]) VALUES (88, 5, 35, 0, NULL, NULL);
+SET IDENTITY_INSERT [M_WorkerSkillMap] OFF;
+SET @IdentityTable = NULL;
 
 COMMIT TRANSACTION;
 END TRY
