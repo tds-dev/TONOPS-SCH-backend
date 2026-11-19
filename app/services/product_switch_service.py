@@ -2,10 +2,10 @@
 from typing import Any
 
 from fastapi import HTTPException, Request
-from sqlalchemy import false, or_, select, true
+from sqlalchemy import and_, false, or_, select, true
 from sqlalchemy.orm import Session
 
-from app.models.masters import Location, Product, ProductProcess, ProductSwitchRule, ProductSwitchTime, ResourceGroup
+from app.models.masters import Location, Product, ProductProcess, ProductSwitchRule, ProductSwitchTime, Resource, ResourceGroup
 from app.services.product_validation import _integer, _name, _value
 
 
@@ -24,7 +24,7 @@ def filter_product_process_list(statement, request: Request):
     )
 
 
-# 切替設定の拠点・対象グループ・既定時間と有効状態を確認する。
+# 切替設定の拠点・単体またはグループの対象・既定時間と有効状態を確認する。
 def validate_switch_time(db: Session, original: ProductSwitchTime | None, values: dict[str, Any]) -> None:
     _name(original, values, "ProductSwitchTimeName", "段取り替え設定名")
     # 既存明細の所属関係を変えないよう、登録後の拠点変更を拒否する。
@@ -34,8 +34,14 @@ def validate_switch_time(db: Session, original: ProductSwitchTime | None, values
     location = db.get(Location, location_id) if location_id is not None else None
     if location is None or location.DeleteFlag:
         raise HTTPException(422, "有効な拠点を指定してください。")
-    # グループ未指定は拠点内の全設備。指定する場合は同じ拠点の有効なグループに限定する。
+    # 単体とグループの両方を未指定にした場合だけ、拠点内の全設備を対象とする。
+    resource_id = _value(original, values, "ResourceID")
     group_id = _value(original, values, "ResourceGroupID")
+    if resource_id is not None and group_id is not None:
+        raise HTTPException(422, "対象リソースと対象グループは、どちらか一方だけを指定してください。")
+    resource = db.get(Resource, resource_id) if resource_id is not None else None
+    if resource_id is not None and (resource is None or resource.DeleteFlag or resource.LocationID != location_id):
+        raise HTTPException(422, "対象リソースは同じ拠点の有効なリソースを指定してください。")
     group = db.get(ResourceGroup, group_id) if group_id is not None else None
     if group_id is not None and (group is None or group.DeleteFlag or group.LocationID != location_id):
         raise HTTPException(422, "対象グループは同じ拠点の有効なグループを指定してください。")
@@ -51,10 +57,19 @@ def validate_switch_time(db: Session, original: ProductSwitchTime | None, values
         )
         if original is not None:
             conflicts = conflicts.where(ProductSwitchTime.ProductSwitchTimeID != original.ProductSwitchTimeID)
-        if group_id is not None:
-            conflicts = conflicts.where(or_(ProductSwitchTime.ResourceGroupID == group_id, ProductSwitchTime.ResourceGroupID.is_(None)))
+        # 全体・単体・グループの対象が重なる場合を拒否し、設備ごとに有効設定を1件に保つ。
+        all_resources = and_(ProductSwitchTime.ResourceID.is_(None), ProductSwitchTime.ResourceGroupID.is_(None))
+        if resource_id is not None:
+            scopes = [all_resources, ProductSwitchTime.ResourceID == resource_id]
+            if resource.ResourceGroupID is not None:
+                scopes.append(ProductSwitchTime.ResourceGroupID == resource.ResourceGroupID)
+            conflicts = conflicts.where(or_(*scopes))
+        elif group_id is not None:
+            members = select(Resource.ResourceID).where(Resource.ResourceGroupID == group_id, Resource.LocationID == location_id)
+            conflicts = conflicts.where(or_(all_resources, ProductSwitchTime.ResourceGroupID == group_id,
+                                            ProductSwitchTime.ResourceID.in_(members)))
         if db.scalar(conflicts.limit(1)) is not None:
-            raise HTTPException(409, "対象設備に有効な段取り替え設定が重複します。既存設定を無効にするか、対象グループを変更してください。")
+            raise HTTPException(409, "対象リソースに有効な工程切替条件が重複します。既存設定を無効にするか、対象リソース・グループを変更してください。")
 
 
 # 前後とも工程を限定しない禁止設定を、保存時と計算条件の読込時に共通で拒否する。

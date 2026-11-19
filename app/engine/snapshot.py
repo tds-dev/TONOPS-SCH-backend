@@ -158,7 +158,11 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
         # 旧データやDB直接登録の全工程禁止も、計算開始前に修正箇所を案内する。
         for rule in switch_time.rules:
             validate_switch_rule_scope(rule.FromProductProcessID, rule.ToProductProcessID, rule.IsForbidden)
-        rids = set(members.get(switch_time.ResourceGroupID, [])) if switch_time.ResourceGroupID else set(resources)
+        # 単体指定を優先して対象集合へ展開し、自動計算・手動検証で同じ対象を使う。
+        if switch_time.ResourceID is not None:
+            rids = {switch_time.ResourceID} & set(resources)
+        else:
+            rids = set(members.get(switch_time.ResourceGroupID, [])) if switch_time.ResourceGroupID else set(resources)
         changeovers.append(PChangeover(
             id=switch_time.ProductSwitchTimeID, resource_ids=rids,
             default=int(switch_time.DefaultMinutes or 0),

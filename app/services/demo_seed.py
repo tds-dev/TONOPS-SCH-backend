@@ -82,9 +82,19 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     # 設備グループごとの段取り替え設定。明細は工程IDの確定後に追加する。
     switch_time = m.ProductSwitchTime(
         LocationID=location.LocationID, ProductSwitchTimeName="ミキサーの製品工程切替条件",
-        ResourceGroupID=groups["KNEAD"].ResourceGroupID, DefaultMinutes=0, CreatedBy=USER,
+        ResourceID=None, ResourceGroupID=groups["KNEAD"].ResourceGroupID, DefaultMinutes=0, CreatedBy=USER,
     )
     db.add(switch_time)
+    # 単体指定の操作例。既存の有効なグループ設定と競合しないよう無効で登録する。
+    db.flush()
+    single_resource = db.scalar(select(m.Resource).where(
+        m.Resource.LocationID == location.LocationID, m.Resource.SortOrder == 0,
+    ))
+    db.add(m.ProductSwitchTime(
+        LocationID=location.LocationID, ProductSwitchTimeName="ミキサー1号機の切替条件（設定例）",
+        ResourceID=single_resource.ResourceID, ResourceGroupID=None,
+        DefaultMinutes=0, IsActive=False, CreatedBy=USER,
+    ))
 
     db.add(m.CalculationSetting(
         LocationID=location.LocationID, CalculationSettingName="パン製造・納期優先", TimeUnit="MINUTE", IsDefault=True,

@@ -105,15 +105,20 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
 
 # ---------------------------------------------------------------- 設定
 class ProductSwitchTime(AuditMixin, Base):
-    """製品切替時間マスタ。設備グループごとの製品工程切替条件条件をまとめる。"""
+    """リソース単体・グループ・拠点全体の工程切替条件をまとめる。"""
 
     __tablename__ = "M_ProductSwitchTimes"
+    __table_args__ = (
+        CheckConstraint("ResourceID IS NULL OR ResourceGroupID IS NULL", name="ResourceScope"),
+    )
     # 切替時間設定の識別番号。明細からの参照にも使う。
     ProductSwitchTimeID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     # 設備グループごとの切替時間設定の表示名。
     ProductSwitchTimeName = Column(String(100), nullable=False)
+    # 単体とグループは同時指定しない。両方NULLなら拠点内の全リソースを対象とする。
+    ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     DefaultMinutes = Column(Integer, nullable=False, default=0)
     IsActive = Column(Boolean, nullable=False, default=True)

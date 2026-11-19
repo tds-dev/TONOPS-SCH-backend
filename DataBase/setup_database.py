@@ -22,7 +22,9 @@ T_PlanAssignments.WorkerIDはNULL不可とし、仮データ登録時だけ工�
 通常の計算・手動配置・計画コピーはWorkerIDを設定しないため、新しい割付の保存は後続実装まで未対応となる。
 
 バックエンドのルートで python -m DataBase.setup_database を実行する。
-query配下のSQLはSSMS用として保持し、この処理ではモデルから直接DBを操作する。
+テーブルはモデルから作成し、SQL Serverの仮データはquery/seed_demo_sqlserver.sqlを実行して登録する。
+SQLファイル内のUSEは除き、アプリの接続設定で指定したDBへ登録する。
+パン工場の全仮データに加え、センシングのマスタ仮データも登録する。
 拠点はLocationモデルを使い、M_LocationsとLocationID等の定義で作成・登録する。
 計算実行の保存先は、SolverRunモデルのT_SolverRunResultとして作成する。
 タスクの設備候補・前後関係の複製テーブルは作らず、製品工程から利用時に組み立てる。
@@ -33,7 +35,9 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 両計画は2026-11-16 06:00～2026-11-21 06:00の5日間とし、比較撮影用の割付39件・評価値14件も登録する。
 新規テーブルには、同じ拠点内で計画名を重複させない現在のモデル定義を適用する。
 タスクは作業番号・集約指定・進捗率・属性の列を持たず、TaskIDで識別する。
-デモ拠点が登録済みの場合は、以前の内容も含めて既存データを保持する。
+SQL Serverでは拠点が1件でも登録済みの場合、仮データ登録をスキップして既存データを保持する。
+既存DBへの不足データ追加やテーブル変更は行わず、全データの再登録にはDBを再作成する。
+SQLite用の従来のパン工場データ登録はapp/services/demo_seed.pyを使用する。
 勤務時間はM_Calendarsへ直接登録し、組織・カレンダーパターンは作成しない。
 作業者3人・全工程リンク54件・勤務36件・例外休日1件も作成する。作業者の画面・APIは実装済みで、計算連携は行わない。
 例外休日はWorkerIDで本人へ直接関連付け、通常稼働時間の登録・削除から独立させる。
@@ -44,6 +48,8 @@ query配下のSQLはSSMS用として保持し、この処理ではモデルか�
 計算時間上限は持たず、作業中の実績はEndAt・StatusともNULL、終了時はDONEまたはSUSPENDEDとする。
 """
 import argparse
+from pathlib import Path
+import re
 
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import URL, make_url
@@ -101,11 +107,39 @@ def connection_help(url: URL, exc: DBAPIError) -> str:
     return "\n".join(lines)
 
 
+def seed_sqlserver() -> None:
+    """手動登録と同じSQLから、パン工場とセンシングを含む全仮データを登録する。"""
+    # 実行ディレクトリに依存せず、初期設定スクリプトと同じフォルダのSQLを読む。
+    seed_path = Path(__file__).resolve().parent / "query" / "seed_demo_sqlserver.sql"
+    script = seed_path.read_text(encoding="utf-8-sig")
+    # USEによる別DBへの切替を除き、SSMS専用のGOも取り除いて一つのバッチとして実行する。
+    script = re.sub(r"(?im)^[ \t]*USE[ \t]+\[TONOPS-SCH\];[ \t]*\r?$", "", script)
+    script = re.sub(r"(?im)^[ \t]*GO[ \t]*\r?$", "", script)
+    # 登録SQL自身がトランザクションを管理するため、ドライバー側の自動開始を無効にする。
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        if connection.scalar(select(Location.LocationID).limit(1)) is not None:
+            print("既存データがあるため、仮データの追加・変更を行いませんでした。全件再登録にはDBを再作成してください。")
+            return
+        cursor = connection.connection.cursor()
+        try:
+            cursor.execute(script)
+            # SQL Serverの全実行結果を読み進め、後半のINSERTやCOMMITのエラーも検出する。
+            while cursor.nextset():
+                pass
+        finally:
+            cursor.close()
+    print("seed_demo_sqlserver.sqlの全仮データを登録しました（パン工場・センシング）。")
+
+
 def setup_database() -> None:
-    """製品マスタからタスク条件を計算する構成でDBを作成し、未登録のデモを追加する。"""
+    """DB・テーブルを作成し、SQL Serverでは共通SQLから全仮データを登録する。"""
     ensure_database()
     # 現在のモデル定義でテーブルを作成する。DB構成を変更した場合は、DBを削除してから実行する。
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "mssql":
+        seed_sqlserver()
+        return
+    # SQLite接続では、従来のPythonデモ登録を維持する。
     with SessionLocal() as db:
         # 削除済みも含めてデモ拠点を確認し、再実行による重複を防ぐ。
         demo_id = db.scalar(select(Location.LocationID).where(Location.LocationName == DEMO_LOCATION_NAME))
@@ -126,7 +160,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m DataBase.setup_database", description=__doc__)
     parser.parse_args()
     setup_database()
-    print("DB・テーブル・デモデータを作成しました。")
+    print("DBの初期設定が完了しました。")
 
 
 if __name__ == "__main__":

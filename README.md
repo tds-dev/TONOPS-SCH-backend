@@ -158,6 +158,7 @@ Python版・SQL版とも、比較用の割付39件とKPI14件を登録します�
 
 今回の構成は新規DB用です。この初期設定は既存テーブル・カラムを削除・変換しないため、旧構成のDBは作り直してから実行してください。
 SSMSで手動作成する場合は、`DataBase/query/create_database_sqlserver.sql` → `schema_sqlserver.sql` → `seed_demo_sqlserver.sql`の順に実行します。Pythonの初期設定と手動SQLのデータ登録は、どちらか一方を使ってください。
+SQL Serverでは、`python -m DataBase.setup_database`がDB・テーブルの作成後に`DataBase/query/seed_demo_sqlserver.sql`を実行します。パン工場の仮データとセンシングのマスタをまとめて登録するため、SQLを別途実行する必要はありません。拠点が1件でも登録済みの場合は仮データ登録をスキップします。既存DBの不足データを補完する処理ではないため、全件登録には空のDBを使用してください。SQL内の`USE`は除外し、接続設定で指定したDBを使用します。
 DB構成を変更した場合は、既存DBを削除してから上記のPython初期設定または手動SQLで再作成してください。変更内容と確認手順は[タスク条件の組み立て](docs/TASK_CONDITIONS.md)を参照してください。
 SQLファイルや実行結果のファイル出力は行いません。既存の手動実行用SQLは`DataBase/query`フォルダにあります。
 

@@ -287,7 +287,7 @@ stateDiagram-v2
 * 型（SQL Server）: 文字列 `NVARCHAR(n)`、長文 `NVARCHAR(MAX)`、日時 `DATETIME2(7)`（naive 日本時間）、JSON 列は `NVARCHAR(MAX)`。
 * 制約名: `PK_<表>`、`FK_<表>_<列>_<参照表>`、`UQ_<表>_<列>…`、`CK_<表>_<名前>`、`IX_<表>_<列>…`。
 * 区分値は CHECK 制約で制限（下表の「値」）。
-* 初期設定は `python -m DataBase.setup_database` でDB・テーブル作成とデモデータ登録を行います。SQLファイルへの出力機能はありません。
+* 初期設定は `python -m DataBase.setup_database` でDB・テーブルを作成し、SQL Serverでは `DataBase/query/seed_demo_sqlserver.sql` の全仮データ（パン工場・センシング）を登録する。テーブルはモデルから作成し、SQL内のUSE・GOを除いて接続設定のDBへ実行する。拠点が登録済みの場合は仮データ登録をスキップする。SQLite接続は従来のPythonデモ登録を使用する。
 
 ### 6.2 ER 図
 
@@ -380,7 +380,8 @@ erDiagram
 | ProductSwitchTimeID | INT PK | |
 | LocationID | INT FK | |
 | ProductSwitchTimeName | NVARCHAR(100) | |
-| ResourceGroupID | INT FK NULL | 適用するグループ（NULL = 拠点の全リソース） |
+| ResourceID | INT FK NULL | 単体の対象リソース。ResourceGroupIDとの同時指定は禁止 |
+| ResourceGroupID | INT FK NULL | 対象グループ。ResourceIDと両方NULLの場合は拠点の全リソース |
 | DefaultMinutes | INT | 明細にない組合せの段取り時間 |
 | IsActive | BIT | |
 
