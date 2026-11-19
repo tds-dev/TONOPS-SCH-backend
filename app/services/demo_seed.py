@@ -92,17 +92,17 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         CreatedBy=USER,
     ))
 
-    # 製品は名称だけを管理し、工程を直接紐づける。
+    # 製品は品目コードと名称を管理し、工程を直接紐づける。
     products = {}
     # デモの曜日制限・段取り替え設定を組み立てる分類。DBには保存しない。
     product_families = {}
-    for name, family in [
-        ("食パン", "食事パン"), ("バターロール", "食事パン"),
-        ("フランスパン", "食事パン"), ("あんパン", "菓子パン"),
-        ("メロンパン", "菓子パン"), ("くるみパン", "ナッツ入り"),
+    for code, name, family in [
+        ("BREAD-001", "食パン", "食事パン"), ("BREAD-002", "バターロール", "食事パン"),
+        ("BREAD-003", "フランスパン", "食事パン"), ("BREAD-004", "あんパン", "菓子パン"),
+        ("BREAD-005", "メロンパン", "菓子パン"), ("BREAD-006", "くるみパン", "ナッツ入り"),
     ]:
         # この製品と、製品に直接属する工程のひな形。
-        product = m.Product(LocationID=location.LocationID, ProductName=name, CreatedBy=USER)
+        product = m.Product(LocationID=location.LocationID, ProductName=name, ProductCode=code, CreatedBy=USER)
         db.add(product)
         db.flush()
         # 工程は製品ごとのひな形、タスクはオーダーごとの実行単位。時間は準備＋固定＋数量×単位時間で求める。
@@ -189,6 +189,11 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ))
 
     # オーダーは店舗からの製造依頼。製品・個数・納期を指定し、製品工程から個別のタスクを作る。
+    # 指定あり・未指定の両方を確認する仮データ。作業者指定はまだ計算に反映しない。
+    order_workers = {
+        "WBS-1001": workers[0].WorkerID, "WBS-1002": workers[1].WorkerID,
+        "WBS-1003": workers[2].WorkerID,
+    }
     orders = []
     for no, name, qty, due_h, prio, customer in [
         ("WBS-1001", "食パン", 200, 8, 10, "駅前店"),
@@ -203,6 +208,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         product = products[name]
         order = t.Order(
             LocationID=location.LocationID, WBSNumber=no, OrderName=f"{product.ProductName} {qty}個（{customer}向け）",
+            WorkerID=order_workers.get(no),
             ProductID=product.ProductID, Quantity=qty, CustomerName=customer, ReleaseAt=start,
             DeadLine=start + timedelta(hours=due_h), Priority=prio, Status="OPEN", CreatedBy=USER,
         )
@@ -276,6 +282,8 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         duration = option_duration(process.SetupMinutes, process.FixedMinutes, process.ProcessingMinutes, order.Quantity)
         db.add(t.PlanAssignment(
             PlanID=plan.PlanID, TaskID=task.TaskID, ResourceID=resource.ResourceID,
+            # 必須列を満たす仮の担当者。通常の計算・配置・コピー処理へは接続しない。
+            WorkerID=workers[process.SequenceNumber - 1].WorkerID,
             StartAt=start + timedelta(minutes=minute), EndAt=start + timedelta(minutes=minute + duration),
             SetupMinutes=setup, Units=1, IsLocked=False, Source="IMPORT", CreatedBy=USER,
         ))

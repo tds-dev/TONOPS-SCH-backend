@@ -85,6 +85,7 @@ CREATE TABLE [M_Product] (
 	[ProductID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[ProductName] NVARCHAR(100) NOT NULL, 
+	[ProductCode] NVARCHAR(100) NULL,
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
@@ -210,6 +211,7 @@ CREATE TABLE [T_Orders] (
 	[WBSNumber] NVARCHAR(30) NOT NULL, 
 	[OrderName] NVARCHAR(200) NOT NULL, 
 	[ProductID] INTEGER NULL, 
+	[WorkerID] INTEGER NULL,
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[CustomerName] NVARCHAR(100) NULL, 
 	[ReleaseAt] DATETIME2(7) NULL, 
@@ -227,7 +229,8 @@ CREATE TABLE [T_Orders] (
 	CONSTRAINT [UQ_T_Orders_LocationID_WBSNumber] UNIQUE ([LocationID], [WBSNumber]), 
 	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
-	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
+	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]),
+	CONSTRAINT [FK_T_Orders_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
 );
 GO
 
@@ -391,6 +394,7 @@ CREATE TABLE [T_PlanAssignments] (
 	[PlanID] INTEGER NOT NULL, 
 	[TaskID] INTEGER NOT NULL, 
 	[ResourceID] INTEGER NOT NULL, 
+	[WorkerID] INTEGER NOT NULL,
 	[StartAt] DATETIME2(7) NOT NULL, 
 	[EndAt] DATETIME2(7) NOT NULL, 
 	[SetupMinutes] INTEGER NOT NULL, 
@@ -408,7 +412,8 @@ CREATE TABLE [T_PlanAssignments] (
 	CONSTRAINT [CK_T_PlanAssignments_Source] CHECK (Source IN ('SOLVER','MANUAL','IMPORT')), 
 	CONSTRAINT [FK_T_PlanAssignments_PlanID_T_Plans] FOREIGN KEY([PlanID]) REFERENCES [T_Plans] ([PlanID]) ON DELETE CASCADE, 
 	CONSTRAINT [FK_T_PlanAssignments_TaskID_T_Tasks] FOREIGN KEY([TaskID]) REFERENCES [T_Tasks] ([TaskID]), 
-	CONSTRAINT [FK_T_PlanAssignments_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID])
+	CONSTRAINT [FK_T_PlanAssignments_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID]),
+	CONSTRAINT [FK_T_PlanAssignments_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
 );
 GO
 

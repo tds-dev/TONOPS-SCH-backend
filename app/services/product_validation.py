@@ -35,10 +35,16 @@ def _integer(value: Any, label: str, minimum: int = 0) -> None:
         raise HTTPException(422, f"{label}は{minimum}～2147483647の整数で入力してください。")
 
 
-# 製品の名称、所属拠点、拠点内の名称重複を確認する。
+# 製品の名称・任意コード・所属拠点と、拠点内の名称重複を確認する。
 def validate_product_write(db: Session, original: Product | None, values: dict[str, Any]) -> None:
     # 保存する名称と拠点。登録済み製品の所属を変えて既存オーダーと食い違うことを防ぐ。
     name = _name(original, values, "ProductName", "製品名")
+    # コードの空欄はNULLへ揃え、NVARCHAR(100)を超える入力を保存前に拒否する。
+    if "ProductCode" in values and values["ProductCode"] is not None:
+        code = values["ProductCode"].strip()
+        if len(code) > 100:
+            raise HTTPException(422, "品目（製品）コードは100文字以内で入力してください。")
+        values["ProductCode"] = code or None
     location_id = _value(original, values, "LocationID")
     if original is not None and location_id != original.LocationID:
         raise HTTPException(422, "登録済み製品の拠点は変更できません。")

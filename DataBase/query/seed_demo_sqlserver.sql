@@ -50,15 +50,15 @@ INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime],
 SET IDENTITY_INSERT [M_Calendars] OFF;
 SET @IdentityTable = NULL;
 
--- M_Product: 6件
+-- M_Product: 6件。任意の品目コードはBREAD-001～BREAD-006を登録する。
 SET @IdentityTable = N'M_Product';
 SET IDENTITY_INSERT [M_Product] ON;
-INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'食パン', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'バターロール', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'フランスパン', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'あんパン', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'メロンパン', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'くるみパン', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'食パン', N'BREAD-001', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'バターロール', N'BREAD-002', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'フランスパン', N'BREAD-003', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'あんパン', N'BREAD-004', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'メロンパン', N'BREAD-005', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'くるみパン', N'BREAD-006', '2026-11-15T15:12:37.000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Product] OFF;
 SET @IdentityTable = NULL;
 
@@ -149,7 +149,7 @@ INSERT INTO [M_ProductSwitchRules] ([ProductSwitchRuleID], [ProductSwitchTimeID]
 SET IDENTITY_INSERT [M_ProductSwitchRules] OFF;
 SET @IdentityTable = NULL;
 
--- 作業者マスタの仮データ。今回は計画計算・CRUD API・画面には接続しない。
+-- 作業者マスタの仮データ。オーダーの作業者指定で使用し、計画計算への連携は行わない。
 -- M_Workers: 3件
 SET @IdentityTable = N'M_Workers';
 SET IDENTITY_INSERT [M_Workers] ON;
@@ -268,16 +268,16 @@ INSERT INTO [M_WorkerCalendarExceptions] ([ExceptionID], [WorkerID], [StartAt], 
 SET IDENTITY_INSERT [M_WorkerCalendarExceptions] OFF;
 SET @IdentityTable = NULL;
 
--- T_Orders: 7件
+-- T_Orders: 7件。先頭3件に作業者A/B/Cを指定し、残りは未指定にする。
 SET @IdentityTable = N'T_Orders';
 SET IDENTITY_INSERT [T_Orders] ON;
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'WBS-1001', N'食パン 200個（駅前店向け）', 1, 200.000, N'駅前店', '2026-11-16T06:00:00.000000', '2026-11-16T14:00:00.000000', NULL, 10, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'WBS-1002', N'バターロール 300個（中央店向け）', 2, 300.000, N'中央店', '2026-11-16T06:00:00.000000', '2026-11-16T16:00:00.000000', NULL, 30, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'WBS-1003', N'フランスパン 150個（駅前店向け）', 3, 150.000, N'駅前店', '2026-11-16T06:00:00.000000', '2026-11-16T16:00:00.000000', NULL, 30, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'WBS-1004', N'あんパン 180個（中央店向け）', 4, 180.000, N'中央店', '2026-11-16T06:00:00.000000', '2026-11-16T18:00:00.000000', NULL, 20, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'WBS-1005', N'メロンパン 120個（北口店向け）', 5, 120.000, N'北口店', '2026-11-16T06:00:00.000000', '2026-11-16T18:00:00.000000', NULL, 30, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'WBS-1006', N'くるみパン 160個（北口店向け）', 6, 160.000, N'北口店', '2026-11-16T06:00:00.000000', '2026-11-18T16:00:00.000000', NULL, 40, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 1, N'WBS-1007', N'食パン 100個（中央店向け）', 1, 100.000, N'中央店', '2026-11-16T06:00:00.000000', '2026-11-17T14:00:00.000000', NULL, 50, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, 1, N'WBS-1001', N'食パン 200個（駅前店向け）', 1, 1, 200.000, N'駅前店', '2026-11-16T06:00:00.000000', '2026-11-16T14:00:00.000000', NULL, 10, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, 1, N'WBS-1002', N'バターロール 300個（中央店向け）', 2, 2, 300.000, N'中央店', '2026-11-16T06:00:00.000000', '2026-11-16T16:00:00.000000', NULL, 30, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (3, 1, N'WBS-1003', N'フランスパン 150個（駅前店向け）', 3, 3, 150.000, N'駅前店', '2026-11-16T06:00:00.000000', '2026-11-16T16:00:00.000000', NULL, 30, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (4, 1, N'WBS-1004', N'あんパン 180個（中央店向け）', 4, NULL, 180.000, N'中央店', '2026-11-16T06:00:00.000000', '2026-11-16T18:00:00.000000', NULL, 20, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (5, 1, N'WBS-1005', N'メロンパン 120個（北口店向け）', 5, NULL, 120.000, N'北口店', '2026-11-16T06:00:00.000000', '2026-11-16T18:00:00.000000', NULL, 30, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (6, 1, N'WBS-1006', N'くるみパン 160個（北口店向け）', 6, NULL, 160.000, N'北口店', '2026-11-16T06:00:00.000000', '2026-11-18T16:00:00.000000', NULL, 40, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [T_Orders] ([OrderID], [LocationID], [WBSNumber], [OrderName], [ProductID], [WorkerID], [Quantity], [CustomerName], [ReleaseAt], [DeadLine], [ShippingDate], [Priority], [Status], [Remarks], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 1, N'WBS-1007', N'食パン 100個（中央店向け）', 1, NULL, 100.000, N'中央店', '2026-11-16T06:00:00.000000', '2026-11-17T14:00:00.000000', NULL, 50, N'OPEN', NULL, '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
 SET IDENTITY_INSERT [T_Orders] OFF;
 SET @IdentityTable = NULL;
 
@@ -365,10 +365,11 @@ INSERT INTO @CompareSlots (PlanID, TaskID, ResourceID, StartMinute, SetupMinutes
     (2,19,1,150,0), (2,20,4,260,0), (2,21,5,390,0);
 
 -- 所要時間は現行の工程候補・オーダー数量から求め、画面のマスタ値と一致させる。
+-- WorkerIDはデモ工程番号1/2/3に対応する仮の作業者ID1/2/3。通常の計算結果ではない。
 INSERT INTO [T_PlanAssignments]
-    ([PlanID], [TaskID], [ResourceID], [StartAt], [EndAt], [SetupMinutes],
+    ([PlanID], [TaskID], [ResourceID], [WorkerID], [StartAt], [EndAt], [SetupMinutes],
      [Units], [IsLocked], [Source], [RowVer], [CreatedAt], [CreatedBy])
-SELECT s.PlanID, s.TaskID, s.ResourceID,
+SELECT s.PlanID, s.TaskID, s.ResourceID, pr.SequenceNumber,
        DATEADD(minute, s.StartMinute, p.StartAt),
        DATEADD(minute, s.StartMinute + COALESCE(pr.SetupMinutes, 0) + COALESCE(pr.FixedMinutes, 0)
            + CAST(CEILING(o.Quantity * pr.ProcessingMinutes) AS int), p.StartAt),

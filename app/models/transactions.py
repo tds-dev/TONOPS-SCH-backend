@@ -51,6 +51,8 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     OrderName = Column(String(200), nullable=False)
     # オーダーの対象製品。ProductIDで製品マスタを参照する。
     ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=True)
+    # オーダーで指定した作業者。未指定はNULLとし、計画計算への反映は後続対応とする。
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
     CustomerName = Column(String(100), nullable=True)
     ReleaseAt = Column(DateTime, nullable=True)
@@ -140,6 +142,8 @@ class PlanAssignment(AuditMixin, Base):
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), nullable=False)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
     ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=False)
+    # 割付の担当作業者。今回は仮データだけ設定し、通常の読取・保存処理には接続しない。
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
     StartAt = Column(DateTime, nullable=False)  # 日本時間。タスク開始時刻（段取りは SetupMinutes として直前に置く）
     EndAt = Column(DateTime, nullable=False)  # 日本時間
     SetupMinutes = Column(Integer, nullable=False, default=0)

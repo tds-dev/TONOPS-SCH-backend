@@ -3,6 +3,8 @@
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
 # TONOPS-SCH システム概要
 
+> 2026-11-19：製品の任意コード `M_Product.ProductCode`（NVARCHAR(100)、NULL可）、オーダーの作業者指定 `T_Orders.WorkerID`（INT、NULL可）、割付の担当作業者 `T_PlanAssignments.WorkerID`（INT、NULL不可）を追加。製品コードとオーダーの作業者指定は画面・APIで保存できるが、作業者指定は計算未連携。割付のWorkerIDは仮データにだけ設定し、通常プログラムでの参照・設定は未実装のため、DB再作成後の自動計算・手動配置・計画コピーによる新規割付保存は必須値不足で失敗する。移行SQLは作成せず、DBは現在の作成SQL・仮データで再作成する。
+
 > 2026-11-18：タスクの作業番号・集約指定・進捗率・属性を廃止。タスクはTaskIDで識別し、表示順はSequence、計算条件は製品工程を使用する。計画のコピー元はCopiedFromPlanIDへ保存する。以下の過去日付のカラム数は当時の記録。
 
 > 現行DBの変更（2026-11-13）：23テーブル・255カラム。段取り替えの工程ID方式は[専用仕様](PRODUCT_PROCESS_SWITCHES.md)を参照。曜日制限を製品工程へ移し、旧属性定義・ルールを廃止。詳細は[DB再作成の手順](DB_SCHEMA_UPDATE_20261113.md)を参照。前回変更：オーダーの種別・計画の管理元・属性を廃止。設備は拠点の勤務を共有し、計算時間上限を廃止。開始終了列はStartAt・EndAt、担当設定はM_WorkerSkillMap。詳細は[変更一覧・作成手順](DB_SCHEMA_UPDATE_20261112.md)を参照。
@@ -409,7 +411,8 @@ erDiagram
 | ProductID | INT PK | 製品を識別する自動採番の番号 |
 | LocationID | INT FK | 所属拠点 |
 | ProductName | NVARCHAR(100) | 同じ拠点内で一意。削除済みも含む |
-| DeleteFlag | BIT | 論理削除。製品コード・単位・属性の列は持たない |
+| ProductCode | NVARCHAR(100) NULL | 任意の品目（製品）コード。空欄はNULL。コードの一意制約は設けない |
+| DeleteFlag | BIT | 論理削除。単位・属性の列は持たない |
 
 #### M_ProductProcesses（製品の工程）
 | 列 | 型 | 説明 |
@@ -449,6 +452,7 @@ erDiagram
 | WBSNumber | NVARCHAR(30) | 拠点内で一意（受注番号・プロジェクト番号） |
 | OrderName | NVARCHAR(200) | |
 | ProductID | INT FK NULL | 製品。タスク生成時は指定が必要で、この製品の工程番号順に展開する |
+| WorkerID | INT FK NULL | 作業者指定。M_Workersを参照し、新規指定は同じ拠点の有効な作業者に限定。未指定はNULL。計算への反映は未実装 |
 | Quantity | DECIMAL(18,3) NULL | 数量 |
 | CustomerName | NVARCHAR(100) | |
 | ReleaseAt | DATETIME2(7) NULL | 着手可能日時（日本時間） |
@@ -496,6 +500,7 @@ erDiagram
 | PlanID | INT FK（CASCADE） | (PlanID, TaskID) 一意 |
 | TaskID | INT FK | |
 | ResourceID | INT FK | |
+| WorkerID | INT FK NOT NULL | M_Workersを参照。仮データだけ設定し、通常プログラムでの参照・設定は未実装 |
 | StartAt / EndAt | DATETIME2(7)（日本時間） | 作業本体の開始・終了（EndAt > StartAt） |
 | SetupMinutes | INT | 段取り替え時間。StartAt の **直前** に置く（ボードでは斜線のブロック） |
 | Units | DECIMAL(5,2) | 予約 |
@@ -504,6 +509,8 @@ erDiagram
 | RowVer | INT | 楽観的排他制御 |
 
 索引: `IX_T_PlanAssignments_PlanID_ResourceID_StartAt`
+
+`WorkerID`を省略する既存の新規割付保存は、NULL不可制約により失敗する。現段階では仮データの登録・表示を対象とし、自動計算結果の保存・手動配置・計画コピーへの担当者設定は後続対応とする。
 
 #### T_SolverRunResult（ソルバー実行 = 作業キュー）
 | 列 | 型 | 説明 |

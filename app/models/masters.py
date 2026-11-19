@@ -170,6 +170,8 @@ class Product(AuditMixin, SoftDeleteMixin, Base):
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     # 拠点内で製品を区別する名称。
     ProductName = Column(String(100), nullable=False)
+    # 任意の品目（製品）コード。未指定はNULLとし、製品の関連付けにはProductIDを使う。
+    ProductCode = Column(String(100), nullable=True)
     # 製品に直接属する工程。番号順にタスクへ展開する。
     processes = relationship(
         "ProductProcess", cascade="all, delete-orphan", order_by="ProductProcess.SequenceNumber", lazy="selectin"

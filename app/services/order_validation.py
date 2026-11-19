@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Location, Product
+from app.models.masters import Location, Product, Worker
 from app.models.transactions import (
     ORDER_STATUSES, WorkActual, Order, PlanAssignment, Task,
 )
@@ -81,6 +81,13 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     product = db.get(Product, product_id) if product_id is not None else None
     if references_changed and product_id is not None and (product is None or product.DeleteFlag or product.LocationID != location_id):
         raise HTTPException(422, "同じ拠点の有効な製品を指定してください。")
+
+    # 作業者指定は同じ拠点の有効な本人に限定し、未変更の削除済み参照は保持する。
+    worker_id = value("WorkerID")
+    if worker_id is not None and (original is None or changed("WorkerID")):
+        worker = db.get(Worker, worker_id)
+        if worker is None or worker.DeleteFlag or worker.LocationID != location_id:
+            raise HTTPException(422, "同じ拠点の有効な作業者を指定してください。")
 
     # 削除済みも同じ番号を保持するため、再利用せず別番号を案内する。
     duplicate = db.scalar(select(Order.OrderID).where(Order.LocationID == location_id, Order.WBSNumber == value("WBSNumber")))
