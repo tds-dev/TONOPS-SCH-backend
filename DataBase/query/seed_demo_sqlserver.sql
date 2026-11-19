@@ -433,6 +433,22 @@ CROSS APPLY (VALUES
 
 
 -- センシングのマスタ仮データ。トランザクションデータは追加しない。
+-- センシング：M_Calendars 10件。月～金の午前・午後を登録し、昼休みと土日は稼働に含めない。
+SET @IdentityTable = N'M_Calendars';
+SET IDENTITY_INSERT [M_Calendars] ON;
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (13, 2, 1, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (14, 2, 1, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (15, 2, 2, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (16, 2, 2, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (17, 2, 3, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (18, 2, 3, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (19, 2, 4, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (20, 2, 4, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (21, 2, 5, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (22, 2, 5, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+SET IDENTITY_INSERT [M_Calendars] OFF;
+SET @IdentityTable = NULL;
+
 -- センシング：M_Product 4件。指定されたID・NULL・監査情報を維持する。
 SET @IdentityTable = N'M_Product';
 SET IDENTITY_INSERT [M_Product] ON;
