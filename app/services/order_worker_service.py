@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.models.masters import Worker
 from app.models.transactions import Order, OrderWorker
+from app.services.order_service import sync_order_tasks
 from app.services.order_validation import validate_order_write
 
 
 def write_order(db: Session, original: Order | None, values: dict[str, Any], user: str) -> Order:
-    """入力を検証して本体・担当リンクを更新し、確定と失敗時の取消は呼出し元へ委ねる。"""
+    """入力を検証して本体・担当リンクを更新し、新規登録・製品変更時はタスクも自動同期する。"""
     validate_order_write(db, original, values)
+    # 新規登録時または製品を変更した編集時のみ、製品工程からタスクを自動生成・再生成する。
+    product_changed = original is None or ("ProductID" in values and values["ProductID"] != original.ProductID)
     # 未送信と全解除を区別し、他項目だけの編集では担当リンクに触れない。
     worker_ids = values.pop("worker_ids", None)
     existing = {link.WorkerID: link for link in original.worker_links} if original else {}
@@ -40,4 +43,8 @@ def write_order(db: Session, original: Order | None, values: dict[str, Any], use
             existing[worker_id] if worker_id in existing else OrderWorker(WorkerID=worker_id)
             for worker_id in sorted(worker_ids)
         ]
+    # 新規登録のOrderIDを確定させてから、製品工程に対応するタスクを同一トランザクションで生成する。
+    if product_changed:
+        db.flush()
+        sync_order_tasks(db, order, user)
     return order

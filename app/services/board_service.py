@@ -265,9 +265,12 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
         key=lambda o: (o.shipping_date or date.max, o.no, o.id),
     )
     for dorder in sorted_orders:
+        otasks = sorted(tasks_by_order.get(dorder.id, []), key=lambda t: (t.sequence_number, t.id))
+        # タスク未生成のオーダーは計画対象外のためExcel風一覧には含めない。
+        if not otasks:
+            continue
         raw_order = order_rows.get(dorder.id)
         prod = product_map.get(dorder.product_id) if dorder.product_id is not None else None
-        otasks = sorted(tasks_by_order.get(dorder.id, []), key=lambda t: (t.sequence_number, t.id))
         cells: dict[str, dict] = {}
         worker_names_ordered: list[str] = []
         max_end_idx: int | None = None

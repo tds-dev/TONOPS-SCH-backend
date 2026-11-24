@@ -204,9 +204,10 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
     )
     task_rows = db.scalars(select(Task).where(*task_filter).order_by(Task.OrderID, Task.Sequence, Task.TaskID)).all()
 
-    # 製品工程の未生成チェック（分単位モードと同じく不完全なタスク生成を事前に案内する）
+    # 製品工程の未生成チェック（分単位モードと同じく、既にタスクが1件以上生成されているオーダーのみ対象にする）
+    order_ids_with_tasks = {t.OrderID for t in task_rows}
     generated: dict[int, set[int]] = {}
-    for batch in chunks(orders):
+    for batch in chunks(order_ids_with_tasks):
         for oid, ppid in db.execute(
             select(Task.OrderID, Task.ProductProcessID).where(
                 Task.OrderID.in_(batch), Task.ProductProcessID.is_not(None)
@@ -214,7 +215,10 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
         ):
             generated.setdefault(oid, set()).add(ppid)
     missing_errors: list[str] = []
-    for oid, dorder in orders.items():
+    for oid in sorted(order_ids_with_tasks):
+        dorder = orders.get(oid)
+        if dorder is None:
+            continue
         missing = [
             pp.ProcessName for pp in by_product.get(dorder.product_id, [])
             if pp.ProductProcessID not in generated.get(oid, set())
