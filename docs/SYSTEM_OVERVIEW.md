@@ -1,5 +1,7 @@
 <!-- SCH全体の構成、業務仕様、データ構造、APIと画面の対応をまとめる資料。 -->
 
+> 2026-11-24：日単位計画モード（日次バケット方式、`TimeUnit = 'DAY'`）を実装し、アプリの既定時間単位を `DAY` へ変更（既存の分単位計算 `MINUTE` は維持）。25テーブル・278カラム。工程区分マスタ `M_ProcessGroups`、製品の日上限除外 `M_Product.ExcludeFromDailyCap`、製品工程の日次項目（`ProcessGroupID`・`StandardOffsetDays`・`DurationDays`・`MinLagDays`・`MaxLagDays`）、作業者の1日作業台数上限 `M_Workers.MaxDailyQuantity` を追加し、`T_Orders` のWBS番号一意制約を撤廃、`T_PlanAssignments` は `ResourceID`・`WorkerID` のどちらか一方以上必須へ変更した。`T_OrderWorkers`・作業者勤務・例外休日・スキルマップを日単位計算へ接続し、計画ボードにExcel風一覧ビュー・作業者ボード・作業者別日別負荷表を追加。詳細は[日単位計画モード仕様](DAY_BUCKET_MODE_20261124.md)を参照。
+
 > 2026-11-20：オーダーの担当者を複数登録できるよう、`T_Orders.WorkerID` を削除し、`T_OrderWorkers`（`OrderWorkerID`・`OrderID`・`WorkerID`、監査列なし）へ変更。APIは `workerIds` 配列を使用し、未送信は維持、空配列は全解除。担当者の変更は計画計算へ反映しない。既存DBの構造変更・データ移行は自動実行しない。
 
 > 最新の日時仕様：DBは日本時間の`datetime2(7)`、通常APIは日本時間（`+09:00`）で入出力。ボードは描画用に時差表記なしの日本時間を使用する。DBは再作成して使用する。過去のUTCに関する記録は変更当時の仕様。詳細はバックエンドの`docs/DATETIME_JST.md`を参照。
@@ -109,18 +111,19 @@ routers（REST の入出力） → services（業務ロジック・トランザ�
 | カレンダー | M_Calendars / M_CalendarExceptions | 同じLocationIDの曜日・時間帯をまとめた週次勤務と、休日・設備停止の例外。日時は共通の日本時間で扱う |
 | リソースグループ | M_ResourceGroups | 同種のリソースのまとまり（例: 配合、充填、包装） |
 | リソース | M_Resources | 作業を行う設備・人員等。所属グループと拠点で管理する |
-| 製品 | M_Product | 製品・成果物。拠点と名称を持つ |
-| 工程 | M_ProductProcesses / M_ProductProcessResources | 製品ごとの工程順・待ち時間・実行候補・所要時間 |
-| オーダー | T_Orders | 需要の単位。受注（ORDER）またはプロジェクト（PROJECT）。納期・優先度を持つ |
+| 工程区分 | M_ProcessGroups | 日単位計算で同一作業者制約・1日台数上限の集計単位に使う工程のまとまり（例: 組立、電気調整、調整検査） |
+| 製品 | M_Product | 製品・成果物。拠点・名称・品目コード・日上限除外フラグを持つ |
+| 工程 | M_ProductProcesses / M_ProductProcessResources | 製品ごとの工程順・工程区分・待ち時間・日単位計画項目・実行候補・所要時間 |
+| オーダー | T_Orders | 需要の単位。WBS番号（重複許可）・数量・納期・出荷日時・優先度・担当作業者指定を持つ |
 | 作業 | T_Tasks | スケジュールの最小単位。オーダーの製品の工程から生成、または直接登録 |
 | リソース候補 | M_ProductProcessResourcesから組み立て | 候補は設備・グループを保持。所要時間は工程の共通時間とオーダー数量から求める。タスク用の保存先は持たない |
-| 依存関係 | M_ProductProcessesから組み立て | 製品内の隣接工程のFS関係と最小・最大待ち時間 |
+| 依存関係 | M_ProductProcessesから組み立て | 製品内の隣接工程のFS関係と最小・最大待ち時間（分単位・日単位） |
 | 計画 | T_Plans | スケジュールの 1 つの版。下書き → マスタ（承認） |
-| 割付 | T_PlanAssignments | 計画内で「作業 × リソース × 時刻」を決めたもの |
+| 割付 | T_PlanAssignments | 計画内で「作業 × 設備（分モード）または作業者（日モード） × 日時」を決めたもの |
 | 計算（ソルバー実行） | T_SolverRunResult | エンジンによる自動計画の 1 回分。作業キューも兼ねる |
-| 段取り替え | M_ProductSwitchTimes | 同じ設備で前後する製品工程の組合せごとに必要な切替時間 |
+| 段取り替え | M_ProductSwitchTimes | 同じ設備で前後する製品工程の組合せごとに必要な切替時間（分モード） |
 | 工程の曜日制限 | M_ProductProcesses | 許可曜日・有効状態・適用開始終了日時 |
-| 計算設定 | M_CalculationSettings | 優先条件の重み・固定期間・既定設定。時間単位の保存値にかかわらず計算は分単位 |
+| 計算設定 | M_CalculationSettings | 時間単位（既定 `DAY` / `MINUTE`）・優先条件の重み・固定期間・既定設定 |
 | ロック（固定） | PlanAssignment.IsLocked | 再計算で動かさない割付。手動で動かした割付は既定でロック |
 | マスタ計画 | T_Plans.Status = MASTER | 承認済みで現場が使う計画。配台表の元データ |
 

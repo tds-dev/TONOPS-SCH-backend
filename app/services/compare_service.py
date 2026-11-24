@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.core.db import chunks
 from app.core.timeutil import to_jst_naive, as_jst
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
-from app.models.masters import Product, Resource, ResourceGroup, Location
+from app.models.masters import Product, Resource, ResourceGroup, Location, Worker
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, Task
 from app.schemas.base import coerce
 from app.services.plan_lifecycle import master_assignments
@@ -22,13 +22,19 @@ def _hhmm(dt: datetime, tz: str) -> str:
     return as_jst(dt).strftime("%m/%d %H:%M")
 
 
-# 割付の移動分数と設備変更から、比較結果の説明を組み立てる。
-def _shift_text(kind: str, minutes: int | None) -> str:
+# 割付の移動分数と設備・作業者変更から、比較結果の説明を組み立てる。
+def _shift_text(kind: str, minutes: int | None, worker_mode: bool = False) -> str:
     if minutes is None or minutes == 0:
+        if kind == "RESOURCE" and worker_mode:
+            return "担当作業者変更"
         return KIND_LABEL[kind]
-    h, m = divmod(abs(minutes), 60)
-    span = f"{h}時間{m:02d}分" if h else f"{m}分"
-    return f"{span}{'後ろ倒し' if minutes > 0 else '前倒し'}" + ("・設備変更" if kind == "RESOURCE" else "")
+    if worker_mode and abs(minutes) % 1440 == 0:
+        span = f"{abs(minutes) // 1440}日"
+    else:
+        h, m = divmod(abs(minutes), 60)
+        span = f"{h}時間{m:02d}分" if h else f"{m}分"
+    suffix = ("・担当変更" if worker_mode else "・設備変更") if kind == "RESOURCE" else ""
+    return f"{span}{'後ろ倒し' if minutes > 0 else '前倒し'}{suffix}"
 
 
 # 二つの計画の評価値と割付を比較し、画面表示用の差分を返す。
@@ -42,14 +48,17 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     def kpis(pid):
         return {k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == pid))}
 
-    # 指定した計画の割付をタスクごとにまとめる。
+    # 指定した計画の割付をタスクごとにまとめる（日次モードはWorkerIDを割付先として比較する）。
     def slots(pid):
+        rows = db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == pid)).all()
         return {
-            a.TaskID: Slot(a.ResourceID, a.StartAt, a.EndAt)
-            for a in db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == pid))
-        }
+            a.TaskID: Slot(a.ResourceID if a.ResourceID is not None else a.WorkerID, a.StartAt, a.EndAt)
+            for a in rows
+        }, any(a.ResourceID is None and a.WorkerID is not None for a in rows)
 
-    sa, sb = slots(a_id), slots(b_id)
+    sa, a_day = slots(a_id)
+    sb, b_day = slots(b_id)
+    worker_mode = a_day or b_day
     changes = assignment_diff(sa, sb)
     task_ids = {c.task_id for c in changes}
     info = {
@@ -58,11 +67,18 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
         for t, j in db.execute(select(Task, Order).join(Order, Order.OrderID == Task.OrderID).where(Task.TaskID.in_(ids)))
     }
     res = {r.ResourceID: r for r in db.scalars(select(Resource).where(Resource.LocationID == plan_a.LocationID))}
+    workers = {w.WorkerID: w for w in db.scalars(select(Worker).where(Worker.LocationID == plan_a.LocationID))}
 
-    # 比較対象の割付を、設備名と現地時刻の表示情報へ変換する。
+    # 比較対象の割付を、設備名または作業者名と現地時刻の表示情報へ変換する。
     def slot_view(s: Slot | None):
         if s is None:
             return None
+        if worker_mode:
+            w = workers.get(s.resource_id) if s.resource_id is not None else None
+            name = w.WorkerName if w else (str(s.resource_id) if s.resource_id is not None else "—")
+            return {"resourceId": s.resource_id, "resourceName": name,
+                    "start": as_jst(s.start).strftime("%m/%d"),
+                    "end": as_jst(s.end - timedelta(seconds=1)).strftime("%m/%d") if s.end > s.start else as_jst(s.end).strftime("%m/%d")}
         r = res.get(s.resource_id) if s.resource_id is not None else None
         return {"resourceId": s.resource_id, "resourceName": r.ResourceName if r else (str(s.resource_id) if s.resource_id is not None else "—"),
                 "start": _hhmm(s.start, tz), "end": _hhmm(s.end, tz)}
@@ -84,7 +100,7 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
         "changes": [
             {
                 "taskId": c.task_id, "wbsNumber": info.get(c.task_id, ("", ""))[0], "taskName": info.get(c.task_id, ("", ""))[1],
-                "kind": c.kind, "shiftMinutes": c.shift_minutes, "description": _shift_text(c.kind, c.shift_minutes),
+                "kind": c.kind, "shiftMinutes": c.shift_minutes, "description": _shift_text(c.kind, c.shift_minutes, worker_mode),
                 "a": slot_view(c.a), "b": slot_view(c.b),
             }
             for c in changes

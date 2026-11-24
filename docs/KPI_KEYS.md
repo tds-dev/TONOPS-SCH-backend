@@ -2,15 +2,17 @@
 
 `T_PlanKpis.KpiKey`とAPIの評価値キーには、次の日本語名を使用する。計算式・単位・評価の方向は変更しない。
 
-| 旧キー | 保存する日本語キー | 単位 |
-| --- | --- | --- |
-| late_orders | 納期遅れ | 件 |
-| total_lateness_min | 遅れ時間の合計 | 分 |
-| setup_min | 段取り時間 | 分 |
-| makespan_min | 最終完了 | 分 |
-| utilisation_pct | 平均負荷率 | % |
-| scheduled_tasks | 割付済みタスク | 件 |
-| unscheduled_tasks | 未割付タスク | 件 |
+| 旧キー | 保存する日本語キー | 単位 | 対象モード |
+| --- | --- | --- | --- |
+| late_orders | 納期遅れ | 件 | 分・日 |
+| total_lateness_min | 遅れ時間の合計 | 分 | 分 |
+| — | 遅れ日数の合計 | 日 | 日 |
+| — | 標準日からのずれ日数 | 日 | 日 |
+| setup_min | 段取り時間 | 分 | 分 |
+| makespan_min | 最終完了 | 分 | 分 |
+| utilisation_pct | 平均負荷率 | % | 分・日 |
+| scheduled_tasks | 割付済みタスク | 件 | 分・日 |
+| unscheduled_tasks | 未割付タスク | 件 | 分・日 |
 
 ## 保存と既存データ
 
