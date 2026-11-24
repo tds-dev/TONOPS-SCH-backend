@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 from app.core.timeutil import jst_now
 from app.models.masters import CalculationSetting, Location
 from app.models.transactions import Plan, PlanAssignment, PlanViolation, SolverRun
+from app.engine.day_snapshot import build_day_problem
 from app.engine.result import SAssignment
 from app.engine.snapshot import build_problem
-from app.engine.solve import write_evaluation
+from app.engine.solve import is_day_mode, write_day_evaluation, write_evaluation
 from app.services.plan_validation import flush_named_plan, validate_plan_name, validate_plan_period, validate_plan_remarks
 
 
@@ -115,17 +116,29 @@ def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) ->
         plan.UpdatedBy = user
         flush_named_plan(db, plan)
         if conditions_changed:
-            # 割付そのものは移動・削除せず、新しい開始日時を基準に評価だけを更新する。
+            # 割付そのものは移動・削除せず、新しい開始日時・計算設定を基準に評価だけを更新する。
             rows = db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == plan.PlanID)).all()
-            assignments = [SAssignment(
-                row.TaskID, row.ResourceID,
-                int((row.StartAt - start).total_seconds() // 60),
-                int((row.EndAt - start).total_seconds() // 60), row.SetupMinutes, row.IsLocked,
-            ) for row in rows]
-            write_evaluation(db, plan, build_problem(db, plan), assignments, user)
+            if is_day_mode(db, plan):
+                day_problem = build_day_problem(db, plan)
+                day_assignments: list[SAssignment] = []
+                for row in rows:
+                    s_day = day_problem.dt_to_day_idx(row.StartAt)
+                    e_day = day_problem.end_dt_to_day_idx(row.EndAt)
+                    if s_day is not None and e_day is not None:
+                        day_assignments.append(SAssignment(
+                            row.TaskID, None, s_day, e_day, 0, row.IsLocked, worker_id=row.WorkerID
+                        ))
+                write_day_evaluation(db, plan, day_problem, day_assignments, user)
+            else:
+                assignments = [SAssignment(
+                    row.TaskID, row.ResourceID,
+                    int((row.StartAt - start).total_seconds() // 60),
+                    int((row.EndAt - start).total_seconds() // 60), row.SetupMinutes, row.IsLocked,
+                ) for row in rows if row.ResourceID is not None]
+                write_evaluation(db, plan, build_problem(db, plan), assignments, user)
             db.add(PlanViolation(
                 PlanID=plan.PlanID, Severity="INFO", CreatedBy=user,
-                Message="計画条件を変更しました。既存の割付日時・設備は保持しています。計画ボードで再計算してください。",
+                Message="計画条件を変更しました。既存の割付は保持しています。計画ボードで再計算してください。",
             ))
         db.commit()
         db.refresh(plan)

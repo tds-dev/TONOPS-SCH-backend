@@ -1,3 +1,4 @@
+-- 2026-11-24: 日単位計算モード（フェーズ1）対応。M_ProcessGroupsを追加し、製品・工程・作業者の日次列とT_PlanAssignmentsのResourceID/WorkerIDのNULL許可を反映。
 -- 2026-11-20: T_Orders.WorkerIDを廃止し、監査列のないT_OrderWorkersで複数の担当者を保持する。
 -- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
 -- 作業者の例外休日はWorkerIDで本人へ直接関連付け、通常稼働時間とは独立して保持する。
@@ -82,11 +83,28 @@ CREATE TABLE [M_CalculationSettings] (
 );
 GO
 
+CREATE TABLE [M_ProcessGroups] (
+	[ProcessGroupID] INTEGER NOT NULL IDENTITY, 
+	[LocationID] INTEGER NOT NULL, 
+	[ProcessGroupName] NVARCHAR(100) NOT NULL, 
+	[SortOrder] INTEGER NOT NULL DEFAULT 1, 
+	[CreatedAt] DATETIME2(7) NOT NULL, 
+	[CreatedBy] NVARCHAR(254) NULL, 
+	[UpdatedAt] DATETIME2(7) NULL, 
+	[UpdatedBy] NVARCHAR(254) NULL, 
+	[DeleteFlag] BIT NOT NULL, 
+	CONSTRAINT [PK_M_ProcessGroups] PRIMARY KEY ([ProcessGroupID]), 
+	CONSTRAINT [UQ_M_ProcessGroups_LocationID_ProcessGroupName] UNIQUE ([LocationID], [ProcessGroupName]), 
+	CONSTRAINT [FK_M_ProcessGroups_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
+);
+GO
+
 CREATE TABLE [M_Product] (
 	[ProductID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[ProductName] NVARCHAR(100) NOT NULL, 
 	[ProductCode] NVARCHAR(100) NULL,
+	[ExcludeFromDailyCap] BIT NOT NULL DEFAULT 0,
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
@@ -102,9 +120,11 @@ CREATE TABLE [M_Workers] (
 	[WorkerID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[WorkerName] NVARCHAR(100) NOT NULL, 
+	[MaxDailyQuantity] NUMERIC(18, 3) NULL, 
 	[Remarks] NVARCHAR(500) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Workers] PRIMARY KEY ([WorkerID]), 
+	CONSTRAINT [CK_M_Workers_MaxDailyQuantity] CHECK (MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0), 
 	CONSTRAINT [FK_M_Workers_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID])
 );
 GO
@@ -169,12 +189,18 @@ CREATE TABLE [M_ProductProcesses] (
 	[ProductID] INTEGER NOT NULL, 
 	[SequenceNumber] INTEGER NOT NULL, 
 	[ProcessName] NVARCHAR(100) NOT NULL, 
+	[ProcessGroupID] INTEGER NULL, 
 	-- 作業時間は工程共通。設備候補には複製しない。
 	[SetupMinutes] INTEGER NULL, 
 	[FixedMinutes] INTEGER NULL, 
 	[ProcessingMinutes] NUMERIC(12, 4) NOT NULL, 
 	[MinLagAfterMin] INTEGER NOT NULL, 
 	[MaxLagAfterMin] INTEGER NULL, 
+	-- 日単位計算の標準前倒し稼働日数、所要稼働日数、次工程までの稼働日間隔。
+	[StandardOffsetDays] INTEGER NULL, 
+	[DurationDays] INTEGER NOT NULL DEFAULT 1, 
+	[MinLagDays] INTEGER NOT NULL DEFAULT 0, 
+	[MaxLagDays] INTEGER NULL, 
 	[AllowedWeekdaysJSON] NVARCHAR(max) NOT NULL DEFAULT '[0,1,2,3,4,5,6]', 
 	[WeekdayRestrictionEnabled] BIT NOT NULL DEFAULT 1, 
 	[WeekdayRestrictionStartAt] DATETIME2(7) NULL, 
@@ -185,8 +211,13 @@ CREATE TABLE [M_ProductProcesses] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	CONSTRAINT [PK_M_ProductProcesses] PRIMARY KEY ([ProductProcessID]), 
 	CONSTRAINT [UQ_M_ProductProcesses_ProductID_SequenceNumber] UNIQUE ([ProductID], [SequenceNumber]), 
+	CONSTRAINT [CK_M_ProductProcesses_StandardOffsetDays] CHECK (StandardOffsetDays IS NULL OR StandardOffsetDays >= 0), 
+	CONSTRAINT [CK_M_ProductProcesses_DurationDays] CHECK (DurationDays >= 1), 
+	CONSTRAINT [CK_M_ProductProcesses_MinLagDays] CHECK (MinLagDays >= 0), 
+	CONSTRAINT [CK_M_ProductProcesses_LagDaysRange] CHECK (MaxLagDays IS NULL OR MaxLagDays >= MinLagDays), 
 	CONSTRAINT [CK_M_ProductProcesses_WeekdayRestrictionPeriod] CHECK (WeekdayRestrictionStartAt IS NULL OR WeekdayRestrictionEndAt IS NULL OR WeekdayRestrictionStartAt <= WeekdayRestrictionEndAt), 
-	CONSTRAINT [FK_M_ProductProcesses_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]) ON DELETE CASCADE
+	CONSTRAINT [FK_M_ProductProcesses_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]) ON DELETE CASCADE, 
+	CONSTRAINT [FK_M_ProductProcesses_ProcessGroupID_M_ProcessGroups] FOREIGN KEY([ProcessGroupID]) REFERENCES [M_ProcessGroups] ([ProcessGroupID])
 );
 GO
 
@@ -229,7 +260,6 @@ CREATE TABLE [T_Orders] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_T_Orders] PRIMARY KEY ([OrderID]), 
-	CONSTRAINT [UQ_T_Orders_LocationID_WBSNumber] UNIQUE ([LocationID], [WBSNumber]), 
 	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
@@ -407,8 +437,8 @@ CREATE TABLE [T_PlanAssignments] (
 	[AssignmentID] BIGINT NOT NULL IDENTITY, 
 	[PlanID] INTEGER NOT NULL, 
 	[TaskID] INTEGER NOT NULL, 
-	[ResourceID] INTEGER NOT NULL, 
-	[WorkerID] INTEGER NOT NULL,
+	[ResourceID] INTEGER NULL, 
+	[WorkerID] INTEGER NULL, 
 	[StartAt] DATETIME2(7) NOT NULL, 
 	[EndAt] DATETIME2(7) NOT NULL, 
 	[SetupMinutes] INTEGER NOT NULL, 
@@ -423,10 +453,11 @@ CREATE TABLE [T_PlanAssignments] (
 	CONSTRAINT [PK_T_PlanAssignments] PRIMARY KEY ([AssignmentID]), 
 	CONSTRAINT [UQ_T_PlanAssignments_PlanID_TaskID] UNIQUE ([PlanID], [TaskID]), 
 	CONSTRAINT [CK_T_PlanAssignments_EndAfterStart] CHECK (EndAt > StartAt), 
+	CONSTRAINT [CK_T_PlanAssignments_ResourceOrWorker] CHECK (ResourceID IS NOT NULL OR WorkerID IS NOT NULL), 
 	CONSTRAINT [CK_T_PlanAssignments_Source] CHECK (Source IN ('SOLVER','MANUAL','IMPORT')), 
 	CONSTRAINT [FK_T_PlanAssignments_PlanID_T_Plans] FOREIGN KEY([PlanID]) REFERENCES [T_Plans] ([PlanID]) ON DELETE CASCADE, 
 	CONSTRAINT [FK_T_PlanAssignments_TaskID_T_Tasks] FOREIGN KEY([TaskID]) REFERENCES [T_Tasks] ([TaskID]), 
-	CONSTRAINT [FK_T_PlanAssignments_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID]),
+	CONSTRAINT [FK_T_PlanAssignments_ResourceID_M_Resources] FOREIGN KEY([ResourceID]) REFERENCES [M_Resources] ([ResourceID]), 
 	CONSTRAINT [FK_T_PlanAssignments_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
 );
 GO

@@ -11,6 +11,8 @@ from app.engine.kpi_keys import normalize_kpis
 KPI_META: dict[str, tuple[str, str, bool]] = {
     "納期遅れ": ("納期遅れ", "件", False),
     "遅れ時間の合計": ("遅れ時間の合計", "分", False),
+    "遅れ日数の合計": ("遅れ日数の合計", "日", False),
+    "標準日からのずれ日数": ("標準日からのずれ日数", "日", False),
     "段取り時間": ("段取り時間", "分", False),
     "最終完了": ("最終オーダーの完了", "分", False),
     "平均負荷率": ("平均負荷率", "%", True),
@@ -48,8 +50,8 @@ def kpi_deltas(a: dict[str, float], b: dict[str, float]) -> list[KpiDelta]:
 
 @dataclass
 class Slot:
-    # タスクを割り付けたリソースと、その開始・終了日時。
-    resource_id: int
+    # タスクを割り付けたリソース（分モード）または作業者（日モード）と、その開始・終了日時。
+    resource_id: int | None
     start: datetime
     end: datetime
 

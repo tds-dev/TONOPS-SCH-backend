@@ -1,6 +1,5 @@
 """作業者の通常稼働時間・例外休日・スキルマップの保存と、日別稼働時間の取得処理。"""
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.masters import Location, Product, ProductProcess, Worker, WorkerCalendar, WorkerCalendarException, WorkerSkillMap
 from app.services.calendar_service import _validate_work_times
 from app.services.product_validation import _value
-from app.services.worker_service import _locked_worker
+from app.services.worker_service import _locked_worker, validate_max_daily_quantity
 from app.services.worktime import ExceptionSpec, Interval, WorkSpec, expand_working_time
 
 
@@ -128,16 +127,7 @@ def save_worker_skill_map(db: Session, original: WorkerSkillMap | None, values: 
     if not isinstance(can_execute, bool):
         raise HTTPException(422, "担当可否を指定してください。")
     # 日上限は正の数量・小数第3位まで。未設定は上限なしとして保持する。
-    maximum = _value(original, values, "MaxDailyQuantity")
-    if maximum is not None:
-        try:
-            quantity = Decimal(str(maximum))
-            valid = quantity.is_finite() and 0 < quantity <= Decimal('999999999999999.999')
-            valid = valid and quantity.quantize(Decimal('0.001')) == quantity
-        except (InvalidOperation, ValueError):
-            valid = False
-        if not valid:
-            raise HTTPException(422, "1日の生産上限は正の数量を小数第3位までで入力してください。")
+    validate_max_daily_quantity(_value(original, values, "MaxDailyQuantity"), "1日の生産上限")
     _optional_text(original, values, "Remarks", "備考", 500)
     if original is None:
         row = WorkerSkillMap(**values)

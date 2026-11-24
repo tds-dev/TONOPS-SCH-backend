@@ -15,7 +15,7 @@ from app.core.db import get_db
 from app.core.timeutil import to_jst_naive
 from app.engine.solve import execute_run
 from app.engine.kpi_keys import normalize_kpis
-from app.models.masters import Resource, Location
+from app.models.masters import Resource, Location, Worker
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, PlanViolation, SolverRun, Task
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, JstDatetime, coerce, schemas_for
@@ -62,16 +62,19 @@ class SolveBody(ApiModel):
     wait: bool = False  # 同期計算を指定した場合はリクエスト内で実行する。通常はワーカーが実行する
 
 
-# 割付の表示に必要なオーダー・タスク・設備・日時。
+# 割付の表示に必要なオーダー・タスク・設備または作業者・日時。
 class AssignmentView(ApiModel):
     assignment_id: int
     task_id: int
     order_id: int
     wbs_number: str
     task_name: str
-    resource_id: int
-    # 設備コードの代わりに表示する設備名。
-    resource_name: str
+    resource_id: int | None = None
+    # 設備コードの代わりに表示する設備名。日単位計画ではNone。
+    resource_name: str | None = None
+    # 日単位計画で割り当てた作業者ID・作業者名。分単位計画ではNone。
+    worker_id: int | None = None
+    worker_name: str | None = None
     start_at: JstDatetime
     end_at: JstDatetime
     setup_minutes: int
@@ -169,26 +172,29 @@ def cancel_run(run_id: int, db: Session = Depends(get_db)):
     return run
 
 
-# 対象計画の割付と、表示に必要なタスク・設備情報を返す。
+# 対象計画の割付と、表示に必要なタスク・設備・作業者情報を返す。
 @router.get("/plans/{plan_id}/assignments", response_model=list[AssignmentView])
 def list_assignments(plan_id: int, db: Session = Depends(get_db)):
     _plan_or_404(db, plan_id)
     rows = db.execute(
-        select(PlanAssignment, Task, Order, Resource)
+        select(PlanAssignment, Task, Order, Resource, Worker)
         .join(Task, Task.TaskID == PlanAssignment.TaskID)
         .join(Order, Order.OrderID == Task.OrderID)
-        .join(Resource, Resource.ResourceID == PlanAssignment.ResourceID)
+        .outerjoin(Resource, Resource.ResourceID == PlanAssignment.ResourceID)
+        .outerjoin(Worker, Worker.WorkerID == PlanAssignment.WorkerID)
         .where(PlanAssignment.PlanID == plan_id)
-        .order_by(Resource.SortOrder, PlanAssignment.StartAt)
+        .order_by(PlanAssignment.StartAt, PlanAssignment.AssignmentID)
     ).all()
     return [
         AssignmentView(
             assignment_id=a.AssignmentID, task_id=t.TaskID, order_id=j.OrderID, wbs_number=j.WBSNumber,
-            task_name=t.TaskName, resource_id=r.ResourceID, resource_name=r.ResourceName,
+            task_name=t.TaskName,
+            resource_id=r.ResourceID if r else None, resource_name=r.ResourceName if r else None,
+            worker_id=w.WorkerID if w else None, worker_name=w.WorkerName if w else None,
             start_at=a.StartAt, end_at=a.EndAt, setup_minutes=a.SetupMinutes,
             is_locked=a.IsLocked, source=a.Source,
         )
-        for a, t, j, r in rows
+        for a, t, j, r, w in rows
     ]
 
 

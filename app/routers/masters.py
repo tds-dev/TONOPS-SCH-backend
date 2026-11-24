@@ -16,10 +16,16 @@ from app.services.calendar_service import (
     delete_calendar,
     save_calendar,
     validate_calendar_exception_write,
-    validate_resource_location_write,
     working_time,
 )
+from app.services.resource_order_service import (
+    delete_resource,
+    delete_resource_group,
+    save_resource,
+    save_resource_group,
+)
 from app.services.product_process_service import delete_product_process, save_product_process
+from app.services.process_group_service import delete_process_group, save_process_group
 from app.services.worker_service import delete_worker, save_worker
 from app.services.worker_settings_service import (
     delete_worker_calendar,
@@ -43,8 +49,10 @@ routers = [
                 write_handler=save_calendar, delete_handler=delete_calendar),
     crud_router(m.CalendarException, "/calendar-exceptions", "Calendars", order_by="StartAt",
                 validate_write=validate_calendar_exception_write),
-    crud_router(m.ResourceGroup, "/resource-groups", "Resources", order_by="SortOrder"),
-    crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder", validate_write=validate_resource_location_write),
+    crud_router(m.ResourceGroup, "/resource-groups", "Resources", order_by="SortOrder",
+                write_handler=save_resource_group, delete_handler=delete_resource_group),
+    crud_router(m.Resource, "/resources", "Resources", order_by="SortOrder",
+                write_handler=save_resource, delete_handler=delete_resource),
     # 作業者は監査列を持たないため、既存の5列に合わせた専用保存・論理削除を使う。
     crud_router(m.Worker, "/workers", "Workers", order_by="WorkerID",
                 write_handler=save_worker, delete_handler=delete_worker),
@@ -60,6 +68,8 @@ routers = [
     crud_router(m.ProductSwitchRule, "/product-switch-rules", "Configuration", validate_write=validate_switch_rule),
     crud_router(m.CalculationSetting, "/calculation-settings", "Configuration",
                 write_handler=save_calculation_setting),
+    crud_router(m.ProcessGroup, "/process-groups", "Products & processes", order_by="SortOrder",
+                write_handler=save_process_group, delete_handler=delete_process_group),
     crud_router(m.Product, "/products", "Products & processes", validate_write=validate_product_write),
     crud_router(m.ProductProcess, "/product-processes", "Products & processes", order_by="SequenceNumber",
                 write_handler=save_product_process, delete_handler=delete_product_process, filter_list=filter_product_process_list),

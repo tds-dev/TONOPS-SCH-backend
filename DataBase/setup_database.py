@@ -17,9 +17,8 @@ DataBase配下のDB・テーブル作成とデモデータ登録を行う初期�
 工程ルートの選択・版管理は行わず、工程はProductIDで製品に直接紐づける。
 製品は任意のProductCode（NVARCHAR(100)）を持つ。単位・製品と工程の属性は持たず、タスクにも属性を登録しない。
 オーダーは種別・計画の管理元・属性の列を持たない。
-オーダーの複数作業者指定はT_OrderWorkers（OrderWorkerID・OrderID・WorkerIDの3列）に保存し、計画計算への反映は行わない。
-T_PlanAssignments.WorkerIDはNULL不可とし、仮データ登録時だけ工程に対応する作業者IDを設定する。
-通常の計算・手動配置・計画コピーはWorkerIDを設定しないため、新しい割付の保存は後続実装まで未対応となる。
+2026-11-24: 日単位計算モード（フェーズ1）対応。工程区分マスタM_ProcessGroupsを追加し、M_Product.ExcludeFromDailyCap、M_ProductProcessesの日次列（ProcessGroupID・StandardOffsetDays・DurationDays・MinLagDays・MaxLagDays）、M_Workers.MaxDailyQuantityを追加。M_CalculationSettings.TimeUnitの既定値はDAYとし、T_PlanAssignments.ResourceID・WorkerIDは両方NULL許可（どちらか一方以上必須）、T_OrdersのWBSNumber一意制約は撤廃した。
+オーダーの複数作業者指定はT_OrderWorkers（OrderWorkerID・OrderID・WorkerIDの3列）に保存し、計画計算への反映は後続フェーズで行う。
 
 バックエンドのルートで python -m DataBase.setup_database を実行する。
 テーブルはモデルから作成し、SQL Serverの仮データはquery/seed_demo_sqlserver.sqlを実行して登録する。

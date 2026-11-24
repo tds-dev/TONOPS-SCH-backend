@@ -82,10 +82,7 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     if references_changed and product_id is not None and (product is None or product.DeleteFlag or product.LocationID != location_id):
         raise HTTPException(422, "同じ拠点の有効な製品を指定してください。")
 
-    # 削除済みも同じ番号を保持するため、再利用せず別番号を案内する。
-    duplicate = db.scalar(select(Order.OrderID).where(Order.LocationID == location_id, Order.WBSNumber == value("WBSNumber")))
-    if duplicate is not None and (original is None or duplicate != original.OrderID):
-        raise HTTPException(409, "同じ拠点でWBS番号が登録済みです。削除済みも含め、別の番号を指定してください。")
+    # WBS番号は小分けロット等で同一拠点内の複数オーダーに共通指定できるため、重複チェックは行わない。
 
     # 計画・実績があるタスクの内容とオーダーが食い違わないよう、生成元の変更を防ぐ。
     if original is not None and any(changed(key) for key in ("ProductID", "Quantity")):

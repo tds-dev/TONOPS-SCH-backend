@@ -82,7 +82,7 @@ class ResourceGroup(AuditMixin, SoftDeleteMixin, Base):
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
     # 設備グループの表示名と画面での表示順。
     GroupName = Column(String(100), nullable=False)
-    SortOrder = Column(Integer, nullable=False, default=0)
+    SortOrder = Column(Integer, nullable=False, default=1)
 
 
 class Resource(AuditMixin, SoftDeleteMixin, Base):
@@ -96,11 +96,11 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     # 設備の表示名。関連付けにはResourceIDを使う。
     ResourceName = Column(String(100), nullable=False)
-    # 同時処理できる数量と、1日の処理上限。
+    # 同時処理できる数量と、一日における稼働上限時間。
     Capacity = Column(Numeric(9, 2), nullable=False, default=1)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
     # 画面・ボードでの表示順。
-    SortOrder = Column(Integer, nullable=False, default=0)
+    SortOrder = Column(Integer, nullable=False, default=1)
 
 
 # ---------------------------------------------------------------- 設定
@@ -153,9 +153,9 @@ class CalculationSetting(AuditMixin, Base):
     CalculationSettingID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    # 計算設定の表示名と、計算の時間単位。
+    # 計算設定の表示名と、計算の時間単位。既定は日単位計算とする。
     CalculationSettingName = Column(String(100), nullable=False)
-    TimeUnit = Column(String(10), nullable=False, default="MINUTE")
+    TimeUnit = Column(String(10), nullable=False, default="DAY")
     # 納期・段取りなどの評価の重み。計算時間の上限は設けない。
     ObjectiveWeightsJSON = Column(JSON, nullable=False, default=dict)
     FrozenWindowHours = Column(Integer, nullable=False, default=0)
@@ -163,6 +163,19 @@ class CalculationSetting(AuditMixin, Base):
 
 
 # ---------------------------------------------------------------- テンプレート
+class ProcessGroup(AuditMixin, SoftDeleteMixin, Base):
+    """工程区分マスタ。同一オーダー内で同一作業者が担当する工程のまとまりを表す。"""
+
+    __tablename__ = "M_ProcessGroups"
+    __table_args__ = (UniqueConstraint("LocationID", "ProcessGroupName"),)
+    # 工程区分の識別番号と所属拠点。
+    ProcessGroupID = Column(Integer, primary_key=True, autoincrement=True)
+    LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
+    # 組立・電気調整・調整検査などの区分名と表示順。
+    ProcessGroupName = Column(String(100), nullable=False)
+    SortOrder = Column(Integer, nullable=False, default=1)
+
+
 class Product(AuditMixin, SoftDeleteMixin, Base):
     """製品マスタ"""
 
@@ -177,6 +190,8 @@ class Product(AuditMixin, SoftDeleteMixin, Base):
     ProductName = Column(String(100), nullable=False)
     # 任意の品目（製品）コード。未指定はNULLとし、製品の関連付けにはProductIDを使う。
     ProductCode = Column(String(100), nullable=True)
+    # 作業者の1日作業台数上限に含めない製品（部品分譲など）の指定。
+    ExcludeFromDailyCap = Column(Boolean, nullable=False, default=False, server_default=text("0"))
     # 製品に直接属する工程。番号順にタスクへ展開する。
     processes = relationship(
         "ProductProcess", cascade="all, delete-orphan", order_by="ProductProcess.SequenceNumber", lazy="selectin"
@@ -189,6 +204,10 @@ class ProductProcess(AuditMixin, Base):
     __tablename__ = "M_ProductProcesses"
     __table_args__ = (
         UniqueConstraint("ProductID", "SequenceNumber"),
+        CheckConstraint("StandardOffsetDays IS NULL OR StandardOffsetDays >= 0", name="StandardOffsetDays"),
+        CheckConstraint("DurationDays >= 1", name="DurationDays"),
+        CheckConstraint("MinLagDays >= 0", name="MinLagDays"),
+        CheckConstraint("MaxLagDays IS NULL OR MaxLagDays >= MinLagDays", name="LagDaysRange"),
         CheckConstraint(
             "WeekdayRestrictionStartAt IS NULL OR WeekdayRestrictionEndAt IS NULL OR "
             "WeekdayRestrictionStartAt <= WeekdayRestrictionEndAt", name="WeekdayRestrictionPeriod",
@@ -202,6 +221,8 @@ class ProductProcess(AuditMixin, Base):
     # 製品内の実行順序と工程の表示名。
     SequenceNumber = Column(Integer, nullable=False)
     ProcessName = Column(String(100), nullable=False)
+    # 日単位計算で同一作業者・日上限集計の単位に使う工程区分。未指定は単独区分扱い。
+    ProcessGroupID = Column(Integer, ForeignKey("M_ProcessGroups.ProcessGroupID"), nullable=True)
     # 準備・固定の未設定はNULL。数量当たりの作業時間とともに工程で共用する。
     SetupMinutes = Column(Integer, nullable=True)
     FixedMinutes = Column(Integer, nullable=True)
@@ -209,6 +230,11 @@ class ProductProcess(AuditMixin, Base):
     # この工程が終わってから次工程を開始するまでの待ち時間。最大の未指定は上限なし。
     MinLagAfterMin = Column(Integer, nullable=False, default=0)
     MaxLagAfterMin = Column(Integer, nullable=True)
+    # 日単位計算の標準日（出荷日から何稼働日前か）、所要稼働日数、次工程までの稼働日間隔。
+    StandardOffsetDays = Column(Integer, nullable=True)
+    DurationDays = Column(Integer, nullable=False, default=1, server_default=text("1"))
+    MinLagDays = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    MaxLagDays = Column(Integer, nullable=True)
     # 許可曜日は日曜0～土曜6。新規工程は全曜日を許可し、工程ごとに独立した一覧を持つ。
     AllowedWeekdaysJSON = Column(JSON, nullable=False, default=lambda: list(range(7)),
                                  server_default=text("'[0,1,2,3,4,5,6]'"))
@@ -247,14 +273,18 @@ class ProductProcessResource(AuditMixin, Base):
 
 # ---------------------------------------------------------------- 作業者
 class Worker(SoftDeleteMixin, Base):
-    """作業者本人の情報。指定された5列だけを保持する。"""
+    """作業者本人の情報と、日単位計算で使う1日の作業台数上限を保持する。"""
 
     __tablename__ = "M_Workers"
+    __table_args__ = (
+        CheckConstraint("MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0", name="MaxDailyQuantity"),
+    )
     # 作業者の識別番号と所属拠点。
     WorkerID = Column(Integer, primary_key=True, autoincrement=True)
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    # 作業者名と、管理上の補足。
+    # 作業者名、日単位計算の1日作業台数上限（NULLは上限なし）、管理上の補足。
     WorkerName = Column(String(100), nullable=False)
+    MaxDailyQuantity = Column(Numeric(18, 3), nullable=True)
     Remarks = Column(String(500), nullable=True)
 
 

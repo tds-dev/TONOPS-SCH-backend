@@ -139,7 +139,8 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
     flush_named_plan(db, new)
     for a in db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == plan.PlanID)):
         db.add(PlanAssignment(
-            PlanID=new.PlanID, TaskID=a.TaskID, ResourceID=a.ResourceID, StartAt=a.StartAt, EndAt=a.EndAt,
+            PlanID=new.PlanID, TaskID=a.TaskID, ResourceID=a.ResourceID, WorkerID=a.WorkerID,
+            StartAt=a.StartAt, EndAt=a.EndAt,
             SetupMinutes=a.SetupMinutes, Units=a.Units, IsLocked=a.IsLocked, Source=a.Source, CreatedBy=user,
         ))
     # 旧計画をコピーする場合も、新しい計画には日本語キーだけを保存する。
@@ -182,4 +183,4 @@ def master_assignments(db: Session, location_id: int, start: datetime, end: date
             prev = chosen.get(a.TaskID)
             if prev is None or (is_master and not prev[0]):
                 chosen[a.TaskID] = (is_master, a)
-    return sorted((a for _, a in chosen.values()), key=lambda a: (a.ResourceID, a.StartAt))
+    return sorted((a for _, a in chosen.values()), key=lambda a: (a.ResourceID or 0, a.StartAt))

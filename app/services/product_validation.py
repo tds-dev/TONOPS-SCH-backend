@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Location, Product, ProductProcess, Resource, ResourceGroup
+from app.models.masters import Location, ProcessGroup, Product, ProductProcess, Resource, ResourceGroup
 
 
 # 部分更新では未送信の項目を元の保存値で補う。
@@ -52,6 +52,10 @@ def validate_product_write(db: Session, original: Product | None, values: dict[s
     location = db.get(Location, location_id) if location_id is not None else None
     if location is None or location.DeleteFlag:
         raise HTTPException(422, "有効な拠点を指定してください。")
+    # 1日上限除外フラグは真偽値のみ許可する。
+    exclude_cap = _value(original, values, "ExcludeFromDailyCap", False)
+    if not isinstance(exclude_cap, bool):
+        raise HTTPException(422, "日上限除外フラグはtrueまたはfalseで指定してください。")
     # 削除済みも含め、同じ拠点で製品名を重複させない。
     duplicate = db.scalar(select(Product.ProductID).where(Product.LocationID == location_id, Product.ProductName == name))
     if duplicate is not None and (original is None or duplicate != original.ProductID):
@@ -69,6 +73,12 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
     product = db.get(Product, product_id) if product_id is not None else None
     if product is None or product.DeleteFlag:
         raise HTTPException(422, "有効な製品を指定してください。")
+    # 工程区分が指定された場合は、製品と同じ拠点の有効な工程区分であることを確認する。
+    process_group_id = _value(original, values, "ProcessGroupID")
+    if process_group_id is not None:
+        group = db.get(ProcessGroup, process_group_id)
+        if group is None or group.DeleteFlag or group.LocationID != product.LocationID:
+            raise HTTPException(422, "製品と同じ拠点の有効な工程区分を指定してください。")
     # 工程番号と、この工程の後に必要な最小・最大待ち時間。
     sequence = _value(original, values, "SequenceNumber")
     minimum = _value(original, values, "MinLagAfterMin", 0)
@@ -79,6 +89,19 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
         _integer(maximum, "最大待ち時間")
         if maximum < minimum:
             raise HTTPException(422, "最大待ち時間は最小待ち時間以上にしてください。")
+    # 日単位計算の標準日・所要日数・稼働日間隔を検証する。
+    standard_offset = _value(original, values, "StandardOffsetDays")
+    if standard_offset is not None:
+        _integer(standard_offset, "出荷日からの標準前倒し稼働日数")
+    duration_days = _value(original, values, "DurationDays", 1)
+    _integer(duration_days, "所要稼働日数", 1)
+    min_lag_days = _value(original, values, "MinLagDays", 0)
+    max_lag_days = _value(original, values, "MaxLagDays")
+    _integer(min_lag_days, "次工程までの最小稼働日間隔")
+    if max_lag_days is not None:
+        _integer(max_lag_days, "次工程までの最大稼働日間隔")
+        if max_lag_days < min_lag_days:
+            raise HTTPException(422, "最大稼働日間隔は最小稼働日間隔以上にしてください。")
     # 工程番号の重複は専用保存処理で交換する。範囲は製品の工程数に合わせて確認する。
     validate_weekday_settings(original, values)
     validate_process_time(original, values)
@@ -142,6 +165,4 @@ def validate_process_time(original: ProductProcess | None, values: dict[str, Any
             or decimal_processing < 0 or decimal_processing > Decimal("99999999.9999")
             or decimal_processing != decimal_processing.quantize(Decimal("0.0001"))):
         raise HTTPException(422, "作業時間は0以上99999999.9999以下、小数点以下4桁以内で入力してください。")
-    # 保存値はNULLのまま保ち、合計時間の確認時だけ0分とみなす。
-    if (setup or 0) + (fixed or 0) + decimal_processing <= 0:
-        raise HTTPException(422, "作業時間・準備時間・固定時間のいずれかを0より大きくしてください。")
+    # 日単位計算では標準時間未確定（0分）の工程を扱うため、保存時の0超必須チェックは行わない。

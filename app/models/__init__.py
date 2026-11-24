@@ -4,6 +4,7 @@ from app.models.masters import (  # noqa: F401
     CalendarException,
     ProductSwitchRule,
     ProductSwitchTime,
+    ProcessGroup,
     Product,
     CalculationSetting,
     Resource,

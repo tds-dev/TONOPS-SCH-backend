@@ -25,6 +25,8 @@ class AssignmentChange(ApiModel):
     assignment_id: int | None = None  # 既存の割付（ボードのイベント ID）
     task_id: int | None = None  # 未割付タスクを配置する場合
     resource_id: int | None = None
+    # 日単位計画で割り当てる作業者ID。分単位計画では未指定。
+    worker_id: int | None = None
     start_at: datetime | None = None  # オフセットなしは拠点の現地時刻
     end_at: datetime | None = None  # 指定時はリサイズ。省略時は所要時間を維持
     is_locked: bool | None = None

@@ -40,13 +40,12 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     # 実DBもT_OrdersとOrder系の列名へ変更されることを前提とする。
     __tablename__ = "T_Orders"
     __table_args__ = (
-        UniqueConstraint("LocationID", "WBSNumber"),
         CheckConstraint(in_check("Status", ORDER_STATUSES), name="Status"),
     )
     OrderID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, ForeignKey("M_Locations.LocationID"), nullable=False)
-    # 同じ拠点内でオーダーを区別するWBS番号。
+    # 案件・小分けロットを表すWBS番号。同一拠点内での重複を許可する。
     WBSNumber = Column(String(30), nullable=False)
     OrderName = Column(String(200), nullable=False)
     # オーダーの対象製品。ProductIDで製品マスタを参照する。
@@ -155,15 +154,16 @@ class PlanAssignment(AuditMixin, Base):
     __table_args__ = (
         UniqueConstraint("PlanID", "TaskID"),
         CheckConstraint("EndAt > StartAt", name="EndAfterStart"),
+        CheckConstraint("ResourceID IS NOT NULL OR WorkerID IS NOT NULL", name="ResourceOrWorker"),
         CheckConstraint(in_check("Source", ASSIGNMENT_SOURCES), name="Source"),
         Index("IX_T_PlanAssignments_PlanID_ResourceID_StartAt", "PlanID", "ResourceID", "StartAt"),
     )
     AssignmentID = Column(BigId, primary_key=True, autoincrement=True)
     PlanID = Column(Integer, ForeignKey("T_Plans.PlanID", ondelete="CASCADE"), nullable=False)
     TaskID = Column(Integer, ForeignKey("T_Tasks.TaskID"), nullable=False)
-    ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=False)
-    # 割付の担当作業者。今回は仮データだけ設定し、通常の読取・保存処理には接続しない。
-    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
+    # 分単位計算では設備、日単位計算では作業者を割り付けるため、どちらか一方以上の指定を必須とする。
+    ResourceID = Column(Integer, ForeignKey("M_Resources.ResourceID"), nullable=True)
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=True)
     StartAt = Column(DateTime, nullable=False)  # 日本時間。タスク開始時刻（段取りは SetupMinutes として直前に置く）
     EndAt = Column(DateTime, nullable=False)  # 日本時間
     SetupMinutes = Column(Integer, nullable=False, default=0)

@@ -1,4 +1,5 @@
 """作業者の基本情報を保存・論理削除し、同じ拠点の製品工程との担当関係を作成する処理。"""
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import HTTPException
@@ -8,6 +9,20 @@ from sqlalchemy.orm import Session
 from app.models.masters import Location, Worker
 from app.services.product_validation import _name, _value
 from app.services.worker_process_service import add_process_skill_maps
+
+
+# 1日の作業台数・生産上限がNULLまたは正の数量（小数第3位まで）であることを確認する。
+def validate_max_daily_quantity(value: Any, label: str) -> None:
+    if value is None:
+        return
+    try:
+        quantity = Decimal(str(value))
+        valid = quantity.is_finite() and 0 < quantity <= Decimal("999999999999999.999")
+        valid = valid and quantity.quantize(Decimal("0.001")) == quantity
+    except (InvalidOperation, ValueError):
+        valid = False
+    if not valid:
+        raise HTTPException(422, f"{label}は正の数量を小数第3位までで入力してください。")
 
 
 # 編集・削除の対象を最新の状態で取得し、削除済み作業者への再保存を防ぐ。
@@ -36,6 +51,8 @@ def save_worker(db: Session, original: Worker | None, values: dict[str, Any], _u
         raise HTTPException(422, "有効な拠点を指定してください。")
     if "DeleteFlag" in values and values["DeleteFlag"] is not False:
         raise HTTPException(422, "作業者を削除するときは削除操作を使ってください。")
+    # 1日の作業台数上限はNULL（上限なし）または正の数量（小数第3位まで）とする。
+    validate_max_daily_quantity(_value(original, values, "MaxDailyQuantity"), "1日の作業台数上限")
     # 任意入力の備考は500文字までとし、空欄は未設定として保存する。
     remarks = _value(original, values, "Remarks")
     if remarks is not None and len(remarks) > 500:

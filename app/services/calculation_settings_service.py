@@ -16,7 +16,7 @@ def save_calculation_setting(
     current = {
         key: getattr(original, key) if original is not None else default
         for key, default in {
-            "LocationID": None, "CalculationSettingName": None, "TimeUnit": "MINUTE",
+            "LocationID": None, "CalculationSettingName": None, "TimeUnit": "DAY",
             "ObjectiveWeightsJSON": {}, "FrozenWindowHours": 0, "IsDefault": False,
         }.items()
     }

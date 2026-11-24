@@ -63,8 +63,8 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     def slot_view(s: Slot | None):
         if s is None:
             return None
-        r = res.get(s.resource_id)
-        return {"resourceId": s.resource_id, "resourceName": r.ResourceName if r else str(s.resource_id),
+        r = res.get(s.resource_id) if s.resource_id is not None else None
+        return {"resourceId": s.resource_id, "resourceName": r.ResourceName if r else (str(s.resource_id) if s.resource_id is not None else "—"),
                 "start": _hhmm(s.start, tz), "end": _hhmm(s.end, tz)}
 
     # 比較対象の計画名・状態・期間を表示用にまとめる。

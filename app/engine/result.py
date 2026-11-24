@@ -8,11 +8,13 @@ from app.engine.problem import Problem
 @dataclass
 class SAssignment:
     task_id: int
-    resource_id: int
-    start: int  # 計画期間開始からの分（タスク開始時刻）
+    resource_id: int | None
+    start: int  # 計画期間開始からの分（分モード）または稼働日番号（日モード）
     end: int
     setup: int = 0  # `start` の直前に置く順序依存の段取り時間
     locked: bool = False
+    # 日単位計算で割り当てた作業者ID。分単位計算ではNone。
+    worker_id: int | None = None
 
 
 @dataclass

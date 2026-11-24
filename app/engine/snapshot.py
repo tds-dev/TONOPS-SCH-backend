@@ -135,7 +135,7 @@ def build_problem(db: Session, plan: Plan, scope: str = "FULL") -> Problem:
             deadline=to_min(t.DeadlineAt) if t.DeadlineAt else None,
         )
         prev = own.get(t.TaskID) or base.get(t.TaskID)
-        if prev is not None:
+        if prev is not None and prev.ResourceID is not None:
             pos = PLock(prev.ResourceID, to_min(prev.StartAt), to_min(prev.EndAt))
             frozen = prev is base.get(t.TaskID) and pos.start < frozen_end
             if (prev.IsLocked or frozen) and pos.end > 0 and pos.end > pos.start:

@@ -62,7 +62,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
 
     # 工程ごとに使える設備の集合。各工程には同じグループの設備を候補として紐付ける。
     groups = {}
-    for i, (key, name) in enumerate([("KNEAD", "こねる設備"), ("BAKE", "焼く設備"), ("PACK", "包装設備")]):
+    for i, (key, name) in enumerate([("KNEAD", "こねる設備"), ("BAKE", "焼く設備"), ("PACK", "包装設備")], start=1):
         # keyはデモ作成中だけ使う参照名。DBには名前と識別番号を保存する。
         g = m.ResourceGroup(LocationID=location.LocationID, GroupName=name, SortOrder=i, CreatedBy=USER)
         db.add(g)
@@ -72,7 +72,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         ("ミキサー1号機", "KNEAD"), ("ミキサー2号機", "KNEAD"),
         ("オーブン1号機", "BAKE"), ("オーブン2号機", "BAKE"),
         ("包装機1号機", "PACK"), ("包装機2号機", "PACK"),
-    ]):
+    ], start=1):
         db.add(m.Resource(
             LocationID=location.LocationID, ResourceGroupID=groups[grp].ResourceGroupID,
             ResourceName=name, Capacity=1,
@@ -88,7 +88,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     # 単体指定の操作例。既存の有効なグループ設定と競合しないよう無効で登録する。
     db.flush()
     single_resource = db.scalar(select(m.Resource).where(
-        m.Resource.LocationID == location.LocationID, m.Resource.SortOrder == 0,
+        m.Resource.LocationID == location.LocationID, m.Resource.SortOrder == 1,
     ))
     db.add(m.ProductSwitchTime(
         LocationID=location.LocationID, ProductSwitchTimeName="ミキサー1号機の切替条件（設定例）",
