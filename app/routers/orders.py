@@ -8,8 +8,9 @@ from app.models.transactions import Order, Task
 from app.routers.crud import crud_router
 from app.routers.deps import current_user
 from app.schemas.base import ApiModel, schemas_for
+from app.schemas.orders import OrderCreate, OrderRead, OrderUpdate
 from app.services.order_service import generate_tasks
-from app.services.order_validation import validate_order_write
+from app.services.order_worker_service import write_order
 from app.services.task_conditions import build_task_conditions
 
 # 保存済みタスクをAPIへ返す型。
@@ -100,9 +101,12 @@ def get_order_dependencies(order_id: int, db: Session = Depends(get_db)):
     return build_task_conditions(db, tasks).dependencies
 
 
-# オーダーだけに追加の入力確認を適用し、他のCRUDは従来どおり登録する。
+# オーダー本体と複数の担当者を一括保存し、タスクのCRUDは従来どおり登録する。
 routers = [
     order_extra,  # /orders/{id}/tasks が隠れないよう先に登録する
-    crud_router(Order, "/orders", "Orders", order_by="DeadLine", validate_write=validate_order_write),
+    crud_router(
+        Order, "/orders", "Orders", order_by="DeadLine", write_handler=write_order,
+        schema_types=(OrderRead, OrderCreate, OrderUpdate),
+    ),
     crud_router(Task, "/tasks", "Orders", order_by="Sequence"),
 ]

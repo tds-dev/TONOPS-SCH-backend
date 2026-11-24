@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.routers.deps import current_user
-from app.schemas.base import python_type, schemas_for, to_camel
+from app.schemas.base import ApiModel, python_type, schemas_for, to_camel
 
 
 # レコードを識別する主キーが一つであることを確認して取得する。
@@ -52,8 +52,10 @@ def crud_router(
     write_handler: Callable[[Session, Any, dict[str, Any], str], Any] | None = None,
     delete_handler: Callable[[Session, Any, str], None] | None = None,
     filter_list: Callable[[Any, Request], Any] | None = None,
+    schema_types: tuple[type[ApiModel], type[ApiModel], type[ApiModel]] | None = None,
 ) -> APIRouter:
-    Read, Create, Update = schemas_for(model)
+    # 関連テーブルも一括保存する場合だけ、専用の入出力型を使う。
+    Read, Create, Update = schema_types if schema_types is not None else schemas_for(model)
     pk = _pk_column(model)
     # APIのorderId等を、対応するDBの列へ結び付けて検索する。
     columns = {to_camel(attribute.key): attribute.columns[0] for attribute in inspect(model).column_attrs}

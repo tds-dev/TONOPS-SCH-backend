@@ -1,7 +1,8 @@
+-- 2026-11-20: T_Orders.WorkerIDを廃止し、監査列のないT_OrderWorkersで複数の担当者を保持する。
 -- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
 -- 作業者の例外休日はWorkerIDで本人へ直接関連付け、通常稼働時間とは独立して保持する。
 -- 2026-11-16: 拠点のCalendarIDを廃止し、週間勤務・停止予定をLocationIDで直接関連付ける。
--- 2026-11-13: 旧属性定義・ルールを廃止。曜日制限は製品工程へ保存。全23テーブル・255列。
+-- 2026-11-13: 旧属性定義・ルールを廃止。曜日制限は製品工程へ保存。
 -- 製品・工程・実行候補の3階層を含む、新規DB用のテーブル・制約・索引作成SQL。
 -- 改名したID・名称と外部キーを統一し、出荷日時は任意入力として保持する。
 -- オーダーは種別・計画の管理元・属性、タスクは作業番号・集約指定・進捗率・属性の列を持たない。
@@ -214,7 +215,6 @@ CREATE TABLE [T_Orders] (
 	[WBSNumber] NVARCHAR(30) NOT NULL, 
 	[OrderName] NVARCHAR(200) NOT NULL, 
 	[ProductID] INTEGER NULL, 
-	[WorkerID] INTEGER NULL,
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[CustomerName] NVARCHAR(100) NULL, 
 	[ReleaseAt] DATETIME2(7) NULL, 
@@ -232,8 +232,19 @@ CREATE TABLE [T_Orders] (
 	CONSTRAINT [UQ_T_Orders_LocationID_WBSNumber] UNIQUE ([LocationID], [WBSNumber]), 
 	CONSTRAINT [CK_T_Orders_Status] CHECK (Status IN ('OPEN','PLANNED','IN_PROGRESS','DONE','CANCELLED')), 
 	CONSTRAINT [FK_T_Orders_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
-	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]),
-	CONSTRAINT [FK_T_Orders_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
+	CONSTRAINT [FK_T_Orders_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID])
+);
+GO
+
+-- オーダーの担当者は複数行で保持する。監査列を持たず、同じ担当者の二重登録を防ぐ。
+CREATE TABLE [T_OrderWorkers] (
+    [OrderWorkerID] INTEGER NOT NULL IDENTITY,
+    [OrderID] INTEGER NOT NULL,
+    [WorkerID] INTEGER NOT NULL,
+    CONSTRAINT [PK_T_OrderWorkers] PRIMARY KEY ([OrderWorkerID]),
+    CONSTRAINT [UQ_T_OrderWorkers_OrderID_WorkerID] UNIQUE ([OrderID], [WorkerID]),
+    CONSTRAINT [FK_T_OrderWorkers_OrderID_T_Orders] FOREIGN KEY([OrderID]) REFERENCES [T_Orders] ([OrderID]),
+    CONSTRAINT [FK_T_OrderWorkers_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID])
 );
 GO
 

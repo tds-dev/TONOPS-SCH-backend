@@ -96,7 +96,7 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     # 設備の表示名。関連付けにはResourceIDを使う。
     ResourceName = Column(String(100), nullable=False)
-    # 同時処理できる数量と、日単位の能力上限。
+    # 同時処理できる数量と、1日の処理上限。
     Capacity = Column(Numeric(9, 2), nullable=False, default=1)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
     # 画面・ボードでの表示順。

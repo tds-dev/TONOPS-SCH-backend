@@ -51,8 +51,6 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
     OrderName = Column(String(200), nullable=False)
     # オーダーの対象製品。ProductIDで製品マスタを参照する。
     ProductID = Column(Integer, ForeignKey("M_Product.ProductID"), nullable=True)
-    # オーダーで指定した作業者。未指定はNULLとし、計画計算への反映は後続対応とする。
-    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=True)
     Quantity = Column(Numeric(18, 3), nullable=True)
     CustomerName = Column(String(100), nullable=True)
     ReleaseAt = Column(DateTime, nullable=True)
@@ -65,6 +63,28 @@ class Order(AuditMixin, SoftDeleteMixin, Base):
 
     # このオーダーに属するタスク。親子階層を持たず、工程順で取得する。
     tasks = relationship("Task", back_populates="order", order_by="Task.Sequence")
+
+    # 一覧取得時も担当リンクをまとめて読み、オーダーごとの追加問い合わせを避ける。
+    worker_links = relationship(
+        "OrderWorker", cascade="all, delete-orphan", lazy="selectin",
+        order_by="OrderWorker.WorkerID",
+    )
+
+    @property
+    def worker_ids(self) -> list[int]:
+        """中間テーブルに保存した担当作業者を、API用のID配列として返す。"""
+        return sorted(link.WorkerID for link in self.worker_links)
+
+
+class OrderWorker(Base):
+    """オーダーと担当作業者を結ぶ。監査列は持たず、担当解除時は行を削除する。"""
+
+    __tablename__ = "T_OrderWorkers"
+    __table_args__ = (UniqueConstraint("OrderID", "WorkerID"),)
+    # 同じ作業者の二重登録は、オーダーと作業者の組み合わせで防ぐ。
+    OrderWorkerID = Column(Integer, primary_key=True, autoincrement=True)
+    OrderID = Column(Integer, ForeignKey("T_Orders.OrderID"), nullable=False)
+    WorkerID = Column(Integer, ForeignKey("M_Workers.WorkerID"), nullable=False)
 
 
 class Task(AuditMixin, Base):

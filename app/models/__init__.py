@@ -19,6 +19,7 @@ from app.models.masters import (  # noqa: F401
 from app.models.transactions import (  # noqa: F401
     WorkActual,
     Order,
+    OrderWorker,
     Plan,
     PlanAssignment,
     PlanKpi,

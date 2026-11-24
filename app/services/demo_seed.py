@@ -199,10 +199,11 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ))
 
     # オーダーは店舗からの製造依頼。製品・個数・納期を指定し、製品工程から個別のタスクを作る。
-    # 指定あり・未指定の両方を確認する仮データ。作業者指定はまだ計算に反映しない。
+    # 複数指定・単一指定・未指定を確認する仮データ。作業者指定はまだ計算に反映しない。
     order_workers = {
-        "WBS-1001": workers[0].WorkerID, "WBS-1002": workers[1].WorkerID,
-        "WBS-1003": workers[2].WorkerID,
+        "WBS-1001": [workers[0].WorkerID, workers[1].WorkerID],
+        "WBS-1002": [workers[1].WorkerID, workers[2].WorkerID],
+        "WBS-1003": [workers[2].WorkerID],
     }
     orders = []
     for no, name, qty, due_h, prio, customer in [
@@ -218,7 +219,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
         product = products[name]
         order = t.Order(
             LocationID=location.LocationID, WBSNumber=no, OrderName=f"{product.ProductName} {qty}個（{customer}向け）",
-            WorkerID=order_workers.get(no),
+            worker_links=[t.OrderWorker(WorkerID=worker_id) for worker_id in order_workers.get(no, [])],
             ProductID=product.ProductID, Quantity=qty, CustomerName=customer, ReleaseAt=start,
             DeadLine=start + timedelta(hours=due_h), Priority=prio, Status="OPEN", CreatedBy=USER,
         )
