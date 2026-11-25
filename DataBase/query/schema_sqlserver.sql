@@ -22,12 +22,15 @@ GO
 CREATE TABLE [M_Locations] (
 	[LocationID] INTEGER NOT NULL IDENTITY, 
 	[LocationName] NVARCHAR(100) NOT NULL, 
+	-- 計算時間の単位。MINUTEは分単位、DAYは日単位。
+	[LocationTimeUnit] NVARCHAR(10) NOT NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
-	CONSTRAINT [PK_M_Locations] PRIMARY KEY ([LocationID])
+	CONSTRAINT [PK_M_Locations] PRIMARY KEY ([LocationID]),
+	CONSTRAINT [CK_M_Locations_LocationTimeUnit] CHECK (LocationTimeUnit IN ('MINUTE','DAY'))
 );
 GO
 
@@ -150,7 +153,7 @@ CREATE TABLE [M_Resources] (
 	[LocationID] INTEGER NOT NULL, 
 	[ResourceGroupID] INTEGER NULL, 
 	[ResourceName] NVARCHAR(100) NOT NULL, 
-	[Capacity] NUMERIC(9, 2) NOT NULL, 
+	[Capacity] NUMERIC(9, 2) NULL, 
 	[DailyCapacityHours] NUMERIC(5, 2) NULL, 
 	[SortOrder] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 

@@ -43,8 +43,10 @@ def demo_start(now: datetime | None = None) -> datetime:
 
 # パン製品・製品工程・オーダー・下書き計画を含む新規デモデータを登録する。
 def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
-    # 組織を介さず、共通の拠点名で初期データを識別する。
-    location = m.Location(LocationName=DEMO_LOCATION_NAME, CreatedBy=USER)
+    # 共通の拠点名で初期データを識別し、パン工場は分単位に設定する。
+    location = m.Location(
+        LocationName=DEMO_LOCATION_NAME, LocationTimeUnit="MINUTE", CreatedBy=USER,
+    )
     db.add(location)
     db.flush()
 

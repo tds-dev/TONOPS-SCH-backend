@@ -18,7 +18,7 @@ from app.core.db import Base
 from app.models.base import AuditMixin, SoftDeleteMixin, in_check
 from app.models.types import DateTime, String
 
-# 計算設定で許可する時間単位。既存の計算設定の区分を維持する。
+# 拠点と計算設定で許可する時間単位。
 TIME_UNITS = ["MINUTE", "DAY"]
 
 
@@ -27,10 +27,15 @@ class Location(AuditMixin, SoftDeleteMixin, Base):
     """拠点マスタ"""
 
     __tablename__ = "M_Locations"
+    __table_args__ = (
+        CheckConstraint(in_check("LocationTimeUnit", TIME_UNITS), name="LocationTimeUnit"),
+    )
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
     LocationID = Column(Integer, primary_key=True, autoincrement=True)
     # 画面の拠点選択欄に表示する名称。
     LocationName = Column(String(100), nullable=False)
+    # 拠点の計算時間の単位。MINUTEは分単位、DAYは日単位を表す。
+    LocationTimeUnit = Column(String(10), nullable=False)
 
 
 # ---------------------------------------------------------------- カレンダー
@@ -96,8 +101,8 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     # 設備の表示名。関連付けにはResourceIDを使う。
     ResourceName = Column(String(100), nullable=False)
-    # 同時処理できる数量と、一日における稼働上限時間。
-    Capacity = Column(Numeric(9, 2), nullable=False, default=1)
+    # 日単位では同時作業数を未設定にできる。分単位の新規登録は従来どおり1を既定にする。
+    Capacity = Column(Numeric(9, 2).evaluates_none(), nullable=True, default=1)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
     # 画面・ボードでの表示順。
     SortOrder = Column(Integer, nullable=False, default=1)

@@ -30,6 +30,12 @@ def save_calculation_setting(
     )
     if location is None or location.DeleteFlag:
         raise HTTPException(422, "有効な拠点を指定してください。")
+    # 時間単位は拠点設定に固定する。新規の未指定だけ補い、異なる指定は受け付けない。
+    if original is None and "TimeUnit" not in values:
+        current["TimeUnit"] = location.LocationTimeUnit
+        values["TimeUnit"] = location.LocationTimeUnit
+    if current["TimeUnit"] != location.LocationTimeUnit:
+        raise HTTPException(422, "時間単位はロケーションの計算時間の単位と一致させてください。")
     name = current["CalculationSettingName"]
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
         raise HTTPException(422, "設定名は1～100文字で入力してください。")

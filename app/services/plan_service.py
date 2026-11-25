@@ -51,7 +51,10 @@ def create_plan(
     remarks = validate_plan_remarks(remarks)
     if calculation_setting_id is None:
         setting = db.scalars(
-            select(CalculationSetting).where(CalculationSetting.LocationID == location_id).order_by(CalculationSetting.IsDefault.desc())
+            select(CalculationSetting).where(
+                CalculationSetting.LocationID == location_id,
+                CalculationSetting.TimeUnit == location.LocationTimeUnit,
+            ).order_by(CalculationSetting.IsDefault.desc())
         ).first()
         if setting is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "この拠点の計算設定がありません")
@@ -60,6 +63,9 @@ def create_plan(
     setting = db.get(CalculationSetting, calculation_setting_id)
     if setting is None or setting.LocationID != location_id:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ拠点の計算設定を指定してください。")
+    # 新規計画では画面の表示モードと異なる計算条件を使用しない。
+    if setting.TimeUnit != location.LocationTimeUnit:
+        raise HTTPException(422, "ロケーションの計算モードと同じ計算設定を指定してください。")
     if base_plan_id is None and use_master_as_base:
         master = current_master(db, location_id, start_at)
         base_plan_id = master.PlanID if master else None
@@ -104,6 +110,10 @@ def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) ->
         setting = db.get(CalculationSetting, setting_id)
         if setting is None or setting.LocationID != plan.LocationID:
             raise HTTPException(422, "同じ拠点の計算設定を指定してください。")
+        # 計算設定の変更時も新規作成と同じモード制約を守る。
+        location = db.get(Location, plan.LocationID)
+        if setting.TimeUnit != location.LocationTimeUnit:
+            raise HTTPException(422, "ロケーションの計算モードと同じ計算設定を指定してください。")
     conditions_changed = (start, end, setting_id) != (plan.StartAt, plan.EndAt, plan.CalculationSettingID)
     if conditions_changed and db.scalar(select(SolverRun.RunID).where(
         SolverRun.PlanID == plan.PlanID, SolverRun.Status.in_(["QUEUED", "RUNNING"]),

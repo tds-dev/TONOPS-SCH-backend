@@ -62,10 +62,6 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     priority = value("Priority")
     if priority is None or not 1 <= priority <= 2147483647:
         raise HTTPException(422, "優先度は1～2147483647の整数で入力してください。")
-    # 納期が開始可能日時より前になっていないか確認する。出荷日時は任意の情報として保持する。
-    if value("ReleaseAt") is not None and value("DeadLine") is not None and value("ReleaseAt") > value("DeadLine"):
-        raise HTTPException(422, "納期は製造開始可能日時以降に設定してください。")
-
     # 更新操作で所属拠点を変え、タスクと設備の所属が食い違うことを防ぐ。
     location_id = value("LocationID")
     if original is not None and location_id != original.LocationID:
@@ -74,6 +70,14 @@ def validate_order_write(db: Session, original: Order | None, values: dict[str, 
     location = db.get(Location, location_id) if location_id is not None else None
     if location is None or location.DeleteFlag:
         raise HTTPException(422, "有効な拠点を指定してください。")
+    # 日単位では保存済み時刻に左右されず日付を比較し、既存の日時自体は変更しない。
+    release, deadline = value("ReleaseAt"), value("DeadLine")
+    if release is not None and deadline is not None:
+        day_mode = location.LocationTimeUnit == "DAY"
+        invalid_period = release.date() > deadline.date() if day_mode else release > deadline
+        if invalid_period:
+            message = "納期は製造開始可能日以降に設定してください。" if day_mode else "納期は製造開始可能日時以降に設定してください。"
+            raise HTTPException(422, message)
     # 製品はオーダーと同じ拠点のものだけ許可する。
     # 既存参照を変えない編集では、削除済みマスタの参照値を保持できるようにする。
     references_changed = original is None or changed("ProductID")

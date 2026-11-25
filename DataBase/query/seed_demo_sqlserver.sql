@@ -23,11 +23,11 @@ DECLARE @CleanupSql nvarchar(512);
 BEGIN TRY
 BEGIN TRANSACTION;
 
--- M_Locations: 2件
+-- M_Locations: 2件（パン工場は分単位、センシングは日単位）
 SET @IdentityTable = N'M_Locations';
 SET IDENTITY_INSERT [M_Locations] ON;
-INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, N'パン工場', '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
-INSERT INTO [M_Locations] ([LocationID], [LocationName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, N'センシング', '2026-11-19T00:00:00.0000000', N'test', NULL, NULL, 0);
+INSERT INTO [M_Locations] ([LocationID], [LocationName], [LocationTimeUnit], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (1, N'パン工場', N'MINUTE', '2026-11-15T15:12:37.000000', N'seed', '2026-11-15T15:12:37.000000', NULL, 0);
+INSERT INTO [M_Locations] ([LocationID], [LocationName], [LocationTimeUnit], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (2, N'センシング', N'DAY', '2026-11-19T00:00:00.0000000', N'test', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Locations] OFF;
 SET @IdentityTable = NULL;
 
@@ -436,19 +436,14 @@ CROSS APPLY (VALUES
 
 
 -- センシングのマスタ仮データ。トランザクションデータは追加しない。
--- センシング：M_Calendars 10件。月～金の午前・午後を登録し、昼休みと土日は稼働に含めない。
+-- センシング：M_Calendars 5件。月～金は09:00～17:30の1行とし、土日は稼働に含めない。
 SET @IdentityTable = N'M_Calendars';
 SET IDENTITY_INSERT [M_Calendars] ON;
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (13, 2, 1, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (14, 2, 1, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (15, 2, 2, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (16, 2, 2, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (17, 2, 3, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (18, 2, 3, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (19, 2, 4, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (20, 2, 4, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (21, 2, 5, '09:00:00', '12:15:00', N'午前', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (22, 2, 5, '13:15:00', '17:30:00', N'午後', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (13, 2, 1, '09:00:00', '17:30:00', N'通常稼働', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (15, 2, 2, '09:00:00', '17:30:00', N'通常稼働', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (17, 2, 3, '09:00:00', '17:30:00', N'通常稼働', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (19, 2, 4, '09:00:00', '17:30:00', N'通常稼働', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Calendars] ([CalendarID], [LocationID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (21, 2, 5, '09:00:00', '17:30:00', N'通常稼働', '2026-11-19T00:00:00.0000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Calendars] OFF;
 SET @IdentityTable = NULL;
 
@@ -523,7 +518,7 @@ INSERT INTO [M_Workers] ([WorkerID], [LocationID], [WorkerName], [MaxDailyQuanti
 SET IDENTITY_INSERT [M_Workers] OFF;
 SET @IdentityTable = NULL;
 
--- センシング：M_WorkerCalendars 60件（6名×月～金の午前・午後）
+-- センシング：M_WorkerCalendars 30件（6名×月～金。拠点カレンダーの09:00～17:30をコピー）
 INSERT INTO [M_WorkerCalendars] ([WorkerID], [DayOfWeek], [StartTime], [EndTime], [WorkName], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag])
 SELECT w.WorkerID, c.DayOfWeek, c.StartTime, c.EndTime, c.WorkName, '2026-11-24T00:00:00.0000000', N'seed', NULL, NULL, 0
 FROM [M_Workers] w

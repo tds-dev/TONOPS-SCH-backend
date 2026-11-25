@@ -31,7 +31,12 @@ def _location(db: Session, location_id: int | None) -> Location:
 # 設備の所属拠点と一日における稼働上限時間を確認する。勤務は所属拠点から共通で参照する。
 def validate_resource_location_write(db: Session, original: Resource | None, values: dict[str, Any]) -> None:
     location_id = _value(original, values, "LocationID")
-    _location(db, location_id)
+    location = _location(db, location_id)
+    # 日単位は同時作業数のNULLを許可し、分単位の必須条件は維持する。
+    capacity = _value(original, values, "Capacity") if original is not None or "Capacity" in values else 1
+    if capacity is None:
+        if location.LocationTimeUnit != "DAY":
+            raise HTTPException(422, "分単位の同時作業数は1以上の整数で指定してください。")
     # 未送信なら既存値を保持し、NULLの送信は上限設定の解除として受け付ける。
     if "DailyCapacityHours" in values and values["DailyCapacityHours"] is not None:
         hours = Decimal(str(values["DailyCapacityHours"]))
