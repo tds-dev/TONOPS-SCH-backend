@@ -505,16 +505,14 @@ INSERT INTO [M_ResourceGroups] ([ResourceGroupID], [LocationID], [GroupName], [S
 SET IDENTITY_INSERT [M_ResourceGroups] OFF;
 SET @IdentityTable = NULL;
 
--- センシング：M_Resources 7件（既存2件＋追加5件。Capacity・DailyCapacityQuantityはNULL）
+-- センシング：M_Resources 5件（Capacity・DailyCapacityQuantityはNULL）
 SET @IdentityTable = N'M_Resources';
 SET IDENTITY_INSERT [M_Resources] ON;
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 2, NULL, N'MFC5連治具', NULL, NULL, NULL, 1, '2026-11-19T14:33:00.0000000', N'system', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (8, 2, NULL, N'ガス校正5連治具', NULL, NULL, NULL, 2, '2026-11-19T14:33:13.0000000', N'system', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (9, 2, 4, N'５連治具（Aライン）', NULL, NULL, NULL, 3, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (10, 2, 4, N'５連治具（Bライン）', NULL, NULL, NULL, 4, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (11, 2, 4, N'５連治具（Cライン）', NULL, NULL, NULL, 5, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (12, 2, NULL, N'MFC5連治具（Dライン）', NULL, NULL, NULL, 6, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
-INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (13, 2, NULL, N'MFC5連治具（静電気対策ライン）', NULL, NULL, NULL, 7, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (7, 2, 4, N'５連治具（Aライン）', NULL, NULL, NULL, 1, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (8, 2, 4, N'５連治具（Bライン）', NULL, NULL, NULL, 2, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (9, 2, 4, N'５連治具（Cライン）', NULL, NULL, NULL, 3, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (10, 2, NULL, N'MFC5連治具（Dライン）', NULL, NULL, NULL, 4, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
+INSERT INTO [M_Resources] ([ResourceID], [LocationID], [ResourceGroupID], [ResourceName], [Capacity], [DailyCapacityHours], [DailyCapacityQuantity], [SortOrder], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy], [DeleteFlag]) VALUES (11, 2, NULL, N'MFC5連治具（静電気対策ライン）', NULL, NULL, NULL, 5, '2026-11-26T00:00:00.0000000', N'seed', NULL, NULL, 0);
 SET IDENTITY_INSERT [M_Resources] OFF;
 SET @IdentityTable = NULL;
 
