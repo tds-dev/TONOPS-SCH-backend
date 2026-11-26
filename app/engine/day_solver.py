@@ -68,7 +68,7 @@ class _DayBuildContext:
         return int(raw)
 
 
-# タスクを指定作業者・開始稼働日で実行できるか判定する（出勤日・許可曜日・計画期間内）。
+# タスクを指定作業者・開始稼働日で実行できるか判定する（出勤日・許可曜日・連休前制限・計画期間内）。
 def _slot_allowed(problem: DayProblem, task: DayTask, worker_id: int, start_day: int) -> bool:
     worker = problem.workers.get(worker_id)
     if worker is None:
@@ -81,6 +81,11 @@ def _slot_allowed(problem: DayProblem, task: DayTask, worker_id: int, start_day:
         if d not in worker.available_days:
             return False
         if allowed_wd is not None and weekday_number(problem.working_days[d]) not in allowed_wd:
+            return False
+    # 工程終了直後に続く連休日数（拠点休日＋担当作業者の休み）が許容上限を超える配置を禁止する。
+    if task.max_holidays_after is not None:
+        holidays = problem.worker_holidays_after(worker_id, end_day)
+        if holidays is not None and holidays > task.max_holidays_after:
             return False
     return True
 

@@ -213,6 +213,7 @@ class ProductProcess(AuditMixin, Base):
         CheckConstraint("DurationDays >= 1", name="DurationDays"),
         CheckConstraint("MinLagDays >= 0", name="MinLagDays"),
         CheckConstraint("MaxLagDays IS NULL OR MaxLagDays >= MinLagDays", name="LagDaysRange"),
+        CheckConstraint("MaxHolidaysAfter IS NULL OR MaxHolidaysAfter >= 0", name="MaxHolidaysAfter"),
         CheckConstraint(
             "WeekdayRestrictionStartAt IS NULL OR WeekdayRestrictionEndAt IS NULL OR "
             "WeekdayRestrictionStartAt <= WeekdayRestrictionEndAt", name="WeekdayRestrictionPeriod",
@@ -240,6 +241,8 @@ class ProductProcess(AuditMixin, Base):
     DurationDays = Column(Integer, nullable=False, default=1, server_default=text("1"))
     MinLagDays = Column(Integer, nullable=False, default=0, server_default=text("0"))
     MaxLagDays = Column(Integer, nullable=True)
+    # 工程終了直後に許容する最大連休日数（拠点休日と担当作業者の休みを含む）。NULLは制限なし。
+    MaxHolidaysAfter = Column(Integer, nullable=True)
     # 許可曜日は日曜0～土曜6。新規工程は全曜日を許可し、工程ごとに独立した一覧を持つ。
     AllowedWeekdaysJSON = Column(JSON, nullable=False, default=lambda: list(range(7)),
                                  server_default=text("'[0,1,2,3,4,5,6]'"))

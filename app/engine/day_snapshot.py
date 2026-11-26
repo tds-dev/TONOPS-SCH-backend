@@ -145,10 +145,19 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
         # 作業者の通常勤務が未登録の場合は拠点カレンダーを既定として本人の例外休日だけ差し引く。
         w_work = worker_cals[w.WorkerID] if worker_cals[w.WorkerID] else loc_work
         combined_excs = loc_excs + worker_excs[w.WorkerID]
-        w_active = _active_dates(w_work, combined_excs, plan_first, plan_last, tz)
-        avail = {date_to_ext[d] for d in w_active if d in date_to_ext and 0 <= date_to_ext[d] < len(working_days)}
+        # 計画最終日の連休前判定にも対応するため、後続バッファ末尾まで出勤可能日を展開する。
+        w_active = _active_dates(w_work, combined_excs, plan_first, buf_last, tz)
+        # 拠点の稼働日と作業者本人の出勤可能日の両方を満たす日だけを採用する。
+        w_working_dates = sorted(w_active & loc_active)
+        avail = {date_to_ext[d] for d in w_working_dates if d in date_to_ext and 0 <= date_to_ext[d] < len(working_days)}
         max_qty = scale_qty(w.MaxDailyQuantity) if w.MaxDailyQuantity is not None else None
-        workers[w.WorkerID] = DayWorker(id=w.WorkerID, name=w.WorkerName, max_daily_qty=max_qty, available_days=avail)
+        workers[w.WorkerID] = DayWorker(
+            id=w.WorkerID,
+            name=w.WorkerName,
+            max_daily_qty=max_qty,
+            available_days=avail,
+            available_dates=w_working_dates,
+        )
 
     # ---- オーダーと製品・工程・タスクの読み込み
     order_filter = (
@@ -335,6 +344,7 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
             eligible_worker_ids=candidates,
             release_day_idx=release_idx,
             allowed_weekdays=allowed_weekdays,
+            max_holidays_after=int(pp.MaxHolidaysAfter) if pp is not None and pp.MaxHolidaysAfter is not None else None,
             deadline_day_idx=deadline_idx,
         )
 
@@ -381,4 +391,5 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
         tasks=tasks,
         dependencies=dependencies,
         weights=weights,
+        buffer_end_date=buf_last,
     )

@@ -3,6 +3,7 @@
 時刻は計画期間内の稼働日インデックス（0 .. num_days - 1）で表す。
 数量は小数第3位まで誤差なく整数演算するため QTY_SCALE（1000倍）で保持する。
 """
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -35,6 +36,8 @@ class DayWorker:
     max_daily_qty: int | None
     # 計画期間内で出勤可能な稼働日インデックスの集合。
     available_days: set[int] = field(default_factory=set)
+    # 計画期間と後続バッファを含む出勤可能日の昇順一覧（連休前制限の判定に使用）。
+    available_dates: list[date] = field(default_factory=list)
 
 
 @dataclass
@@ -88,6 +91,8 @@ class DayTask:
     release_day_idx: int = 0
     # 工程の許可曜日（日曜0～土曜6）。Noneは制限なし。
     allowed_weekdays: list[int] | None = None
+    # 工程終了直後に許容する最大連休日数（拠点休日と担当作業者の休みを含む）。Noneは制限なし。
+    max_holidays_after: int | None = None
     # タスク個別の完了期限（拡張稼働日インデックス）。
     deadline_day_idx: int | None = None
     lock: DayLock | None = None
@@ -122,10 +127,27 @@ class DayProblem:
     tasks: dict[int, DayTask]
     dependencies: list[DayDependency] = field(default_factory=list)
     weights: dict[str, int] = field(default_factory=dict)
+    # 後続バッファの最終日。作業者の出勤日が後続バッファ内に存在しない場合の連続休業日数算出に使う。
+    buffer_end_date: date | None = None
 
     @property
     def num_days(self) -> int:
         return len(self.working_days)
+
+    # 指定作業者が終了稼働日 end_day に作業を終えた直後に続く連休日数を返す（算出不可時はNone）。
+    def worker_holidays_after(self, worker_id: int, end_day: int) -> int | None:
+        worker = self.workers.get(worker_id)
+        end_date = self.ext_idx_to_date.get(end_day)
+        if worker is None or end_date is None or not worker.available_dates:
+            return None
+        # end_date より後で最初に出勤可能な日を探し、間の暦休日数を求める。
+        idx = bisect_right(worker.available_dates, end_date)
+        if idx < len(worker.available_dates):
+            return max(0, (worker.available_dates[idx] - end_date).days - 1)
+        # 後続バッファ末尾まで出勤日がない場合は、バッファ末尾まで連続休業とみなす。
+        if self.buffer_end_date is not None and self.buffer_end_date > end_date:
+            return (self.buffer_end_date - end_date).days
+        return None
 
     # 稼働日インデックスからDB保存用の開始日時（当日 00:00:00）を返す。
     def day_to_start_dt(self, day_idx: int) -> datetime:

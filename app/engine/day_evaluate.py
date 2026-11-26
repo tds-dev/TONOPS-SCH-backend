@@ -75,6 +75,16 @@ def check_day_schedule(problem: DayProblem, assignments: list[SAssignment]) -> l
                         f"工程の曜日制限: {task.name} は {allowed_label} のみ実行可能です（{problem.fmt_day(bad_days[0])}）",
                         task_id=task.id,
                     ))
+            # 工程終了直後の連休日数（拠点休日＋担当作業者の休み）が上限を超える配置を違反として検出する。
+            if task.max_holidays_after is not None:
+                holidays = problem.worker_holidays_after(a.worker_id, a.end)
+                if holidays is not None and holidays > task.max_holidays_after:
+                    out.append(Violation(
+                        "HARD", "MAX_HOLIDAYS_AFTER",
+                        f"連休前制限: {task.name} は終了後の連休が{task.max_holidays_after}日以内の日のみ配置可能です"
+                        f"（{problem.fmt_day(a.end)}の直後は{wname}の休みが{holidays}日間）",
+                        task_id=task.id,
+                    ))
 
     # 同一オーダー×同一工程区分の同一作業者チェック
     group_workers: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)

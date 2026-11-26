@@ -199,11 +199,12 @@ CREATE TABLE [M_ProductProcesses] (
 	[ProcessingMinutes] NUMERIC(12, 4) NOT NULL, 
 	[MinLagAfterMin] INTEGER NOT NULL, 
 	[MaxLagAfterMin] INTEGER NULL, 
-	-- 日単位計算の標準前倒し稼働日数、所要稼働日数、次工程までの稼働日間隔。
+	-- 日単位計算の標準前倒し稼働日数、所要稼働日数、次工程までの稼働日間隔、終了直後の最大許容連休日数。
 	[StandardOffsetDays] INTEGER NULL, 
 	[DurationDays] INTEGER NOT NULL DEFAULT 1, 
 	[MinLagDays] INTEGER NOT NULL DEFAULT 0, 
 	[MaxLagDays] INTEGER NULL, 
+	[MaxHolidaysAfter] INTEGER NULL, 
 	[AllowedWeekdaysJSON] NVARCHAR(max) NOT NULL DEFAULT '[0,1,2,3,4,5,6]', 
 	[WeekdayRestrictionEnabled] BIT NOT NULL DEFAULT 1, 
 	[WeekdayRestrictionStartAt] DATETIME2(7) NULL, 
@@ -218,6 +219,7 @@ CREATE TABLE [M_ProductProcesses] (
 	CONSTRAINT [CK_M_ProductProcesses_DurationDays] CHECK (DurationDays >= 1), 
 	CONSTRAINT [CK_M_ProductProcesses_MinLagDays] CHECK (MinLagDays >= 0), 
 	CONSTRAINT [CK_M_ProductProcesses_LagDaysRange] CHECK (MaxLagDays IS NULL OR MaxLagDays >= MinLagDays), 
+	CONSTRAINT [CK_M_ProductProcesses_MaxHolidaysAfter] CHECK (MaxHolidaysAfter IS NULL OR MaxHolidaysAfter >= 0), 
 	CONSTRAINT [CK_M_ProductProcesses_WeekdayRestrictionPeriod] CHECK (WeekdayRestrictionStartAt IS NULL OR WeekdayRestrictionEndAt IS NULL OR WeekdayRestrictionStartAt <= WeekdayRestrictionEndAt), 
 	CONSTRAINT [FK_M_ProductProcesses_ProductID_M_Product] FOREIGN KEY([ProductID]) REFERENCES [M_Product] ([ProductID]) ON DELETE CASCADE, 
 	CONSTRAINT [FK_M_ProductProcesses_ProcessGroupID_M_ProcessGroups] FOREIGN KEY([ProcessGroupID]) REFERENCES [M_ProcessGroups] ([ProcessGroupID])

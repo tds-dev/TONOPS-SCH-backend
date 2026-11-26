@@ -102,6 +102,10 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
         _integer(max_lag_days, "次工程までの最大稼働日間隔")
         if max_lag_days < min_lag_days:
             raise HTTPException(422, "最大稼働日間隔は最小稼働日間隔以上にしてください。")
+    # 終了直後の最大許容連休日数を検証する。NULLは制限なし。
+    max_holidays_after = _value(original, values, "MaxHolidaysAfter")
+    if max_holidays_after is not None:
+        _integer(max_holidays_after, "終了後の最大許容連休日数")
     # 工程番号の重複は専用保存処理で交換する。範囲は製品の工程数に合わせて確認する。
     validate_weekday_settings(original, values)
     validate_process_time(original, values)
