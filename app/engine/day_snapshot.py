@@ -12,6 +12,7 @@ from app.engine.day_problem import (
     DayLock,
     DayOrder,
     DayProblem,
+    DayResource,
     DayTask,
     DayWorker,
     scale_qty,
@@ -21,6 +22,9 @@ from app.models.masters import (
     Location,
     Product,
     ProductProcess,
+    ProductProcessResource,
+    Resource,
+    ResourceGroup,
     Worker,
     WorkerCalendar,
     WorkerCalendarException,
@@ -159,6 +163,33 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
             available_dates=w_working_dates,
         )
 
+    # ---- 設備・治具リソースとグループ（工程にリソース候補がある場合のみ日単位割付に使用）
+    res_group_rows = db.scalars(
+        select(ResourceGroup)
+        .where(ResourceGroup.LocationID == location.LocationID, ResourceGroup.DeleteFlag == false())
+        .order_by(ResourceGroup.SortOrder, ResourceGroup.ResourceGroupID)
+    ).all()
+    res_group_map = {g.ResourceGroupID: g for g in res_group_rows}
+    res_rows = db.scalars(
+        select(Resource)
+        .where(Resource.LocationID == location.LocationID, Resource.DeleteFlag == false())
+        .order_by(Resource.SortOrder, Resource.ResourceID)
+    ).all()
+    resources: dict[int, DayResource] = {}
+    group_members: dict[int, list[int]] = {}
+    for r in res_rows:
+        grp = res_group_map.get(r.ResourceGroupID) if r.ResourceGroupID is not None else None
+        resources[r.ResourceID] = DayResource(
+            id=r.ResourceID,
+            name=r.ResourceName,
+            group_id=r.ResourceGroupID,
+            group_name=grp.GroupName if grp else None,
+            daily_capacity_qty=scale_qty(r.DailyCapacityQuantity) if r.DailyCapacityQuantity is not None else None,
+            capacity=max(1, int(r.Capacity)) if r.Capacity is not None else None,
+        )
+        if r.ResourceGroupID is not None:
+            group_members.setdefault(r.ResourceGroupID, []).append(r.ResourceID)
+
     # ---- オーダーと製品・工程・タスクの読み込み
     order_filter = (
         Order.LocationID == location.LocationID,
@@ -254,6 +285,27 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
     for ppid in skill_workers:
         skill_workers[ppid].sort()
 
+    # ---- 工程リソース候補（M_ProductProcessResources：登録がある工程のみリソースを割り当てる）
+    process_requires_resource: set[int] = set()
+    process_resources: dict[int, list[int]] = {}
+    if processes:
+        for batch in chunks(processes):
+            for ppr in db.scalars(
+                select(ProductProcessResource)
+                .where(ProductProcessResource.ProductProcessID.in_(batch))
+                .order_by(ProductProcessResource.ProductProcessResourceID)
+            ):
+                process_requires_resource.add(ppr.ProductProcessID)
+                targets = (
+                    [ppr.ResourceID]
+                    if ppr.ResourceID is not None
+                    else group_members.get(ppr.ResourceGroupID, [])
+                )
+                dest = process_resources.setdefault(ppr.ProductProcessID, [])
+                for rid in targets:
+                    if rid in resources and rid not in dest:
+                        dest.append(rid)
+
     # ---- 前回の割付（自計画優先、なければ元計画）
     def assignments_of(plan_id: int | None) -> dict[int, PlanAssignment]:
         if plan_id is None:
@@ -342,6 +394,8 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
             standard_day_idx=std_day_idx,
             duration_days=dur_days,
             eligible_worker_ids=candidates,
+            requires_resource=pp.ProductProcessID in process_requires_resource if pp is not None else False,
+            eligible_resource_ids=list(process_resources.get(pp.ProductProcessID, [])) if pp is not None else [],
             release_day_idx=release_idx,
             allowed_weekdays=allowed_weekdays,
             max_holidays_after=int(pp.MaxHolidaysAfter) if pp is not None and pp.MaxHolidaysAfter is not None else None,
@@ -355,7 +409,7 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
             end_d = (prev.EndAt - timedelta(seconds=1)).date() if prev.EndAt.time() == time(0, 0) else prev.EndAt.date()
             e_idx = date_to_ext.get(end_d)
             if s_idx is not None and e_idx is not None and e_idx >= s_idx:
-                pos = DayLock(prev.WorkerID, s_idx, e_idx)
+                pos = DayLock(prev.WorkerID, s_idx, e_idx, resource_id=prev.ResourceID)
                 frozen = prev is base.get(t.TaskID) and prev.StartAt < frozen_dt
                 if prev.IsLocked or frozen:
                     dtask.lock = pos
@@ -392,4 +446,5 @@ def build_day_problem(db: Session, plan: Plan, scope: str = "FULL") -> DayProble
         dependencies=dependencies,
         weights=weights,
         buffer_end_date=buf_last,
+        resources=resources,
     )

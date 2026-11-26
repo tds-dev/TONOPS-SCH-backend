@@ -81,7 +81,7 @@ def write_evaluation(db: Session, plan: Plan, problem: Problem, assignments: lis
     _replace_evaluation(db, plan, compute_kpis(problem, checked), check_schedule(problem, checked), user)
 
 
-# 日次バケット計算の結果を T_PlanAssignments（ResourceID=NULL, WorkerID設定）へ保存し評価を更新する。
+# 日次バケット計算の結果を T_PlanAssignments（WorkerID＋必要に応じてResourceID設定）へ保存し評価を更新する。
 def write_day_results(
     db: Session, plan: Plan, problem: DayProblem, assignments: list[SAssignment], user: str
 ) -> None:
@@ -99,7 +99,7 @@ def write_day_results(
         db.add(PlanAssignment(
             PlanID=plan.PlanID,
             TaskID=a.task_id,
-            ResourceID=None,
+            ResourceID=a.resource_id,
             WorkerID=a.worker_id,
             StartAt=problem.day_to_start_dt(a.start),
             EndAt=problem.day_to_end_dt(a.end),

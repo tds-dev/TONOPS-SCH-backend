@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.db import chunks
 from app.core.timeutil import to_jst_naive, as_jst
 from app.engine.compare import Slot, assignment_diff, kpi_deltas
+from app.engine.solve import is_day_mode
 from app.models.masters import Product, Resource, ResourceGroup, Location, Worker
 from app.models.transactions import Order, Plan, PlanAssignment, PlanKpi, Task
 from app.schemas.base import coerce
@@ -48,17 +49,23 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     def kpis(pid):
         return {k.KpiKey: coerce(k.KpiValue) for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == pid))}
 
-    # 指定した計画の割付をタスクごとにまとめる（日次モードはWorkerIDを割付先として比較する）。
+    # 日単位モードではResourceIDが併記されていてもWorkerIDを割付先として比較する。
+    worker_mode = is_day_mode(db, plan_a) or is_day_mode(db, plan_b)
+
+    # 指定した計画の割付をタスクごとにまとめる。
     def slots(pid):
         rows = db.scalars(select(PlanAssignment).where(PlanAssignment.PlanID == pid)).all()
         return {
-            a.TaskID: Slot(a.ResourceID if a.ResourceID is not None else a.WorkerID, a.StartAt, a.EndAt)
+            a.TaskID: Slot(
+                (a.WorkerID if worker_mode else (a.ResourceID if a.ResourceID is not None else a.WorkerID)),
+                a.StartAt,
+                a.EndAt,
+            )
             for a in rows
-        }, any(a.ResourceID is None and a.WorkerID is not None for a in rows)
+        }
 
-    sa, a_day = slots(a_id)
-    sb, b_day = slots(b_id)
-    worker_mode = a_day or b_day
+    sa = slots(a_id)
+    sb = slots(b_id)
     changes = assignment_diff(sa, sb)
     task_ids = {c.task_id for c in changes}
     info = {

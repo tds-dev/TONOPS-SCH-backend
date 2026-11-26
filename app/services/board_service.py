@@ -166,12 +166,17 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
         raw_order = order_rows.get(dorder.id)
         prod = product_map.get(dorder.product_id) if dorder.product_id is not None else None
         worker = problem.workers[a.WorkerID]
+        res_obj = problem.resources.get(a.ResourceID) if a.ResourceID is not None else None
         qty_val = coerce(raw_order.Quantity) if raw_order else None
         events.append({
             "id": a.AssignmentID,
             "resource": a.WorkerID,
             "workerId": a.WorkerID,
             "workerName": worker.name,
+            "resourceId": a.ResourceID,
+            "resourceName": res_obj.name if res_obj else None,
+            "requiresResource": task.requires_resource,
+            "eligibleResourceIds": task.eligible_resource_ids,
             "start": _local(a.StartAt, tz),
             "end": _local(a.EndAt, tz),
             "text": f"{dorder.no} {task.process_name}",
@@ -225,6 +230,8 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
             "wbsNumber": dorder.no,
             "name": task.name,
             "durations": {str(wid): task.duration_days for wid in task.eligible_worker_ids},
+            "requiresResource": task.requires_resource,
+            "eligibleResourceIds": task.eligible_resource_ids,
             "deadLine": _local(ship_or_due, tz) if ship_or_due else None,
             "colorValue": str(dorder.product_id) if dorder.product_id is not None else dorder.no,
         })
@@ -294,6 +301,7 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
                     else None
                 )
                 wname = problem.workers[a.WorkerID].name if a.WorkerID in problem.workers else None
+                res_obj = problem.resources.get(a.ResourceID) if a.ResourceID is not None else None
                 if wname and wname not in worker_names_ordered:
                     worker_names_ordered.append(wname)
                 end_disp_date = (
@@ -307,6 +315,10 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
                     "rowVer": a.RowVer,
                     "workerId": a.WorkerID,
                     "workerName": wname,
+                    "resourceId": a.ResourceID,
+                    "resourceName": res_obj.name if res_obj else None,
+                    "requiresResource": task.requires_resource,
+                    "eligibleResourceIds": task.eligible_resource_ids,
                     "date": a.StartAt.date().isoformat(),
                     "endDate": end_disp_date.isoformat(),
                     "label": a.StartAt.strftime("%m/%d"),
@@ -323,6 +335,10 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
                     "rowVer": None,
                     "workerId": None,
                     "workerName": None,
+                    "resourceId": None,
+                    "resourceName": None,
+                    "requiresResource": task.requires_resource,
+                    "eligibleResourceIds": task.eligible_resource_ids,
                     "date": None,
                     "endDate": None,
                     "label": "未割付",
@@ -403,6 +419,61 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
             "loads": loads_by_date,
         })
 
+    # 拠点のリソース一覧と、リソース×稼働日ごとの台数・同時タスク件数サマリを構築する。
+    equipment_resources = [
+        {
+            "id": r.id,
+            "name": r.name,
+            "groupId": r.group_id,
+            "groupName": r.group_name,
+            "dailyCapacityQuantity": round(r.daily_capacity_qty / QTY_SCALE, 3) if r.daily_capacity_qty is not None else None,
+            "capacity": r.capacity,
+        }
+        for r in problem.resources.values()
+    ]
+    res_qty_scaled: dict[tuple[int, int], int] = defaultdict(int)
+    res_cnt: dict[tuple[int, int], int] = defaultdict(int)
+    for a in assign_rows:
+        if a.ResourceID is None or a.ResourceID not in problem.resources:
+            continue
+        task = problem.tasks.get(a.TaskID)
+        if task is None:
+            continue
+        dorder = problem.orders.get(task.order_id)
+        qty_s = dorder.quantity_scaled if dorder is not None and dorder.quantity_scaled > 0 else 0
+        s_idx = problem.dt_to_day_idx(a.StartAt)
+        e_idx = problem.end_dt_to_day_idx(a.EndAt)
+        if s_idx is None or e_idx is None:
+            continue
+        for d_idx in range(s_idx, e_idx + 1):
+            if 0 <= d_idx < problem.num_days:
+                res_cnt[(a.ResourceID, d_idx)] += 1
+                if qty_s > 0:
+                    res_qty_scaled[(a.ResourceID, d_idx)] += qty_s
+
+    resource_loads = []
+    for r in problem.resources.values():
+        max_qty = round(r.daily_capacity_qty / QTY_SCALE, 3) if r.daily_capacity_qty is not None else None
+        r_loads_by_date: dict[str, dict] = {}
+        for d_idx, d in enumerate(problem.working_days):
+            used_s = res_qty_scaled.get((r.id, d_idx), 0)
+            used_c = res_cnt.get((r.id, d_idx), 0)
+            over_qty = r.daily_capacity_qty is not None and used_s > r.daily_capacity_qty
+            over_cnt = r.capacity is not None and used_c > r.capacity
+            r_loads_by_date[d.isoformat()] = {
+                "usedQty": round(used_s / QTY_SCALE, 3),
+                "usedCount": used_c,
+                "over": over_qty or over_cnt,
+            }
+        resource_loads.append({
+            "resourceId": r.id,
+            "resourceName": r.name,
+            "groupName": r.group_name,
+            "dailyCapacityQuantity": max_qty,
+            "capacity": r.capacity,
+            "loads": r_loads_by_date,
+        })
+
     kpis = normalize_kpis({
         k.KpiKey: coerce(k.KpiValue)
         for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))
@@ -441,6 +512,8 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
             "processColumns": process_columns,
             "orders": daily_orders,
             "workerLoads": worker_loads,
+            "equipmentResources": equipment_resources,
+            "resourceLoads": resource_loads,
         },
     }
 

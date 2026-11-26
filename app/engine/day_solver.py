@@ -6,7 +6,8 @@
   * 同一オーダー×同一工程区分のタスクは同一作業者へ割り当てる
   * 同一オーダーの隣接工程は MinLagDays / MaxLagDays の稼働日間隔を守る
   * 作業者×稼働日ごとの1日作業台数上限（工程区分先頭工程のみカウント、部品分譲除外）を守る
-  * ロック済みタスクは位置と作業者を固定する
+  * リソース候補がある工程は候補リソースを1つ割り当て、リソースの1日稼働上限数量・同時作業数を守る
+  * ロック済みタスクは位置・作業者・リソースを固定する
 目的関数:
   * 未割付の最小化 ＞ 出荷日超過（出荷日−1稼働日超）の最小化 ＞
     標準日からの後ろ倒し（重）＞ 標準日からの前倒し（軽）＞ 安定性
@@ -46,6 +47,8 @@ class _DayTaskVars:
     worker_vars: dict[int, Any] = field(default_factory=dict)
     # (worker_id, start_day_idx) -> BoolVar
     slot_vars: dict[tuple[int, int], Any] = field(default_factory=dict)
+    # resource_id -> BoolVar（リソース必須工程のみ作成）
+    resource_vars: dict[int, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -108,6 +111,10 @@ def _add_tasks(ctx: _DayBuildContext) -> None:
             slot_var = m.NewBoolVar(f"dx_{task.id}_{lk.worker_id}_{lk.start_day}")
             m.Add(slot_var == 1)
             tv.slot_vars[(lk.worker_id, lk.start_day)] = slot_var
+            if lk.resource_id is not None:
+                r_var = m.NewBoolVar(f"dr_{task.id}_{lk.resource_id}")
+                m.Add(r_var == 1)
+                tv.resource_vars[lk.resource_id] = r_var
             ctx.task_vars[task.id] = tv
             continue
 
@@ -129,7 +136,8 @@ def _add_tasks(ctx: _DayBuildContext) -> None:
                 by_worker[wid].append(x)
                 all_slots.append((d, x))
 
-        if all_slots:
+        resource_ready = (not task.requires_resource) or bool(task.eligible_resource_ids)
+        if all_slots and resource_ready:
             m.Add(sum(x for _, x in all_slots) == sched)
             # 開始日と終了日を割付スロットと厳密に結び付ける。
             m.Add(s_day == sum(d * x for d, x in all_slots)).OnlyEnforceIf(sched)
@@ -138,9 +146,18 @@ def _add_tasks(ctx: _DayBuildContext) -> None:
                 w_var = m.NewBoolVar(f"dw_{task.id}_{wid}")
                 m.Add(w_var == sum(xs))
                 tv.worker_vars[wid] = w_var
+            # リソース候補が登録された工程は、割付時に候補リソースからちょうど1つを選ぶ。
+            if task.requires_resource:
+                for rid in task.eligible_resource_ids:
+                    r_var = m.NewBoolVar(f"dr_{task.id}_{rid}")
+                    tv.resource_vars[rid] = r_var
+                m.Add(sum(tv.resource_vars.values()) == sched)
         else:
             m.Add(sched == 0)
-            ctx.notes.append(f"task {task.id}: no usable worker/day slot")
+            if not all_slots:
+                ctx.notes.append(f"task {task.id}: no usable worker/day slot")
+            else:
+                ctx.notes.append(f"task {task.id}: no usable resource")
 
         # 前回計画の位置があれば初期解ヒントとして与える。
         if task.hint is not None and (task.hint.worker_id, task.hint.start_day) in tv.slot_vars:
@@ -148,6 +165,9 @@ def _add_tasks(ctx: _DayBuildContext) -> None:
             m.AddHint(s_day, task.hint.start_day)
             for key, x in tv.slot_vars.items():
                 m.AddHint(x, 1 if key == (task.hint.worker_id, task.hint.start_day) else 0)
+            if task.hint.resource_id is not None and task.hint.resource_id in tv.resource_vars:
+                for rid, rv in tv.resource_vars.items():
+                    m.AddHint(rv, 1 if rid == task.hint.resource_id else 0)
 
         ctx.task_vars[task.id] = tv
 
@@ -234,6 +254,82 @@ def _add_daily_capacity(ctx: _DayBuildContext) -> None:
         m.Add(sum(qty * x for x, qty in terms) <= remaining)
 
 
+# リソース×稼働日ごとの1日稼働上限数量（DailyCapacityQuantity）と同時作業数（Capacity）制約を追加する。
+def _add_resource_daily_capacity(ctx: _DayBuildContext) -> None:
+    m, p = ctx.model, ctx.problem
+    locked_qty: dict[tuple[int, int], int] = defaultdict(int)
+    locked_cnt: dict[tuple[int, int], int] = defaultdict(int)
+    free_qty_terms: dict[tuple[int, int], list[tuple[Any, int]]] = defaultdict(list)
+    free_cnt_terms: dict[tuple[int, int], list[Any]] = defaultdict(list)
+
+    for tv in ctx.task_vars.values():
+        task = tv.task
+        order = p.orders.get(task.order_id)
+        qty = order.quantity_scaled if order is not None and order.quantity_scaled > 0 else 0
+
+        if task.lock is not None:
+            lk = task.lock
+            if lk.resource_id is None:
+                continue
+            for d in range(lk.start_day, lk.end_day + 1):
+                if 0 <= d < p.num_days:
+                    locked_cnt[(lk.resource_id, d)] += 1
+                    if qty > 0:
+                        locked_qty[(lk.resource_id, d)] += qty
+            continue
+
+        if not tv.resource_vars:
+            continue
+        # 上限（台数または件数）が設定されている候補リソースだけ占有変数を作成する。
+        bounded_rids = [
+            rid for rid in tv.resource_vars
+            if rid in p.resources and (
+                p.resources[rid].daily_capacity_qty is not None or p.resources[rid].capacity is not None
+            )
+        ]
+        if not bounded_rids:
+            continue
+
+        # タスクが各稼働日 d に占有しているかを1つのブール変数へまとめる。
+        day_slots: dict[int, list[Any]] = defaultdict(list)
+        for (_wid, start_d), x in tv.slot_vars.items():
+            for d in range(start_d, start_d + task.duration_days):
+                if 0 <= d < p.num_days:
+                    day_slots[d].append(x)
+
+        for d, xs in day_slots.items():
+            day_act = m.NewBoolVar(f"dda_{task.id}_{d}")
+            m.Add(day_act == sum(xs))
+            for rid in bounded_rids:
+                rv = tv.resource_vars[rid]
+                # リソース選択（rv）と稼働日占有（day_act）の論理積を線形制約で表現する。
+                used = m.NewBoolVar(f"dru_{task.id}_{rid}_{d}")
+                m.Add(used <= rv)
+                m.Add(used <= day_act)
+                m.Add(used >= rv + day_act - 1)
+                res = p.resources[rid]
+                if res.daily_capacity_qty is not None and qty > 0:
+                    free_qty_terms[(rid, d)].append((used, qty))
+                if res.capacity is not None:
+                    free_cnt_terms[(rid, d)].append(used)
+
+    # 1日の稼働上限数量制約（リソースを使用する各工程のオーダー数量を合計）。
+    for (rid, d), terms in free_qty_terms.items():
+        res = p.resources.get(rid)
+        if res is None or res.daily_capacity_qty is None:
+            continue
+        remaining = max(0, res.daily_capacity_qty - locked_qty.get((rid, d), 0))
+        m.Add(sum(qty * u for u, qty in terms) <= remaining)
+
+    # 1日の同時作業数制約（リソースを使用する同日タスク件数を合計）。
+    for (rid, d), terms in free_cnt_terms.items():
+        res = p.resources.get(rid)
+        if res is None or res.capacity is None:
+            continue
+        remaining = max(0, res.capacity - locked_cnt.get((rid, d), 0))
+        m.Add(sum(terms) <= remaining)
+
+
 # 未割付・出荷日超過・標準日からのずれ（前倒し優先）・安定性の目的関数を組み立てる。
 def _add_objective(ctx: _DayBuildContext) -> None:
     m, p = ctx.model, ctx.problem
@@ -305,6 +401,10 @@ def _add_objective(ctx: _DayBuildContext) -> None:
             w_var = tv.worker_vars.get(task.hint.worker_id)
             if w_var is not None:
                 ctx.add_penalty(1 - w_var, stab_w * 30)
+            if task.hint.resource_id is not None:
+                r_var = tv.resource_vars.get(task.hint.resource_id)
+                if r_var is not None:
+                    ctx.add_penalty(1 - r_var, stab_w * 20)
 
     if ctx.objective:
         m.Minimize(sum(coef * expr for expr, coef in ctx.objective))
@@ -317,6 +417,7 @@ def build_day_model(problem: DayProblem) -> _DayBuildContext:
     _add_same_worker_constraints(ctx)
     _add_dependencies(ctx)
     _add_daily_capacity(ctx)
+    _add_resource_daily_capacity(ctx)
     _add_objective(ctx)
     return ctx
 
@@ -332,7 +433,7 @@ def solve_day_problem(
         locked_out = [
             SAssignment(
                 task_id=t.id,
-                resource_id=None,
+                resource_id=t.lock.resource_id,
                 start=t.lock.start_day,
                 end=t.lock.end_day,
                 setup=0,
@@ -374,9 +475,10 @@ def solve_day_problem(
         if not solver.BooleanValue(tv.scheduled):
             continue
         chosen_worker = next(wid for wid, wv in tv.worker_vars.items() if solver.BooleanValue(wv))
+        chosen_resource = next((rid for rid, rv in tv.resource_vars.items() if solver.BooleanValue(rv)), None)
         out.append(SAssignment(
             task_id=tv.task.id,
-            resource_id=None,
+            resource_id=chosen_resource,
             start=solver.Value(tv.start_day),
             end=solver.Value(tv.end_day),
             setup=0,

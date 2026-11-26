@@ -38,6 +38,25 @@ def check_day_schedule(problem: DayProblem, assignments: list[SAssignment]) -> l
             out.append(Violation(
                 "HARD", "NOT_ELIGIBLE", f"{task.name} は {wname} が担当できない工程です", task_id=task.id
             ))
+        # 工程にリソース候補が登録されている場合は必須割付・候補内であることを確認する。
+        if task.requires_resource:
+            if a.resource_id is None:
+                out.append(Violation(
+                    "HARD", "NO_RESOURCE", f"{task.name} にリソースが割り当てられていません", task_id=task.id
+                ))
+            elif a.resource_id not in task.eligible_resource_ids:
+                res = problem.resources.get(a.resource_id)
+                rname = res.name if res else f"リソース {a.resource_id}"
+                out.append(Violation(
+                    "HARD", "NOT_ELIGIBLE_RESOURCE", f"{task.name} は {rname} で実行できません", task_id=task.id
+                ))
+        elif a.resource_id is not None:
+            res = problem.resources.get(a.resource_id)
+            rname = res.name if res else f"リソース {a.resource_id}"
+            out.append(Violation(
+                "HARD", "NOT_ELIGIBLE_RESOURCE",
+                f"{task.name} はリソース指定対象外の工程です（{rname}）", task_id=task.id,
+            ))
         if a.start < task.release_day_idx:
             out.append(Violation(
                 "HARD", "BEFORE_RELEASE",
@@ -155,6 +174,45 @@ def check_day_schedule(problem: DayProblem, assignments: list[SAssignment]) -> l
                 f"{worker.name} の {problem.fmt_day(d)} 作業台数が上限を超過しています"
                 f"（{fmt_qty(total_qty)}台 / 上限 {fmt_qty(worker.max_daily_qty)}台）",
                 task_id=daily_tasks[(wid, d)][-1],
+            ))
+
+    # リソース×稼働日ごとの1日稼働上限数量・同時作業数チェック（リソースを使用する各工程でカウント）
+    res_daily_qty: dict[tuple[int, int], int] = defaultdict(int)
+    res_daily_cnt: dict[tuple[int, int], int] = defaultdict(int)
+    res_daily_tasks: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for a in assignments:
+        if a.resource_id is None:
+            continue
+        task = tasks.get(a.task_id)
+        if task is None:
+            continue
+        order = problem.orders.get(task.order_id)
+        qty = order.quantity_scaled if order is not None and order.quantity_scaled > 0 else 0
+        for d in range(a.start, a.end + 1):
+            if 0 <= d < problem.num_days:
+                res_daily_cnt[(a.resource_id, d)] += 1
+                if qty > 0:
+                    res_daily_qty[(a.resource_id, d)] += qty
+                res_daily_tasks[(a.resource_id, d)].append(task.id)
+
+    for (rid, d), total_cnt in sorted(res_daily_cnt.items()):
+        res = problem.resources.get(rid)
+        if res is None:
+            continue
+        total_qty = res_daily_qty.get((rid, d), 0)
+        if res.daily_capacity_qty is not None and total_qty > res.daily_capacity_qty:
+            out.append(Violation(
+                "HARD", "RESOURCE_DAILY_QTY_EXCEEDED",
+                f"{res.name} の {problem.fmt_day(d)} 稼働数量が上限を超過しています"
+                f"（{fmt_qty(total_qty)} / 上限 {fmt_qty(res.daily_capacity_qty)}）",
+                task_id=res_daily_tasks[(rid, d)][-1],
+            ))
+        if res.capacity is not None and total_cnt > res.capacity:
+            out.append(Violation(
+                "HARD", "RESOURCE_CAPACITY_EXCEEDED",
+                f"{res.name} の {problem.fmt_day(d)} 同時作業数が上限を超過しています"
+                f"（{total_cnt}件 / 上限 {res.capacity}件）",
+                task_id=res_daily_tasks[(rid, d)][-1],
             ))
 
     # オーダー単位の出荷日超過（SOFT：最終工程終了日 > 出荷日 − 1稼働日）

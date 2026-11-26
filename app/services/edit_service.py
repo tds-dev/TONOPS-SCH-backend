@@ -106,7 +106,7 @@ def _load_day(db: Session, plan: Plan) -> tuple[DayProblem, dict[int, PlanAssign
         if s_day is None or e_day is None:
             continue
         current.append(SAssignment(
-            a.TaskID, None, s_day, e_day, 0, bool(a.IsLocked), worker_id=a.WorkerID
+            a.TaskID, a.ResourceID, s_day, e_day, 0, bool(a.IsLocked), worker_id=a.WorkerID
         ))
     return problem, rows, current
 
@@ -139,6 +139,7 @@ def _to_day_changes(
         out.append(DayChange(
             task_id=task_id,
             worker_id=r.worker_id,
+            resource_id=r.resource_id,
             start_day=start_day,
             end_day=end_day,
             lock=r.is_locked,
@@ -204,9 +205,9 @@ def save_edit(db: Session, plan: Plan, requests: list[ChangeRequest], user: str,
             continue
         a, b = new[task_id], before.get(task_id)
         if day_mode:
-            moved = b is None or (a.worker_id, a.start, a.end) != (b.worker_id, b.start, b.end)
+            moved = b is None or (a.worker_id, a.resource_id, a.start, a.end) != (b.worker_id, b.resource_id, b.start, b.end)
             if moved or b is None or a.locked != b.locked:
-                row.ResourceID = None
+                row.ResourceID = a.resource_id
                 row.WorkerID = a.worker_id
                 row.StartAt = problem.day_to_start_dt(a.start)
                 row.EndAt = problem.day_to_end_dt(a.end)
@@ -227,7 +228,7 @@ def save_edit(db: Session, plan: Plan, requests: list[ChangeRequest], user: str,
         if task_id not in rows:  # 未割付タスクを配置した
             if day_mode:
                 db.add(PlanAssignment(
-                    PlanID=plan.PlanID, TaskID=task_id, ResourceID=None, WorkerID=a.worker_id,
+                    PlanID=plan.PlanID, TaskID=task_id, ResourceID=a.resource_id, WorkerID=a.worker_id,
                     StartAt=problem.day_to_start_dt(a.start), EndAt=problem.day_to_end_dt(a.end),
                     SetupMinutes=0, IsLocked=a.locked, Source="MANUAL", CreatedBy=user,
                 ))

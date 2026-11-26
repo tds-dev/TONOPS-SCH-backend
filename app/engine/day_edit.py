@@ -17,6 +17,7 @@ class DayChange:
 
     task_id: int
     worker_id: int | None = None  # None = 変更しない
+    resource_id: int | None = None  # None = 変更しない（未割付配置時はリソース必須工程のみ指定）
     start_day: int | None = None  # 稼働日インデックス。None = 変更しない
     end_day: int | None = None  # 稼働日インデックス（閉区間）。None = 所要稼働日数を維持
     lock: bool | None = None
@@ -50,7 +51,12 @@ def apply_day_changes(
             del by_task[c.task_id]
             continue
 
-        moving = c.worker_id is not None or c.start_day is not None or c.end_day is not None
+        moving = (
+            c.worker_id is not None
+            or c.resource_id is not None
+            or c.start_day is not None
+            or c.end_day is not None
+        )
         if cur is None:
             if task is None:
                 errors.append(f"{name} はこの計画の対象外です")
@@ -61,10 +67,17 @@ def apply_day_changes(
             if c.worker_id not in problem.workers:
                 errors.append(f"{name} に指定された作業者が存在しません")
                 continue
+            if task.requires_resource and c.resource_id is None:
+                errors.append(f"{name} を配置するにはリソースの指定が必要です")
+                continue
+            if c.resource_id is not None and c.resource_id not in problem.resources:
+                errors.append(f"{name} に指定されたリソースが存在しません")
+                continue
+            rid = c.resource_id if task.requires_resource else None
             end_day = c.end_day if c.end_day is not None else c.start_day + task.duration_days - 1
             new = SAssignment(
                 task_id=c.task_id,
-                resource_id=None,
+                resource_id=rid,
                 start=c.start_day,
                 end=end_day,
                 setup=0,
@@ -79,13 +92,17 @@ def apply_day_changes(
             if wid is not None and wid not in problem.workers:
                 errors.append(f"{name} に指定された作業者が存在しません")
                 continue
+            rid = c.resource_id if c.resource_id is not None else cur.resource_id
+            if rid is not None and rid not in problem.resources:
+                errors.append(f"{name} に指定されたリソースが存在しません")
+                continue
             start_day = c.start_day if c.start_day is not None else cur.start
             if c.end_day is not None:
                 end_day = c.end_day
             else:
                 span = (task.duration_days - 1) if task is not None else (cur.end - cur.start)
                 end_day = start_day + span
-            new = replace(cur, resource_id=None, worker_id=wid, start=start_day, end=end_day, setup=0)
+            new = replace(cur, resource_id=rid, worker_id=wid, start=start_day, end=end_day, setup=0)
             if moving:
                 new.locked = lock_moved or cur.locked
 
@@ -101,8 +118,8 @@ def apply_day_changes(
 
 
 def _key(v: Violation) -> tuple:
-    # 日上限超過は作業者・日付ごとにメッセージ単位で区別し、悪化・新規超過を確実に検出する。
-    if v.code == "DAILY_CAPACITY_EXCEEDED" or v.task_id is None:
+    # 日上限超過は作業者・リソース・日付ごとにメッセージ単位で区別し、悪化・新規超過を確実に検出する。
+    if v.code in {"DAILY_CAPACITY_EXCEEDED", "RESOURCE_DAILY_QTY_EXCEEDED", "RESOURCE_CAPACITY_EXCEEDED"} or v.task_id is None:
         return (v.severity, v.code, v.task_id, v.message)
     return (v.severity, v.code, v.task_id, "")
 

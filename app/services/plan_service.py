@@ -136,7 +136,7 @@ def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) ->
                     e_day = day_problem.end_dt_to_day_idx(row.EndAt)
                     if s_day is not None and e_day is not None:
                         day_assignments.append(SAssignment(
-                            row.TaskID, None, s_day, e_day, 0, row.IsLocked, worker_id=row.WorkerID
+                            row.TaskID, row.ResourceID, s_day, e_day, 0, row.IsLocked, worker_id=row.WorkerID
                         ))
                 write_day_evaluation(db, plan, day_problem, day_assignments, user)
             else:

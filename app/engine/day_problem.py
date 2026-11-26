@@ -41,6 +41,20 @@ class DayWorker:
 
 
 @dataclass
+class DayResource:
+    """日単位計算で割付先となる設備・治具リソースと、1日の数量上限・同時作業数上限。"""
+
+    id: int
+    name: str
+    group_id: int | None = None
+    group_name: str | None = None
+    # 1日の稼働上限数量（QTY_SCALE倍）。Noneは上限なし。
+    daily_capacity_qty: int | None = None
+    # 1日の同時タスク件数上限。Noneは上限なし。
+    capacity: int | None = None
+
+
+@dataclass
 class DayOrder:
     """日単位計算の対象オーダー。出荷日と台数・日上限除外フラグを保持する。"""
 
@@ -60,11 +74,13 @@ class DayOrder:
 
 @dataclass
 class DayLock:
-    """ロック済みまたは前回計画の割付位置（作業者と開始・終了の稼働日番号）。"""
+    """ロック済みまたは前回計画の割付位置（作業者・リソースと開始・終了の稼働日番号）。"""
 
     worker_id: int
     start_day: int
     end_day: int  # 終了日を含む閉区間（duration_days=1ならstart_day==end_day）
+    # リソース割付済みタスクの設備・治具ID。リソース不要工程ではNone。
+    resource_id: int | None = None
 
 
 @dataclass
@@ -87,6 +103,10 @@ class DayTask:
     duration_days: int = 1
     # 実行可能な作業者ID一覧（スキルマップ＋オーダー指定作業者で絞り込み済み）。
     eligible_worker_ids: list[int] = field(default_factory=list)
+    # 工程にリソース候補（M_ProductProcessResources）が登録されているか。Trueの工程のみリソースを割り当てる。
+    requires_resource: bool = False
+    # 実行可能な設備・治具リソースID一覧（単体指定とグループ展開を重複除去して保持）。
+    eligible_resource_ids: list[int] = field(default_factory=list)
     # 計画期間内の最早着手稼働日インデックス（0以上）。
     release_day_idx: int = 0
     # 工程の許可曜日（日曜0～土曜6）。Noneは制限なし。
@@ -129,6 +149,8 @@ class DayProblem:
     weights: dict[str, int] = field(default_factory=dict)
     # 後続バッファの最終日。作業者の出勤日が後続バッファ内に存在しない場合の連続休業日数算出に使う。
     buffer_end_date: date | None = None
+    # 拠点に属する未削除の設備・治具リソース（リソースID → DayResource）。
+    resources: dict[int, DayResource] = field(default_factory=dict)
 
     @property
     def num_days(self) -> int:
