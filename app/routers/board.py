@@ -1,6 +1,6 @@
-"""計画ボード、手動編集、計画比較、配台表（フェーズ3）。
+"""計画ボード、手動編集、計画比較、実績登録（フェーズ3）。
 
-ボードと配台表の時刻は拠点の現地時刻（オフセットなし）。編集リクエストの
+ボードと実績登録の時刻は拠点の現地時刻（オフセットなし）。編集リクエストの
 オフセットなしの日時も拠点の現地時刻として解釈する。
 """
 from datetime import date, datetime
@@ -122,5 +122,5 @@ def get_dispatch(
     resource_group_id: int | None = Query(None, alias="resourceGroupId"),
     db: Session = Depends(get_db),
 ):
-    """配台表: マスタ計画の指定日（現地時間）の割付をリソース別・開始順に返す。"""
+    """実績登録: マスタ計画の指定日（現地時間）の割付をリソース別・開始順に返す。"""
     return dispatch_list(db, location_id, day, resource_group_id)

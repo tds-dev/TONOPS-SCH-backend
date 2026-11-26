@@ -72,7 +72,7 @@
   `rowVer` による楽観的排他制御（不一致は 409）。新たな必須違反は `force: true` なしでは 422。
   手動で動かした作業は既定でロックされ、Source は MANUAL。KPI と違反を再計算。
 * `GET /plans/compare?a=&b=`: KPI 差分（良化・悪化）と、差異のある作業一覧。
-* `GET /dispatch?locationId=&date=`: マスタ計画の配台表（リソース別、開始順）。
+* `GET /dispatch?locationId=&date=`: マスタ計画の実績登録（リソース別、開始順）。
 * `GET /solver-runs/{id}/events`: 進捗の Server-Sent Events。
 * `T_PlanViolations` に `ViolationCode` 列を追加（承認・編集で未割付を区別するため）。
   DB構成を変更した場合は、DBを削除してから`python -m DataBase.setup_database`でDB・テーブル・仮データを再作成する。
@@ -97,7 +97,7 @@ Angular 21（スタンドアロンコンポーネント、signal、新しい制�
     マスタ計画は「コピーして編集」。
   * 右パネル: KPI、選択中作業（固定・解除、割付を外す）、課題一覧、未割付作業の配置。
 * 計画比較: A/B の KPI カード（改善 = 青、悪化 = オレンジ）、変更作業一覧、B の承認・A の破棄。
-* 配台表: 日付・グループ選択、リソースのタブ、大きな「開始」「完了」ボタン（`PATCH /tasks/{id}`）、
+* 実績登録: 日付・グループ選択、リソースのタブ、大きな「開始」「完了」ボタン（`PATCH /tasks/{id}`）、
   印刷（全リソースを 1 ページずつ）。
 * 実績入力・マスタ編集画面は「準備中」（今後のフェーズ）。
 * バックエンドの変更: `POST /plans` のオフセットなしの日時を拠点の現地時刻として扱う（以前は UTC）。

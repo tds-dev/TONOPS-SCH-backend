@@ -1,4 +1,4 @@
-"""計画比較（KPI 差分と差異のあるタスク）と配台表。"""
+"""計画比較（KPI 差分と差異のあるタスク）と実績登録。"""
 from datetime import date, datetime, time, timedelta
 
 from fastapi import HTTPException
@@ -108,9 +108,9 @@ def compare_plans(db: Session, a_id: int, b_id: int) -> dict:
     }
 
 
-# 指定日のマスタ計画の割付を、設備別・開始順の配台表へまとめる。
+# 指定日のマスタ計画の割付を、設備別・開始順の実績登録へまとめる。
 def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: int | None = None) -> dict:
-    """マスタ計画の配台表（指定日の現地 0:00〜24:00、リソース別・開始順）。"""
+    """マスタ計画の実績登録（指定日の現地 0:00〜24:00、リソース別・開始順）。"""
     # 対象の拠点情報。現地時刻や既定設定の参照に使う。
     location = db.get(Location, location_id)
     if location is None:
@@ -136,7 +136,7 @@ def dispatch_list(db: Session, location_id: int, day: date, resource_group_id: i
     resources.sort(key=lambda r: (groups[r.ResourceGroupID].SortOrder if r.ResourceGroupID in groups else 9999, r.SortOrder, r.ResourceName, r.ResourceID))
     out = []
     for r in resources:
-        # このリソースの配台表に表示する割付一覧。画面側のassignmentsと対応する。
+        # このリソースの実績登録に表示する割付一覧。画面側のassignmentsと対応する。
         assignments = []
         for a in (x for x in rows if x.ResourceID == r.ResourceID):
             t, j, product = detail[a.TaskID]

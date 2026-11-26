@@ -1,6 +1,6 @@
 """計画、ソルバー実行とその結果、計画のライフサイクル（承認・破棄・複製）。
 
-ボード表示・手動編集・比較・配台表は app/routers/board.py。
+ボード表示・手動編集・比較・実績登録は app/routers/board.py。
 """
 import time
 from datetime import datetime

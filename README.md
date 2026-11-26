@@ -239,7 +239,7 @@ TONOPS-SCH-backend/
 │   │   ├── masters.py          マスタの CRUD 登録
 │   │   ├── orders.py             オーダー・作業（タスク生成など）
 │   │   ├── plans.py            計画・計算・承認・SSE
-│   │   └── board.py            計画ボード・手動編集・比較・配台表
+│   │   └── board.py            計画ボード・手動編集・比較・実績登録
 │   ├── services/               業務ロジック（計画作成、承認、編集、ボード整形、カレンダー、タスク生成、デモデータ）
 │   └── engine/                 スケジューリングエンジン
 │       ├── problem.py          ソルバー入力（Problem）の型
@@ -296,7 +296,7 @@ Order系へ変更したSQLファイルの内容と実行順は、[DB作成・初
 * テーブル名は `M_`（マスタ）/ `T_`（トランザクション）、列名は PascalCase、主キーは `<Entity>ID`、
   監査列 `CreatedAt/By`、`UpdatedAt/By`、論理削除 `DeleteFlag`（工程くんと同じ）。
 * 日時はDBに時差情報なしの日本時間で保存。通常APIは`+09:00`付きの日本時間で返し、入力のオフセットは日本時間へ変換します。オフセットなしの入力は日本時間として扱います。
-  計画ボード・配台表の描画用日時は、日本時間のオフセットなし文字列を使用します。
+  計画ボード・実績登録の描画用日時は、日本時間のオフセットなし文字列を使用します。
 * API の JSON は camelCase（`resourceName`、`locationId`）。
 * 認証は未実装。`CreatedBy` / `UpdatedBy` には `X-User-Email` ヘッダーの値（なければ `system`）を記録します。
 * コメント・docstring・メッセージは日本語。
