@@ -474,7 +474,7 @@ INSERT INTO [M_Product] ([ProductID], [LocationID], [ProductName], [ProductCode]
 SET IDENTITY_INSERT [M_Product] OFF;
 SET @IdentityTable = NULL;
 
--- センシング：M_ProductProcesses 18件（工程区分・標準前倒し稼働日数・稼働日間隔を設定、MaxHolidaysAfterはNULL）
+-- センシング：M_ProductProcesses 18件（工程区分・「出荷日何日前を作業日目安とするか」・稼働日間隔を設定、MaxHolidaysAfterはNULL）
 SET @IdentityTable = N'M_ProductProcesses';
 SET IDENTITY_INSERT [M_ProductProcesses] ON;
 INSERT INTO [M_ProductProcesses] ([ProductProcessID], [ProductID], [SequenceNumber], [ProcessName], [ProcessGroupID], [SetupMinutes], [FixedMinutes], [ProcessingMinutes], [MinLagAfterMin], [MaxLagAfterMin], [StandardOffsetDays], [DurationDays], [MinLagDays], [MaxLagDays], [MaxHolidaysAfter], [AllowedWeekdaysJSON], [WeekdayRestrictionEnabled], [WeekdayRestrictionStartAt], [WeekdayRestrictionEndAt], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy]) VALUES (19, 7, 1, N'ピッキング', 1, NULL, NULL, 3.0000, 0, 0, 5, 1, 0, 0, NULL, N'[0, 1, 2, 3, 4, 5, 6]', 1, NULL, NULL, '2026-11-19T14:49:36.0000000', N'system', NULL, NULL);

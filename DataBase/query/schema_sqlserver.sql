@@ -203,7 +203,7 @@ CREATE TABLE [M_ProductProcesses] (
 	[ProcessingMinutes] NUMERIC(12, 4) NOT NULL, 
 	[MinLagAfterMin] INTEGER NOT NULL, 
 	[MaxLagAfterMin] INTEGER NULL, 
-	-- 日単位計算の標準前倒し稼働日数、所要稼働日数、次工程までの稼働日間隔、終了直後の最大許容連休日数。
+	-- 日単位計算の「出荷日何日前を作業日目安とするか」、所要稼働日数、次工程までの稼働日間隔、終了直後の最大許容連休日数。
 	[StandardOffsetDays] INTEGER NULL, 
 	[DurationDays] INTEGER NOT NULL DEFAULT 1, 
 	[MinLagDays] INTEGER NOT NULL DEFAULT 0, 

@@ -97,7 +97,7 @@ class DayTask:
     process_group_id: int | None = None
     # 工程区分の先頭工程かつ日上限対象製品の場合のみTrue。
     counts_for_daily_cap: bool = True
-    # 出荷日からの標準前倒し稼働日数と、逆算した標準作業日（拡張稼働日インデックス）。
+    # 「出荷日何日前を作業日目安とするか」と、出荷日から逆算した標準作業日（拡張稼働日インデックス）。
     standard_offset_days: int | None = None
     standard_day_idx: int | None = None
     duration_days: int = 1

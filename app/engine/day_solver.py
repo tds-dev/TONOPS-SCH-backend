@@ -389,7 +389,7 @@ def _add_objective(ctx: _DayBuildContext) -> None:
             ctx.add_penalty(early, early_shift_w)
             ctx.add_penalty(late_s, late_shift_w)
         elif mk_w:
-            # 標準前倒し日が未設定のタスクは、不要に後ろへ寄らないよう開始日に微小ペナルティを付ける。
+            # 「出荷日何日前を作業日目安とするか」が未設定のタスクは、不要に後ろへ寄らないよう開始日に微小ペナルティを付ける。
             ctx.add_penalty(tv.start_day, mk_w)
 
         # REPAIRスコープ時は前回計画からの作業日・作業者変更を抑える。

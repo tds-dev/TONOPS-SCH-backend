@@ -242,7 +242,7 @@ class ProductProcess(AuditMixin, Base):
     # この工程が終わってから次工程を開始するまでの待ち時間。最大の未指定は上限なし。
     MinLagAfterMin = Column(Integer, nullable=False, default=0)
     MaxLagAfterMin = Column(Integer, nullable=True)
-    # 日単位計算の標準日（出荷日から何稼働日前か）、所要稼働日数、次工程までの稼働日間隔。
+    # 日単位計算の「出荷日何日前を作業日目安とするか」、所要稼働日数、次工程までの稼働日間隔。
     StandardOffsetDays = Column(Integer, nullable=True)
     DurationDays = Column(Integer, nullable=False, default=1, server_default=text("1"))
     MinLagDays = Column(Integer, nullable=False, default=0, server_default=text("0"))

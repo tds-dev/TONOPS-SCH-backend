@@ -89,10 +89,10 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
         _integer(maximum, "最大待ち時間")
         if maximum < minimum:
             raise HTTPException(422, "最大待ち時間は最小待ち時間以上にしてください。")
-    # 日単位計算の標準日・所要日数・稼働日間隔を検証する。
+    # 日単位計算の「出荷日何日前を作業日目安とするか」・所要稼働日数・稼働日間隔を検証する。
     standard_offset = _value(original, values, "StandardOffsetDays")
     if standard_offset is not None:
-        _integer(standard_offset, "出荷日からの標準前倒し稼働日数")
+        _integer(standard_offset, "出荷日何日前を作業日目安とするか")
     duration_days = _value(original, values, "DurationDays", 1)
     _integer(duration_days, "所要稼働日数", 1)
     min_lag_days = _value(original, values, "MinLagDays", 0)
@@ -105,7 +105,7 @@ def validate_product_process_write(db: Session, original: ProductProcess | None,
     # 終了直後の最大許容連休日数を検証する。NULLは制限なし。
     max_holidays_after = _value(original, values, "MaxHolidaysAfter")
     if max_holidays_after is not None:
-        _integer(max_holidays_after, "終了後の最大許容連休日数")
+        _integer(max_holidays_after, "次の工程を開始するまでに連続してもよい休日数（休日＋担当者年休）")
     # 工程番号の重複は専用保存処理で交換する。範囲は製品の工程数に合わせて確認する。
     validate_weekday_settings(original, values)
     validate_process_time(original, values)
