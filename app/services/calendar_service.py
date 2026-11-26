@@ -28,15 +28,16 @@ def _location(db: Session, location_id: int | None) -> Location:
     return location
 
 
-# 設備の所属拠点と一日における稼働上限時間を確認する。勤務は所属拠点から共通で参照する。
+# 設備の所属拠点と同時作業数・稼働上限（時間・数量）を確認する。勤務は所属拠点から共通で参照する。
 def validate_resource_location_write(db: Session, original: Resource | None, values: dict[str, Any]) -> None:
     location_id = _value(original, values, "LocationID")
-    location = _location(db, location_id)
-    # 日単位は同時作業数のNULLを許可し、分単位の必須条件は維持する。
-    capacity = _value(original, values, "Capacity") if original is not None or "Capacity" in values else 1
-    if capacity is None:
-        if location.LocationTimeUnit != "DAY":
-            raise HTTPException(422, "分単位の同時作業数は1以上の整数で指定してください。")
+    _location(db, location_id)
+    # 同時作業数はNULLを許可し、指定時のみNUMERIC(9,2)の正の範囲を確認する。
+    if "Capacity" in values and values["Capacity"] is not None:
+        capacity = Decimal(str(values["Capacity"]))
+        if (not capacity.is_finite() or capacity < 1 or capacity > Decimal("9999999.99")
+                or capacity != capacity.quantize(Decimal("0.01"))):
+            raise HTTPException(422, "同時作業数は1～9999999.99、小数点以下2桁以内で入力してください。")
     # 未送信なら既存値を保持し、NULLの送信は上限設定の解除として受け付ける。
     if "DailyCapacityHours" in values and values["DailyCapacityHours"] is not None:
         hours = Decimal(str(values["DailyCapacityHours"]))
@@ -44,6 +45,11 @@ def validate_resource_location_write(db: Session, original: Resource | None, val
         if (not hours.is_finite() or hours < 0 or hours > Decimal("999.99")
                 or hours != hours.quantize(Decimal("0.01"))):
             raise HTTPException(422, "一日における稼働上限時間は0～999.99時間、小数点以下2桁以内で入力してください。")
+    # 1日の稼働上限数量はNULLを許可し、指定時のみ1以上の整数を確認する。
+    if "DailyCapacityQuantity" in values and values["DailyCapacityQuantity"] is not None:
+        quantity = values["DailyCapacityQuantity"]
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or not 1 <= quantity <= 2147483647:
+            raise HTTPException(422, "1日の稼働上限数量は1～2147483647の整数で入力してください。")
 
 
 # 保存・計算読込で同じ時刻確認を使い、同日内の勤務だけを受け付ける。

@@ -94,6 +94,10 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     """リソースマスタ。設備名・能力・所属グループを管理し、拠点の勤務を使う。"""
 
     __tablename__ = "M_Resources"
+    # 1日の稼働上限数量を設定する場合は1以上のみ許可する。
+    __table_args__ = (
+        CheckConstraint("DailyCapacityQuantity IS NULL OR DailyCapacityQuantity >= 1", name="DailyCapacityQuantity"),
+    )
     # 設備を識別する番号。稼働カレンダーはLocationIDから所属拠点を参照する。
     ResourceID = Column(Integer, primary_key=True, autoincrement=True)
     # 拠点の識別番号。既存データのID値と所属関係は維持する。
@@ -101,9 +105,11 @@ class Resource(AuditMixin, SoftDeleteMixin, Base):
     ResourceGroupID = Column(Integer, ForeignKey("M_ResourceGroups.ResourceGroupID"), nullable=True)
     # 設備の表示名。関連付けにはResourceIDを使う。
     ResourceName = Column(String(100), nullable=False)
-    # 日単位では同時作業数を未設定にできる。分単位の新規登録は従来どおり1を既定にする。
-    Capacity = Column(Numeric(9, 2).evaluates_none(), nullable=True, default=1)
+    # 同時作業数。未設定（NULL）を許可し、初期値はNULLとする。
+    Capacity = Column(Numeric(9, 2), nullable=True, default=None)
     DailyCapacityHours = Column(Numeric(5, 2), nullable=True)
+    # 1日の稼働上限数量。未設定（NULL）を許可し、初期値はNULLとする。
+    DailyCapacityQuantity = Column(Integer, nullable=True, default=None)
     # 画面・ボードでの表示順。
     SortOrder = Column(Integer, nullable=False, default=1)
 
@@ -300,10 +306,10 @@ class WorkerSkillMap(Base):
     """作業者と製品工程の担当可否・工程別日上限。全工程分の組合せを保存する。"""
 
     __tablename__ = "M_WorkerSkillMap"
-    # 同じ担当関係を重複させず、設定する日上限は正の数量に限定する。
+    # 同じ担当関係を重複させず、設定する工程別日上限は正の数量に限定する。
     __table_args__ = (
         UniqueConstraint("WorkerID", "ProductProcessID"),
-        CheckConstraint("MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0", name="MaxDailyQuantity"),
+        CheckConstraint("MaxDailyProcessQuantity IS NULL OR MaxDailyProcessQuantity > 0", name="MaxDailyProcessQuantity"),
     )
     # 担当関係の識別番号と、作業者・製品工程への参照。
     WorkerSkillMapID = Column(Integer, primary_key=True, autoincrement=True)
@@ -311,9 +317,9 @@ class WorkerSkillMap(Base):
     ProductProcessID = Column(
         Integer, ForeignKey("M_ProductProcesses.ProductProcessID", ondelete="CASCADE"), nullable=False
     )
-    # 新しい担当関係は不可から開始する。日上限のNULLは追加制限なし。
+    # 新しい担当関係は不可から開始する。工程別日上限のNULLは追加制限なし。
     CanExecute = Column(Boolean, nullable=False, default=False)
-    MaxDailyQuantity = Column(Numeric(18, 3), nullable=True)
+    MaxDailyProcessQuantity = Column(Numeric(18, 3), nullable=True)
     # 担当不可の理由などを記録する補足。
     Remarks = Column(String(500), nullable=True)
 

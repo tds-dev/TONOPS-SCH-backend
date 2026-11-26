@@ -77,7 +77,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
     ], start=1):
         db.add(m.Resource(
             LocationID=location.LocationID, ResourceGroupID=groups[grp].ResourceGroupID,
-            ResourceName=name, Capacity=1,
+            ResourceName=name, Capacity=None, DailyCapacityQuantity=None,
             SortOrder=i, CreatedBy=USER,
         ))
 
@@ -128,6 +128,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             process = m.ProductProcess(
                 SequenceNumber=no, ProcessName=process_name, MinLagAfterMin=lag, CreatedBy=USER,
                 SetupMinutes=setup, FixedMinutes=fixed, ProcessingMinutes=processing,
+                MaxHolidaysAfter=None,
                 AllowedWeekdaysJSON=[1, 2, 3, 4, 5] if family == "ナッツ入り" else list(range(7)),
             )
             process.resources.append(m.ProductProcessResource(
@@ -180,7 +181,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
                 # 工程番号が担当と一致する場合だけ、能力上限を付けて担当可能にする。
                 sequence, daily_limit = worker_settings[link.WorkerID]
                 link.CanExecute = process.SequenceNumber == sequence
-                link.MaxDailyQuantity = daily_limit if link.CanExecute else None
+                link.MaxDailyProcessQuantity = daily_limit if link.CanExecute else None
                 link.Remarks = None if link.CanExecute else "担当外（デモ）"
                 worker_link_count += 1
     # 各作業者の月～土の午前・午後勤務。拠点の勤務とは独立した行として保持する。

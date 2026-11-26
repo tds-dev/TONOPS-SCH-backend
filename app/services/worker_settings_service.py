@@ -153,8 +153,8 @@ def save_worker_skill_map(db: Session, original: WorkerSkillMap | None, values: 
     can_execute = _value(original, values, "CanExecute", False)
     if not isinstance(can_execute, bool):
         raise HTTPException(422, "担当可否を指定してください。")
-    # 日上限は正の数量・小数第3位まで。未設定は上限なしとして保持する。
-    validate_max_daily_quantity(_value(original, values, "MaxDailyQuantity"), "1日の生産上限")
+    # 工程別の日上限は正の数量・小数第3位まで。未設定は上限なしとして保持する。
+    validate_max_daily_quantity(_value(original, values, "MaxDailyProcessQuantity"), "1日の生産上限")
     _optional_text(original, values, "Remarks", "備考", 500)
     if original is None:
         row = WorkerSkillMap(**values)

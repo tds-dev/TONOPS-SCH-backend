@@ -16,7 +16,7 @@ def _add_missing_skill_maps(db: Session, worker_ids: list[int], process_ids: lis
     )))
     # 呼出し元の仮データ登録では、この戻り値へ初期の担当値を設定する。
     added = [WorkerSkillMap(WorkerID=worker_id, ProductProcessID=process_id,
-                           CanExecute=False, MaxDailyQuantity=None)
+                           CanExecute=False, MaxDailyProcessQuantity=None)
              for worker_id in worker_ids for process_id in process_ids if (worker_id, process_id) not in existing]
     db.add_all(added)
     # 次の呼出しでも今回分を検出できるよう、確定せず保存内容を反映する。

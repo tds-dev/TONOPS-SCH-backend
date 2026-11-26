@@ -1,3 +1,4 @@
+-- 2026-11-26: M_Resources.CapacityをNULL許可とし、M_Resources.DailyCapacityQuantityとM_ProductProcesses.MaxHolidaysAfterを反映。M_WorkerSkillMap.MaxDailyQuantityをMaxDailyProcessQuantityへ改名。
 -- 2026-11-24: 日単位計算モード（フェーズ1）対応。M_ProcessGroupsを追加し、製品・工程・作業者の日次列とT_PlanAssignmentsのResourceID/WorkerIDのNULL許可を反映。
 -- 2026-11-20: T_Orders.WorkerIDを廃止し、監査列のないT_OrderWorkersで複数の担当者を保持する。
 -- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
@@ -155,6 +156,8 @@ CREATE TABLE [M_Resources] (
 	[ResourceName] NVARCHAR(100) NOT NULL, 
 	[Capacity] NUMERIC(9, 2) NULL, 
 	[DailyCapacityHours] NUMERIC(5, 2) NULL, 
+	-- 1日の稼働上限数量。未設定はNULL。
+	[DailyCapacityQuantity] INTEGER NULL, 
 	[SortOrder] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
@@ -162,6 +165,7 @@ CREATE TABLE [M_Resources] (
 	[UpdatedBy] NVARCHAR(254) NULL, 
 	[DeleteFlag] BIT NOT NULL, 
 	CONSTRAINT [PK_M_Resources] PRIMARY KEY ([ResourceID]), 
+	CONSTRAINT [CK_M_Resources_DailyCapacityQuantity] CHECK (DailyCapacityQuantity IS NULL OR DailyCapacityQuantity >= 1), 
 	CONSTRAINT [FK_M_Resources_LocationID_M_Locations] FOREIGN KEY([LocationID]) REFERENCES [M_Locations] ([LocationID]), 
 	CONSTRAINT [FK_M_Resources_ResourceGroupID_M_ResourceGroups] FOREIGN KEY([ResourceGroupID]) REFERENCES [M_ResourceGroups] ([ResourceGroupID])
 );
@@ -354,11 +358,11 @@ CREATE TABLE [M_WorkerSkillMap] (
 	[WorkerID] INTEGER NOT NULL, 
 	[ProductProcessID] INTEGER NOT NULL, 
 	[CanExecute] BIT NOT NULL, 
-	[MaxDailyQuantity] NUMERIC(18, 3) NULL, 
+	[MaxDailyProcessQuantity] NUMERIC(18, 3) NULL, 
 	[Remarks] NVARCHAR(500) NULL, 
 	CONSTRAINT [PK_M_WorkerSkillMap] PRIMARY KEY ([WorkerSkillMapID]), 
 	CONSTRAINT [UQ_M_WorkerSkillMap_WorkerID_ProductProcessID] UNIQUE ([WorkerID], [ProductProcessID]), 
-	CONSTRAINT [CK_M_WorkerSkillMap_MaxDailyQuantity] CHECK (MaxDailyQuantity IS NULL OR MaxDailyQuantity > 0), 
+	CONSTRAINT [CK_M_WorkerSkillMap_MaxDailyProcessQuantity] CHECK (MaxDailyProcessQuantity IS NULL OR MaxDailyProcessQuantity > 0), 
 	CONSTRAINT [FK_M_WorkerSkillMap_WorkerID_M_Workers] FOREIGN KEY([WorkerID]) REFERENCES [M_Workers] ([WorkerID]), 
 	CONSTRAINT [FK_M_WorkerSkillMap_ProductProcessID_M_ProductProcesses] FOREIGN KEY([ProductProcessID]) REFERENCES [M_ProductProcesses] ([ProductProcessID]) ON DELETE CASCADE
 );
