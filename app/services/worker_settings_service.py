@@ -6,7 +6,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
-from app.models.masters import Location, Product, ProductProcess, Worker, WorkerCalendar, WorkerCalendarException, WorkerSkillMap
+from app.models.masters import Calendar, Location, Product, ProductProcess, Worker, WorkerCalendar, WorkerCalendarException, WorkerSkillMap
 from app.services.calendar_service import _validate_work_times
 from app.services.product_validation import _value
 from app.services.worker_service import _locked_worker, validate_max_daily_quantity
@@ -72,6 +72,33 @@ def delete_worker_calendar(db: Session, original: WorkerCalendar, user: str) -> 
         raise HTTPException(404, "削除済みの通常稼働時間です。")
     original.DeleteFlag = True
     original.UpdatedBy = user
+
+
+# 拠点の曜日・時間帯・勤務名で通常勤務を置換し、例外休日には触れない。
+def copy_location_calendar(db: Session, worker_id: int, user: str) -> None:
+    worker = _worker(db, worker_id)
+    calendars = list(db.scalars(select(Calendar).where(
+        Calendar.LocationID == worker.LocationID, Calendar.DeleteFlag == false(),
+    ).order_by(Calendar.DayOfWeek, Calendar.StartTime, Calendar.CalendarID)))
+    # 未登録の拠点をコピーして、作業者の通常勤務を空にしない。
+    if not calendars:
+        raise HTTPException(422, "拠点の稼働日が未登録です。カレンダーマスタで登録してください。")
+    # 追加前の行だけを置換対象とし、新しくコピーした行は残す。
+    existing = list(db.scalars(select(WorkerCalendar).where(
+        WorkerCalendar.WorkerID == worker_id, WorkerCalendar.DeleteFlag == false(),
+    )))
+    # 既存の保存処理を共用し、日単位でも拠点に保存された時刻を保持する。
+    for calendar in calendars:
+        save_worker_calendar(db, None, {
+            "WorkerID": worker_id,
+            "DayOfWeek": calendar.DayOfWeek,
+            "StartTime": calendar.StartTime,
+            "EndTime": calendar.EndTime,
+            "WorkName": calendar.WorkName,
+        }, user)
+    for row in existing:
+        row.DeleteFlag = True
+        row.UpdatedBy = user
 
 
 # 例外休日の作業者を直接確認し、勤務未登録でも休日の登録を受け付ける。

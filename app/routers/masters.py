@@ -2,7 +2,8 @@
 カレンダーの稼働時間展開。"""
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -10,6 +11,7 @@ from app.core.db import get_db
 from app.core.timeutil import to_jst_naive
 from app.models import masters as m
 from app.routers.crud import crud_router
+from app.routers.deps import current_user
 from app.services.calculation_settings_service import save_calculation_setting
 from app.schemas.base import ApiModel, JstDatetime
 from app.services.calendar_service import (
@@ -28,6 +30,7 @@ from app.services.product_process_service import delete_product_process, save_pr
 from app.services.process_group_service import delete_process_group, save_process_group
 from app.services.worker_service import delete_worker, save_worker
 from app.services.worker_settings_service import (
+    copy_location_calendar,
     delete_worker_calendar,
     filter_worker_skill_maps,
     prevent_worker_skill_map_deletion,
@@ -133,6 +136,25 @@ def get_worker_working_time(
     if e <= s:
         raise HTTPException(422, "'to' must be after 'from'")
     return [WorkingInterval(start=a, end=b) for a, b in worker_working_time(db, worker_id, s, e, tz)]
+
+
+# 拠点と同じ通常勤務を一括保存し、途中の失敗時は置換全体を取り消す。
+@worker_extra.post("/{worker_id}/copy-location-calendar", status_code=status.HTTP_204_NO_CONTENT)
+def copy_worker_location_calendar(
+    worker_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(current_user),
+) -> Response:
+    try:
+        copy_location_calendar(db, worker_id, user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "稼働日の登録が競合しました。再読込してからやり直してください。") from None
+    except Exception:
+        db.rollback()
+        raise
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 routers.append(worker_extra)
