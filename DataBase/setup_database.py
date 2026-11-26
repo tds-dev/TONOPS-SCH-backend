@@ -18,7 +18,7 @@ DataBase配下のDB・テーブル作成とデモデータ登録を行う初期�
 製品は任意のProductCode（NVARCHAR(100)）を持つ。単位・製品と工程の属性は持たず、タスクにも属性を登録しない。
 オーダーは種別・計画の管理元・属性の列を持たない。
 2026-11-24: 日単位計算モード（フェーズ1）対応。工程区分マスタM_ProcessGroupsを追加し、M_Product.ExcludeFromDailyCap、M_ProductProcessesの日次列（ProcessGroupID・StandardOffsetDays・DurationDays・MinLagDays・MaxLagDays）、M_Workers.MaxDailyQuantityを追加。M_CalculationSettings.TimeUnitの既定値はDAYとし、T_PlanAssignments.ResourceID・WorkerIDは両方NULL許可（どちらか一方以上必須）、T_OrdersのWBSNumber一意制約は撤廃した。
-2026-11-26: M_Resources.CapacityをNULL許可（初期値NULL・仮データはすべてNULL）へ変更し、M_Resources.DailyCapacityQuantity（int・NULL許可・初期値NULL）とM_ProductProcesses.MaxHolidaysAfter（int・NULL許可・初期値NULL）をモデル・DBクエリ・仮データへ反映した。M_WorkerSkillMap.MaxDailyQuantityをMaxDailyProcessQuantityへ改名した。
+2026-11-26: M_Resources.CapacityをNULL許可（初期値NULL・仮データはすべてNULL）へ変更し、M_Resources.DailyCapacityQuantity（int・NULL許可・初期値NULL）とM_ProductProcesses.MaxHolidaysAfter（int・NULL許可・初期値NULL）をモデル・DBクエリ・仮データへ反映した。M_WorkerSkillMap.MaxDailyQuantityをMaxDailyProcessQuantityへ改名し、T_Plans.RowVer・T_PlanAssignments.Units・T_PlanAssignments.RowVerを削除した。
 オーダーの複数作業者指定はT_OrderWorkers（OrderWorkerID・OrderID・WorkerIDの3列）に保存し、計画計算への反映は後続フェーズで行う。
 
 バックエンドのルートで python -m DataBase.setup_database を実行する。

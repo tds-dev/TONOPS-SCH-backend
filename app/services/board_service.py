@@ -193,7 +193,6 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
             "setupMinutes": 0,
             "colorValue": str(dorder.product_id) if dorder.product_id is not None else dorder.no,
             "issue": worst.get(task.id),
-            "rowVer": a.RowVer,
         })
 
     # ---- 作業者別の非稼働日（拠点休日＋本人の全日不在日を網掛け）
@@ -312,7 +311,6 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
                 cells[col_key] = {
                     "taskId": task.id,
                     "assignmentId": a.AssignmentID,
-                    "rowVer": a.RowVer,
                     "workerId": a.WorkerID,
                     "workerName": wname,
                     "resourceId": a.ResourceID,
@@ -332,7 +330,6 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
                 cells[col_key] = {
                     "taskId": task.id,
                     "assignmentId": None,
-                    "rowVer": None,
                     "workerId": None,
                     "workerName": None,
                     "resourceId": None,
@@ -486,7 +483,6 @@ def _build_day_board(db: Session, plan: Plan, start: datetime, end: datetime, tz
             "timeUnit": "DAY",
             "startAt": _local(plan.StartAt, tz),
             "endAt": _local(plan.EndAt, tz),
-            "rowVer": plan.RowVer,
         },
         "timeZone": tz,
         "from": _local(start, tz),
@@ -596,7 +592,7 @@ def build_board(
             "isLocked": a.IsLocked, "source": a.Source, "setupMinutes": a.SetupMinutes,
             # 製品ごとの配色を維持し、製品未指定時はオーダー番号を使う。
             "colorValue": str(j.ProductID) if j.ProductID is not None else j.WBSNumber,
-            "issue": worst.get(t.TaskID), "rowVer": a.RowVer,
+            "issue": worst.get(t.TaskID),
         })
         if a.SetupMinutes:
             setups.append({
@@ -636,7 +632,6 @@ def build_board(
             "planId": plan.PlanID, "planName": plan.PlanName, "status": plan.Status,
             "timeUnit": setting.TimeUnit if setting else "DAY",
             "startAt": _local(plan.StartAt, tz), "endAt": _local(plan.EndAt, tz),
-            "rowVer": plan.RowVer,
         },
         "timeZone": tz,
         "from": _local(start, tz),

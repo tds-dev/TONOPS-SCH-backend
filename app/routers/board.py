@@ -31,7 +31,6 @@ class AssignmentChange(ApiModel):
     end_at: datetime | None = None  # 指定時はリサイズ。省略時は所要時間を維持
     is_locked: bool | None = None
     remove: bool = False  # 割付を外す
-    row_ver: int | None = None  # 楽観的排他制御（ボードの rowVer をそのまま返す）
 
 
 # 割付変更の一覧と、移動したタスクの固定設定。

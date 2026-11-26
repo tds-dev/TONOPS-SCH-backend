@@ -348,8 +348,8 @@ SET @IdentityTable = NULL;
 -- 計画はPlanIDとPlanNameで識別し、製造現場を想定した名前を設定する。
 SET @IdentityTable = N'T_Plans';
 SET IDENTITY_INSERT [T_Plans] ON;
-INSERT INTO [T_Plans] ([PlanID], [LocationID], [PlanName], [Status], [StartAt], [EndAt], [CalculationSettingID], [BasePlanID], [CopiedFromPlanID], [Remarks], [RowVer], [CreatedAt], [CreatedBy]) VALUES (1, 1, N'11月第3週_パン製造計画', N'DRAFT', '2026-11-16T06:00:00', '2026-11-21T06:00:00', 1, NULL, NULL, N'駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。', 1, '2026-11-15T15:12:37.000000', N'seed');
-INSERT INTO [T_Plans] ([PlanID], [LocationID], [PlanName], [Status], [StartAt], [EndAt], [CalculationSettingID], [BasePlanID], [CopiedFromPlanID], [Remarks], [RowVer], [CreatedAt], [CreatedBy]) VALUES (2, 1, N'11月第3週_パン製造計画v2', N'DRAFT', '2026-11-16T06:00:00', '2026-11-21T06:00:00', 1, NULL, NULL, N'駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。', 1, '2026-11-15T15:12:37.000000', N'seed');
+INSERT INTO [T_Plans] ([PlanID], [LocationID], [PlanName], [Status], [StartAt], [EndAt], [CalculationSettingID], [BasePlanID], [CopiedFromPlanID], [Remarks], [CreatedAt], [CreatedBy]) VALUES (1, 1, N'11月第3週_パン製造計画', N'DRAFT', '2026-11-16T06:00:00', '2026-11-21T06:00:00', 1, NULL, NULL, N'駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。', '2026-11-15T15:12:37.000000', N'seed');
+INSERT INTO [T_Plans] ([PlanID], [LocationID], [PlanName], [Status], [StartAt], [EndAt], [CalculationSettingID], [BasePlanID], [CopiedFromPlanID], [Remarks], [CreatedAt], [CreatedBy]) VALUES (2, 1, N'11月第3週_パン製造計画v2', N'DRAFT', '2026-11-16T06:00:00', '2026-11-21T06:00:00', 1, NULL, NULL, N'駅前店・中央店・北口店向けの食パン・菓子パンなどの製造計画。', '2026-11-15T15:12:37.000000', N'seed');
 SET IDENTITY_INSERT [T_Plans] OFF;
 SET @IdentityTable = NULL;
 
@@ -378,12 +378,12 @@ INSERT INTO @CompareSlots (PlanID, TaskID, ResourceID, StartMinute, SetupMinutes
 -- WorkerIDはデモ工程番号1/2/3に対応する仮の作業者ID1/2/3。通常の計算結果ではない。
 INSERT INTO [T_PlanAssignments]
     ([PlanID], [TaskID], [ResourceID], [WorkerID], [StartAt], [EndAt], [SetupMinutes],
-     [Units], [IsLocked], [Source], [RowVer], [CreatedAt], [CreatedBy])
+     [IsLocked], [Source], [CreatedAt], [CreatedBy])
 SELECT s.PlanID, s.TaskID, s.ResourceID, pr.SequenceNumber,
        DATEADD(minute, s.StartMinute, p.StartAt),
        DATEADD(minute, s.StartMinute + COALESCE(pr.SetupMinutes, 0) + COALESCE(pr.FixedMinutes, 0)
            + CAST(CEILING(o.Quantity * pr.ProcessingMinutes) AS int), p.StartAt),
-       s.SetupMinutes, 1, 0, N'IMPORT', 1, '2026-11-15T15:12:37', N'seed'
+       s.SetupMinutes, 0, N'IMPORT', '2026-11-15T15:12:37', N'seed'
 FROM @CompareSlots s
 JOIN [T_Plans] p ON p.PlanID = s.PlanID
 JOIN [T_Tasks] t ON t.TaskID = s.TaskID

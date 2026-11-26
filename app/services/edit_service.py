@@ -37,7 +37,6 @@ class ChangeRequest:
     end_at: datetime | None = None
     is_locked: bool | None = None
     remove: bool = False
-    row_ver: int | None = None
 
 
 # 手動編集の検証で得た割付・違反・評価値。
@@ -63,14 +62,12 @@ def _load(db: Session, plan: Plan) -> tuple[Problem, dict[int, PlanAssignment], 
     return problem, rows, current
 
 
-# 手動編集の対象タスクIDを解決し、楽観的排他制御を確認する。
+# 手動編集の対象タスクIDを解決する。
 def _resolve_task_id(by_id: dict[int, PlanAssignment], r: ChangeRequest) -> int:
     if r.assignment_id is not None:
         row = by_id.get(r.assignment_id)
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"割付 {r.assignment_id} はこの計画にありません")
-        if r.row_ver is not None and r.row_ver != row.RowVer:
-            raise HTTPException(status.HTTP_409_CONFLICT, "他のユーザーが先に更新しました。再読み込みしてください")
         return row.TaskID
     if r.task_id is not None:
         return r.task_id

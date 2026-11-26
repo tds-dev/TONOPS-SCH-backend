@@ -83,19 +83,17 @@ def create_plan(
 
 # 名前・備考は全状態で、期間・計算設定は下書きだけ更新し、割付の日時と設備を保持する。
 def update_plan(db: Session, plan_id: int, values: dict[str, Any], user: str) -> Plan:
-    # 同じ計画への同時編集を直列化し、読み込み後の変更をRowVerで検出する。
+    # 同じ計画への同時編集を直列化して更新する。
     plan = db.scalar(select(Plan).where(Plan.PlanID == plan_id)
                      .with_hint(Plan, "WITH (UPDLOCK, HOLDLOCK)", dialect_name="mssql")
                      .execution_options(populate_existing=True))
     if plan is None:
         raise HTTPException(404, "計画が見つかりません。")
-    if values["row_ver"] != plan.RowVer:
-        raise HTTPException(409, "計画が更新されています。一覧を開き直してから編集してください。")
     condition_keys = {"start_at", "end_at", "calculation_setting_id"}
     if condition_keys.intersection(values) and plan.Status != "DRAFT":
         raise HTTPException(409, "開始日時・終了日時・計算設定は下書きの計画のみ変更できます。")
     # 備考のNULLだけは内容の削除として受け付け、他項目の必須制約を維持する。
-    if any(values[key] is None for key in values if key not in {"row_ver", "remarks"}):
+    if any(values[key] is None for key in values if key != "remarks"):
         raise HTTPException(422, "更新する項目にnullは指定できません。")
     name = validate_plan_name(db, plan.LocationID, values.get("plan_name", plan.PlanName), plan.PlanID)
     # 未送信の場合は元の備考を保持し、明示された空欄・NULLだけを削除する。

@@ -1,4 +1,4 @@
--- 2026-11-26: M_Resources.CapacityをNULL許可とし、M_Resources.DailyCapacityQuantityとM_ProductProcesses.MaxHolidaysAfterを反映。M_WorkerSkillMap.MaxDailyQuantityをMaxDailyProcessQuantityへ改名。
+-- 2026-11-26: M_Resources.CapacityをNULL許可とし、M_Resources.DailyCapacityQuantityとM_ProductProcesses.MaxHolidaysAfterを反映。M_WorkerSkillMap.MaxDailyQuantityをMaxDailyProcessQuantityへ改名。T_Plans.RowVer・T_PlanAssignments.Units・T_PlanAssignments.RowVerを削除。
 -- 2026-11-24: 日単位計算モード（フェーズ1）対応。M_ProcessGroupsを追加し、製品・工程・作業者の日次列とT_PlanAssignmentsのResourceID/WorkerIDのNULL許可を反映。
 -- 2026-11-20: T_Orders.WorkerIDを廃止し、監査列のないT_OrderWorkersで複数の担当者を保持する。
 -- 段取り替えは切替前後の製品工程IDを参照し、NULLは任意の工程を表す。
@@ -302,7 +302,6 @@ CREATE TABLE [T_Plans] (
 	[ApprovedAt] DATETIME2(7) NULL, 
 	[ApprovedBy] NVARCHAR(254) NULL, 
 	[Remarks] NVARCHAR(500) NULL, 
-	[RowVer] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 
@@ -451,10 +450,8 @@ CREATE TABLE [T_PlanAssignments] (
 	[StartAt] DATETIME2(7) NOT NULL, 
 	[EndAt] DATETIME2(7) NOT NULL, 
 	[SetupMinutes] INTEGER NOT NULL, 
-	[Units] NUMERIC(5, 2) NOT NULL, 
 	[IsLocked] BIT NOT NULL, 
 	[Source] NVARCHAR(10) NOT NULL, 
-	[RowVer] INTEGER NOT NULL, 
 	[CreatedAt] DATETIME2(7) NOT NULL, 
 	[CreatedBy] NVARCHAR(254) NULL, 
 	[UpdatedAt] DATETIME2(7) NULL, 

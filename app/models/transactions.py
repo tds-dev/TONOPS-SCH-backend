@@ -140,11 +140,6 @@ class Plan(AuditMixin, Base):
     ApprovedBy = Column(String(254), nullable=True)
     # 計画に関する任意の補足情報。
     Remarks = Column(String(500), nullable=True)
-    # 楽観的排他制御。SQL Server の rowversion は SQLite に移植できないため、
-    # SQLAlchemy が管理する整数のバージョンカウンタを使う。
-    RowVer = Column(Integer, nullable=False, default=1)
-
-    __mapper_args__ = {"version_id_col": RowVer}
 
 
 class PlanAssignment(AuditMixin, Base):
@@ -167,12 +162,8 @@ class PlanAssignment(AuditMixin, Base):
     StartAt = Column(DateTime, nullable=False)  # 日本時間。タスク開始時刻（段取りは SetupMinutes として直前に置く）
     EndAt = Column(DateTime, nullable=False)  # 日本時間
     SetupMinutes = Column(Integer, nullable=False, default=0)
-    Units = Column(Numeric(5, 2), nullable=False, default=1)
     IsLocked = Column(Boolean, nullable=False, default=False)
     Source = Column(String(10), nullable=False, default="SOLVER")
-    RowVer = Column(Integer, nullable=False, default=1)
-
-    __mapper_args__ = {"version_id_col": RowVer}
 
 
 class SolverRun(AuditMixin, Base):

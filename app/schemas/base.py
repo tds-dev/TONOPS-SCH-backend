@@ -102,7 +102,7 @@ def schemas_for(model: type) -> tuple[type[ApiModel], type[ApiModel], type[ApiMo
         read_fields[name] = (Optional[py], None)
         # 代理キー（自動採番）はサーバー側で生成。複合キーは書込み可のまま。
         is_identity = col.primary_key and single_pk and py is int
-        if is_identity or name in AUDIT_COLUMNS or name == "RowVer":
+        if is_identity or name in AUDIT_COLUMNS:
             continue
         has_default = col.default is not None or col.server_default is not None
         if col.nullable or has_default:

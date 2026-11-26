@@ -141,7 +141,7 @@ def copy_plan(db: Session, plan: Plan, user: str, name: str | None = None) -> Pl
         db.add(PlanAssignment(
             PlanID=new.PlanID, TaskID=a.TaskID, ResourceID=a.ResourceID, WorkerID=a.WorkerID,
             StartAt=a.StartAt, EndAt=a.EndAt,
-            SetupMinutes=a.SetupMinutes, Units=a.Units, IsLocked=a.IsLocked, Source=a.Source, CreatedBy=user,
+            SetupMinutes=a.SetupMinutes, IsLocked=a.IsLocked, Source=a.Source, CreatedBy=user,
         ))
     # 旧計画をコピーする場合も、新しい計画には日本語キーだけを保存する。
     kpis = normalize_kpis({k.KpiKey: k.KpiValue for k in db.scalars(select(PlanKpi).where(PlanKpi.PlanID == plan.PlanID))})

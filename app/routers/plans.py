@@ -45,9 +45,8 @@ class PlanCreateBody(ApiModel):
     remarks: str | None = None
 
 
-# 編集可能な項目だけを受け付け、画面読込後の別操作はバージョン番号で検出する。
+# 計画一覧から編集可能な項目だけを受け付ける。
 class PlanUpdateBody(ApiModel):
-    row_ver: int
     plan_name: str | None = None
     # 備考は全状態で更新でき、明示したNULLは内容の削除として扱う。
     remarks: str | None = None

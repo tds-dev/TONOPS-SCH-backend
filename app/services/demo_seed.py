@@ -299,7 +299,7 @@ def seed_demo(db: Session, now: datetime | None = None) -> dict[str, int]:
             # 必須列を満たす仮の担当者。通常の計算・配置・コピー処理へは接続しない。
             WorkerID=workers[process.SequenceNumber - 1].WorkerID,
             StartAt=start + timedelta(minutes=minute), EndAt=start + timedelta(minutes=minute + duration),
-            SetupMinutes=setup, Units=1, IsLocked=False, Source="IMPORT", CreatedBy=USER,
+            SetupMinutes=setup, IsLocked=False, Source="IMPORT", CreatedBy=USER,
         ))
         assignments[plan.PlanID].append(SAssignment(task.TaskID, resource.ResourceID, minute, minute + duration, setup))
     db.flush()
