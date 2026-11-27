@@ -253,7 +253,7 @@ CREATE TABLE [T_Orders] (
 	[OrderID] INTEGER NOT NULL IDENTITY, 
 	[LocationID] INTEGER NOT NULL, 
 	[WBSNumber] NVARCHAR(30) NOT NULL, 
-	[OrderName] NVARCHAR(200) NOT NULL, 
+	[OrderName] NVARCHAR(200) NULL, 
 	[ProductID] INTEGER NULL, 
 	[Quantity] NUMERIC(18, 3) NULL, 
 	[CustomerName] NVARCHAR(100) NULL, 
